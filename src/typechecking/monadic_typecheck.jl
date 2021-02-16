@@ -1,7 +1,17 @@
+"""
+   check_term(t::DMTerm, scope = Dict{Symbol, Vector{DMTerm}}()) :: TC
 
-function mcheck_sens(t::DMTerm, scope::Dict{Symbol, Vector{DMTerm}}) :: TC#{DMType}
+Typecheck the input `DMTerm` and return the resulting computation as a `TC` monad. The
+result will have a lot of unresolved constraints.
+"""
+check_term(t::DMTerm) = mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}())
 
-    println("checking $t, scope $scope\n")
+# scope maps variable names to the stack of terms that were assigned to that variable. it
+# gets updated during the recursive traversal of t, pushing a term to the stack whenever
+# a variable gets assigned. this is analogous to the julia interpreter's traversal of the
+# corresponding julia expression and serves to keep track of the current state of a variable
+# at the point in execution where it is actually used as a function argument.
+function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DMType}
 
     result = @match t begin
         sng(n) => let
@@ -179,10 +189,6 @@ function mcheck_sens(t::DMTerm, scope::Dict{Symbol, Vector{DMTerm}}) :: TC#{DMTy
 
     end
 
-    println("done checking $t\n")
-
     result
 
 end
-
-mcheck(t::DMTerm) = run(mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}()))

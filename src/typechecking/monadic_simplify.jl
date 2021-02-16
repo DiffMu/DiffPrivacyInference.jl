@@ -24,10 +24,8 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 
     # This means the simplification yielded new constraints.
     function return_simple(newCs :: Constraints) :: TC
-            println("discarding $c, adding $newCs")
         function mconstr(S,T,C,Σ) :: MType{Tuple{}}
             Cc = filter(x -> !isequal(x, c), C)
-            println("discarding $c, got $Cc, adding $newCs")
             Cc = union(Cc,newCs)
             (S,T,Cc,Σ), ()
         end
@@ -125,7 +123,6 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             end
         end;
         isChoice(τ, choices) => begin
-    println("\n=== simplifying choice constraint $c\n")
             @match τ begin
                 Arr(args, _) => let
 
@@ -154,7 +151,6 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                             end
 
                             if length(newchoices) == 1 # only one left, we can pick that one
-                                println("got an arrow, discarding")
                                 flag, cτ = first(values(newchoices))
 
                                 # even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
@@ -162,7 +158,6 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                                 # set this ones flag to 1
                                 return_simple([nullflags; isSubtypeOf(cτ, τ); isEqual(flag, 1)])
                             else
-                                println("got an arrow, returning $newchoices")
                                 return_simple([nullflags; isChoice(τ, newchoices)])
                             end
                         end
@@ -235,7 +230,6 @@ function msimplify_constraints() :: TC#{Tuple{}}
         else
             @mdo TC begin
                 simpl <- mtry_simplify_Constr(Ci[1])
-                _ <-mreturn(println("---------> recursion pass  $(length(Ci)) on $(Ci[1]), got $simpl\n\n"))
                 ret <- (isnothing(simpl) ? try_simplify_constraints(Ci[2:end]) : msimplify_constraints())
                 return ret
             end
@@ -244,7 +238,6 @@ function msimplify_constraints() :: TC#{Tuple{}}
 
     @mdo TC begin
         Cs <- extract_Cs()
-        _ <-mreturn(println("---------> simplifying constraints $Cs\n\n"))
         _ <- try_simplify_constraints(Cs) # see if the constraints changed. recurse, if so.
         return ()
     end

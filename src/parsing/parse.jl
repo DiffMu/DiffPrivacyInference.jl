@@ -11,7 +11,6 @@ function file_to_dmterm(file::AbstractString) :: DMTerm
     println("read file $file")
     # error upon modification of nonlocal variables
     sanitize(ast.args, ast.args[1])
-    println("sanitation complete")
     exprs_to_dmterm(ast.args, ast.args[1])
 end
 
