@@ -4,7 +4,7 @@ julia:
   - nightly
 codecov: true
 script:
-  - bundle exec rake scripts/custom-julia.rb
+  - bash scripts/custom-julia-2.sh
 # deploy:
 #   provider: script
 #   script: rvm use $TRAVIS_RUBY_VERSION do script.rb
