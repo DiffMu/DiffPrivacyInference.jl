@@ -27,6 +27,7 @@ module Travis
 
         def setup
           super
+          sh.echo '=========== CUSTOM BUILD SCRIPT! =============='
 
           sh.echo 'Julia for Travis-CI is not officially supported, ' \
             'but is community maintained.', ansi: :green
