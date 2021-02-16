@@ -1,71 +1,16 @@
+include("DMIR.jl")
 import Base.==
 
+#########################################################################################
+# monads
 
 abstract type Monad end
-
-# TC has a hidden type parameter A that i cannot express. i use MType{A} as a cheap substitute...
-struct TC <: Monad
-    func :: Function # (SVarCtx, TVarCtx, Constraints) -> (Full{SCtx} x A)
-end
-
-MType{A} = Tuple{Full{SCtx}, A}
-
-
-function mbind(f::Function, m::TC) :: TC # f :: A -> TC{B}
-    #m = deepcopy(m) # otherwise very weird things happen.
-    function mconstr(S::SVarCtx,T::TVarCtx,C::Constraints) :: MType # it's actually MType{B}
-        (S,T,C,Σm), τm = m.func(S,T,C)
-        (S,T,C,Σf), τf = f(τm).func(S,T,C)
-        (S,T,C,Σ) = add(S,T,C, Σm, Σf)
-        ((S,T,C,Σ), τf)
-    end
-    TC(mconstr)
-end
-
-
-# this must satisfy mbind(mreturn, M) = M
-# hence the empty SCtx, being the neutral element of context addition
-function mreturn(::Type{TC}, val) :: TC # A -> TC{A}
-    @assert !(val isa Monad) "are you sure you want to return the monad $val?"
-
-    TC((S,T,C) -> ((S,T,C,SCtx()), val))
-end
-
-
-# this is foldM in haskell
-# foldM :: (Monad m) => (b -> a -> m b) -> b -> [a] -> m b
-# do some crazy bind(v->f(v,args[n]), bind(v-> f(v,args[n-1]), ... , bind(v->f(v,args[1]), M)...)) action, it's like
-# do
-#   V <- M
-#   for a in args
-#     V <- f(V,a)     # throwing away the type, only keeping the state.
-#   end
-#   return V
-function mloop(f :: Function, args, M::Monad)
-    println("looping on $args, start with $M")
-    foldr((a, m) -> mbind(v->f(v,a), m), Iterators.reverse(args), init = M)
-end
-# miloop(f :: Function, n ::Int, M) = foldr((i, m) -> mbind(v->f(v,i), m), reverse(1:n), init = mreturn(TC,M)) # indexed loop
-
-fmap(f::Function, m::M) where {M<:Monad} = mbind(x->mreturn(M, f(x)), m)
-
-
-# apply f to Σ, return a monad with the result context
-function apply_sctx(f::Function, m::TC) :: TC#{A} where f :: Full{SCtx} -> Full{SCtx}, m :: TC{A}
-    function mconstr(S,T,C) :: MType
-        STCΣ, τ = m.func(S,T,C)
-        (f(STCΣ), τ)
-    end
-    TC(mconstr)
-end
-
-extract_Cs() = TC((S,T,C) -> ((S,T,C,SCtx()), deepcopy(C)))
 
 ## Extra combinators
 mthen(k::Monad, m::Monad) = mbind(_ -> k, m)
 (==)(m::Monad, k::Monad) = m.value == k.value
 
-## Friendly monad blocks
+## Friendly monad blocks/mdo
 macro mdo(mtype, body)
     #println("mdo says: ",mdo_desugar(mdo_patch(mtype, body)))
     println("mdo says: ",esc(mdo_desugar(mdo_patch(mtype, deepcopy(body)))))
@@ -120,6 +65,199 @@ function mdo_desugar_helper(expr::Expr, rest)
     end
 end
 
+# fmap(f::Function, m::M) where {M<:Monad} = mbind(x->mreturn(M, f(x)), m)
+
+
+#########################################################################################
+# type context state monad
+
+# TC has a hidden type parameter A that i cannot express. i use MType{A} as a cheap substitute...
+struct TC <: Monad
+func :: Function # (Full{SCtx}) -> (Full{SCtx} x A)
+end
+
+MType{A} = Tuple{Full{SCtx}, A}
+
+# execute the computation within a TC monad.
+run(m::TC) = m.func(emptySVarCtx(),emptyTVarCtx(),emptyConstraints(),SCtx())
+
+# bind just passes the result context of executing m on into f(τ)
+function mbind(f::Function, m::TC) :: TC # f :: A -> TC{B}
+    function mconstr(S,T,C,Σ) :: MType # it's actually MType{B}
+        # TODO func should not be modifying Σ, but deepcopy just in case...
+        (S,T,C,Σm), τm = m.func(S,T,C,deepcopy(Σ))
+        return f(τm).func(S,T,C,Σm)
+    end
+    TC(mconstr)
+end
+
+# execute all monads in args seperately with the same input Σ, only passing on S,T,C
+# then sum the resulting contexts and return execution results as a vector
+function msum(args::Vector{TC}) :: TC#{Vector}
+    function mconstr(S,T,C,Σ) :: MType{Vector}
+        Σ1 = SCtx()
+        τs = []
+        for arg in args
+             # TODO func should not be modifying Σ, but deepcopy just in case...
+            (S,T,C,Σ2), τ = arg.func(S,T,C,deepcopy(Σ))
+            τs = push!(τs, τ)
+            (S,T,C,Σ1) = add(S,T,C,Σ1,Σ2)
+        end
+        return (S,T,C,Σ1), τs
+    end
+    TC(mconstr)
+end
+
+# msum args, return execution results as tuple
+function msum(args::TC...) :: TC#{Tuple}
+    @mdo TC begin
+        sum <- msum([args...])
+        return (sum...,)
+    end
+end
+
+# this must satisfy mbind(mreturn, M) = M
+function mreturn(::Type{TC}, val) :: TC # A -> TC{A}
+    @assert !(val isa Monad) "are you sure you want to return the monad $val?"
+
+    TC((S,T,C,Σ) -> ((S,T,C,Σ), val))
+end
+
+#########################################################################################
+# convenience functions for TC monad
+
+"Add a `DMTypeOp` constraint for the  `nargs`-ary operation accoding to `opf`."
+function add_op(opf::Symbol, nargs::Int) :: TC#{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
+    function mconstr(S,T,C,Σ) :: MType{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
+        function makeType()
+            T, tv = addNewName(T, Symbol("op_arg_"))
+            TVar(tv)
+        end
+        τs = [makeType() for _ in 1:nargs]
+        dmop = getDMOp(opf)(τs)
+        (S,T,C), τ, sv = add_TypeOp((S,T,C), dmop)
+        ((S,T,C,Σ), (τ, τs, sv))
+    end
+    TC(mconstr)
+end
+
+"Unify `DMTypes` `τ1` and `τ2` within a `TC` monad."
+function unify(τ1::DMType, τ2::DMType) :: TC#{DMType}
+    function mconstr(S,T,C,Σ) :: MType{DMType}
+        τ, nC = unify_nosubs(τ1, τ2)
+        C = [C; nC]
+        (S,T,C,Σ), τ
+    end
+    TC(mconstr)
+end
+
+"Add a subtype constraint `τ1 ⊑ τ2` to the monad's constraint list."
+subtype_of(τ1::DMType, τ2::DMType) = TC((S,T,C,Σ) -> ((S,T,union(C, [isSubtypeOf(τ1, τ2)]),Σ), ()))
+
+"Return the current constraint list."
+extract_Cs() = TC((S,T,C,Σ) -> ((S,T,C,Σ), deepcopy(C)))
+
+"Add the given constraints to the monad's constraint list."
+function add_Cs(Cs::Constraints) :: TC
+    function mconstr(S,T,C,Σ) :: MType{Tuple{}}
+        (S,T,union(C,Cs),Σ), ()
+    end
+    TC(mconstr)
+end
+
+"Convert a given julia type into a `DMType` and return it."
+function mcreate_DMType(dτ::DataType) :: TC
+    function mconstr(S,T,C,Σ) :: MType{DMType}
+        # if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
+        τ, S, T, C = create_DMType(dτ, S, T, C)
+        (S,T,C,Σ), τ
+    end
+    TC(mconstr)
+end
+
+"Scale a TC Monad's sensitivity context by `s`."
+mscale(s) = TC((S,T,C,Σ) -> ((S,T,C,scale(s,deepcopy(Σ))), ()))
+
+"""
+   add_type(make_type::Function) :: TC
+
+Add a newly created typevar to the monad's type variable context `T`, made by calling
+`make_type::TVarCtx => TVarCtx x DMType`. Return the new type.
+"""
+function add_type(make_type::Function) :: TC#{DMType}
+    function mconstr(S,T,C,Σ) :: MType{DMType}
+        T, τ = make_type(T)
+
+        (S,T,C,Σ), τ
+    end
+    TC(mconstr)
+end
+
+"Add a newly created sensitivity variable to the monad's sensitivity variable context `S` and return it."
+function add_svar() :: TC#{Sensitivity}
+    function mconstr(S,T,C,Σ) :: MType{Sensitivity}
+        S, s = addNewName(S, Symbol("sens_"))
+        s = symbols(s)
+
+        (S,T,C,Σ), s
+    end
+    TC(mconstr)
+end
+
+"Set sensitivity of `x` to `s` and type to `τ`."
+function set_var(x::Symbol, s, τ::DMType) :: TC#{DMTypen}
+    function mconstr(S,T,C,Σ) :: MType{DMType}
+        # x gets sensitivity s, and the inferred type
+        Σ = deepcopy(Σ)
+        Σ[x] = (s,τ)
+        (S,T,C,Σ), τ
+    end
+    TC(mconstr)
+end
+
+"Delete `x` from the current context."
+remove_var(x::Symbol) :: TC = TC((S,T,C,Σ) -> ((S,T,C,delete!(deepcopy(Σ), x)),()))
+
+"Return variable `x`'s current sensitivity."
+lookup_var_sens(x::Symbol) = TC((S,T,C,Σ) -> ((S,T,C,Σ), haskey(Σ,x) ? Σ[x][1] : nothing))
+
+"Return variable `x`'s current type."
+lookup_var_type(x::Symbol) = TC((S,T,C,Σ) -> ((S,T,C,Σ), haskey(Σ,x) ? Σ[x][2] : nothing))
+
+
+"""
+    get_arglist(xτs::Vector{<:TAsgmt}) :: TC
+
+Look up the types and sensitivities of the variables in `xτs` from the current context.
+If a variable is not present in Σ (this means it was not used in the lambda body),
+create a new type/typevar according to type hint given in `xτs`
+"""
+# then remove the xs from Σ
+function get_arglist(xτs::Vector{<:TAsgmt}) :: TC#{Vect{Sens x DMType}}
+    function mconstr(S,T,C,Σ) :: MType{Vector{Tuple{Sensitivity, DMType}}}
+
+        function make_type(dτ::DataType)
+            # if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
+            τx, S, T, C = create_DMType(dτ, S, T, C)
+            (0, τx)
+        end
+
+        Σ = deepcopy(Σ)
+        nxτs = [haskey(Σ, x) ? Σ[x] : make_type(τx) for (x,τx) in xτs]
+        for (x,_) in xτs
+            if haskey(Σ,x)
+                delete!(Σ, x)
+            end
+        end
+        (S,T,C,Σ), nxτs
+    end
+    TC(mconstr)
+end
+
+
+
+#########################################################################################
+# stuff stilen from Monads.jl that we might need
 #abstract type MonadPlus <: Monad end
 # types
 #export Monad, Identity, MList, Maybe, State, MPromise

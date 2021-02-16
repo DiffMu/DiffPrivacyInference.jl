@@ -1,74 +1,59 @@
 
 include("../typechecking/monadic_simplify.jl")
 
-
-"Make types involved in underspecified operations non-constant to enable simplification."
-# this is permitted as ops on non-consts have worse sensitivity.
-function make_typeOp_nonconst(constr :: Constr) :: TC
-    # get non-constant type of τ
-    function relax_numeric_type(τ :: DMType) :: DMType
-        @match τ begin
-            Constant(τ1, _) => relax_numeric_type(τ1)
-            X => X
-        end
-    end
-
-    # if c is in C already, return nothing
-    function add_c_ifnew(c::Constr) :: TC
-        function mconstr(S,T,C) :: MType{Union{Nothing, Tuple{}}}
-            if c in C
-                return (S,T,C,SCtx()), nothing
-            else
-                return (S,T,[C; c],SCtx()), ()
-            end
-        end
-        TC(mconstr)
-    end
-
-    @match constr begin
-        isTypeOpResult(_, _, (Binary(_, τ1, τ2))) => @match (τ1, τ2) begin
-            (TVar(x), Y) => add_c_ifnew(isEqualType(x, relax_numeric_type(Y)))
-            (X, TVar(y)) => add_c_ifnew(isEqualType(y, relax_numeric_type(X)))
-            (_, _) => mreturn(TC, nothing)
-        end;
-        _ => mreturn(TC, nothing)
-    end
-end
-
 """
-    simplify_constraints_lose_generality((S,T,C,Γ)::Full{SensitivityContext}, τ::DMType)
+simplify_constraints_lose_generality() :: TC
 
-Assume all free type variables are non-constant and convert constant types involved in
-underspecified operations to their non-constant equivalent. Then evaluate the constraints
-in `C`, updating `τ`.
+Simplify as many constraints as possible, then assume all free type variables involved in
+DMTypeOps are non-constant and simplify again.
 
-This worsens the sensitivity, as non-constant types yield larger sensitivity penalty. It's
-hence legal, but should only be done after attempting to simplify without assumptions for
-best results.
+This worsens the sensitivity, as non-constant types yield larger sensitivity penalty. It
+is hence legal to do, but should only be done if no other simplification is possible for best results.
 """
 function simplify_constraints_lose_generality() :: TC
 
-    # add isNonConstant constraints for all typevars
-    make_all_nonconstant() = TC((S,T,C) -> ((S,T,union(C,[isNotConstant(TVar(t)) for t in T.names]) ,SCtx()), ()))
-
-    # find an underspecified typeOp constraint, make all types involved nonconst, then recurse.
-    function recurse_lose_generality(Ci::Constraints) :: TC
+    # try to simplify a less general version of the first constraint in Ci by assuming all free
+    # type variables involved are nonconstant (this makes sensitivity worse).
+    # in case that was possible, recurse lose_generality with the new state.
+    # else pop the constraint and recurse try_simplify_constraints with the next one in Ci.
+    function try_simplify_constraints(Ci::Constraints) :: TC
         if isempty(Ci)
-            mreturn(TC, ())
+            mreturn(TC, nothing)
         else
-            @mdo TC begin
-                lg <- make_typeOp_nonconst(Ci[1])
-                r <- (isnothing(lg) ? recurse_lose_generality(Ci[2:end]) : simplify_constraints_lose_generality())
-                return ()
+            @match Ci[1] begin
+                isTypeOpResult(sv, τres, op) => let #TODO clean this up
+
+                    function mconstr(S,T,C,Σ) :: MType{Union{Nothing, Tuple{}}}
+                        otherCs = filter!(x -> !isequal(x, Ci[1]), deepcopy(C))
+                        res = signature((S,T,otherCs,Σ), op, true) # pass the flag for making typevars nonconst
+                        if res isa Nothing
+                            try_simplify_constraints(Ci[2:end]) # nothing happened, try the next constraint.
+                        else
+                            (vs, vt, (S,T,co,_)) = res
+                            @assert length(vs) == length(sv) "operator argument number mismatch"
+
+                            co = [co; unify_nosubs(τres, vt)[2]]
+                            co = [co; map(x->unify_Sensitivity_nosubs(x...)[2], zip(sv, vs))...]
+
+                            return ((S,T,co,Σ), ())
+                        end
+                    end
+
+                    @mdo TC begin
+                        M <- TC(mconstr)
+                        _ <- simplify_constraints_lose_generality()
+                        return ()
+                    end
+                end;
+                _ => try_simplify_constraints(Ci[2:end]) # nothing happened, try the next constraint.
             end
         end
     end
 
     @mdo TC begin
-        _ <- make_all_nonconstant()
-        _ <- msimplify_constraints()
+        _ <- msimplify_constraints() # simplify once without changing things
         Cs <- extract_Cs()
-        _ <- recurse_lose_generality(Cs)
+        _ <- try_simplify_constraints(Cs) # lose generality and recurse
         return ()
     end
 

@@ -72,14 +72,13 @@ Apply the single type substitution `σ` to the constraint `c`.
 function singleTSub(c :: Constr, σ :: TSSub) :: Constr
     @match c begin
         isNumeric(s) => isNumeric(singleTSub(s, σ))
-        isNotConstant(a) => isNotConstant(singleTSub(a, σ))
         isTypeOpResult(sv, τ, op) => isTypeOpResult(sv, singleTSub(τ, σ), singleTSub(op, σ))
         isEqual(s1, s2) => isEqual(s1, s2)
         isLessOrEqual(s1, s2) => isLessOrEqual(s1, s2)
         isSubtypeOf(τ1, τ2) => isSubtypeOf(singleTSub(τ1, σ), singleTSub(τ2, σ))
         isSupremumOf(τ1, τ2, ρ) => isSupremumOf(singleTSub(τ1, σ), singleTSub(τ2, σ), singleTSub(ρ, σ))
         isEqualType(t1, t2) => isEqualType(singleTSub(t1, σ) , singleTSub(t2, σ))
-        isChoice(t, ts) => isChoice(singleTSub(t, σ), Dict((s,singleTSub(tt, σ)) for (s,tt) in ts))
+        isChoice(t, ts) => isChoice(singleTSub(t, σ), Dict((s,(flag, singleTSub(tt, σ))) for (s,(flag, tt)) in ts))
     end
 end
 
@@ -173,7 +172,7 @@ Since `s` or `η` might be already fully evaluated numbers, we simplify the resu
 term in those cases as much as possible.
 """
 function singleSSub(s :: Sensitivity, (X, η) :: SSSub) :: Sensitivity
-    println("### SUBSTITUTING:\n  in $s we do $X := $η\n")
+#    println("### SUBSTITUTING:\n  in $s we do $X := $η\n")
    if s isa STerm
        s = substitute(s, Dict((symbols(X)=> η)))
        η isa Number ? simplify(s) : s
@@ -224,7 +223,6 @@ Apply the single sensitivity substitution `σ` to the constraint `c`.
 """
 function singleSSub(c :: Constr, σ::SSSub) :: Constr
     @match c begin
-        isNotConstant(a) => isNotConstant(singleSSub(a, σ))
         isEqual(s1, s2) => isEqual(singleSSub(s1, σ), singleSSub(s2, σ))
         isLessOrEqual(s1, s2) => isLessOrEqual(singleSSub(s1, σ), singleSSub(s2, σ))
         isNumeric(τ) => isNumeric(singleSSub(τ, σ))
@@ -232,7 +230,7 @@ function singleSSub(c :: Constr, σ::SSSub) :: Constr
         isSubtypeOf(τ1, τ2) => isSubtypeOf(singleSSub(τ1, σ), singleSSub(τ2, σ))
         isSupremumOf(τ1, τ2, ρ) => isSupremumOf(singleSSub(τ1, σ), singleSSub(τ2, σ), singleSSub(ρ, σ))
         isEqualType(t1, t2) => isEqualType(singleSSub(t1, σ) , singleSSub(t2, σ))
-        isChoice(t, ts) => isChoice(singleSSub(t, σ), Dict((s,singleSSub(tt, σ)) for (s,tt) in ts))
+        isChoice(t, ts) => isChoice(singleSSub(t, σ), Dict((s,(singleSSub(flag, σ), singleSSub(tt, σ))) for (s,(flag,tt)) in ts))
     end
 end
 

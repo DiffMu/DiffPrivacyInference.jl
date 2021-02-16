@@ -200,6 +200,26 @@ end
    Ternary :: (DMTypeOps_Ternary, DMType, DMType, DMType) => DMTypeOp
 end
 
+# julia interface
+
+builtin_ops = Dict(
+                   :ceil => τs -> Unary(DMOpCeil(), τs...),
+                   :+ => τs -> Binary(DMOpAdd(), τs...),
+                   :- => τs -> Binary(DMOpSub(), τs...),
+                   :* => τs -> Binary(DMOpMul(), τs...),
+                   :/ => τs -> Binary(DMOpDiv(), τs...),
+                   :% => τs -> Binary(DMOpMod(), τs...),
+                   :rem => τs -> Binary(DMOpMod(), τs...),
+                   :(==) => τs -> Binary(DMOpEq(), τs...)
+                  )
+
+is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
+
+"Get a map from some argument `DMType`s to the `DMTypeOp` corresponding to the input julia function."
+getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : error("Unsupported builtin op $f.")
+
+# pretty printing
+
 "We override equality of type operations to be by value instead of by reference."
 Base.isequal(a::T, aa::T) where {T<:DMTypeOp} = all(map(t->isequal(t...), [(getfield(a, i), getfield(aa, i)) for i in 1:(fieldcount(T))]))
 
@@ -256,15 +276,12 @@ SymbolOrType = Union{Symbol, DMType}
     # `isLessOrEqual(s₁, s₂)` means that `s₁ ≤ s₂` has to hold.
     isLessOrEqual :: (SymbolOrSens, SymbolOrSens) => Constr
 
-    # `isNotConstant(τ)` means that τ is NOT of the form `Constant(τ,_)`.
-    isNotConstant :: (DMType) => Constr
-
     # `isTypeOpResult(sv,τ,op)` means that the result of executing the operation as encoded in `op`,
     # on operands of the types as encoded in `op`, will be a value of type `τ`, and it will depend with
     # sensitivities `sv` on the operands given in `op`.
     # Note: In particular, this means that `sv` should always have exactly as many entries, as there are
     # operands in `op.`
-    isTypeOpResult :: (Vector{SymbolOrSens}, SymbolOrType, DMTypeOp) => Constr
+    isTypeOpResult :: (Vector{Sensitivity}, DMType, DMTypeOp) => Constr
 
     # `isEqual(s₁, s₂)` means that the sensitivities `s₁` and `s₂` should be equal.
     isEqual :: (Sensitivity, Sensitivity) => Constr
@@ -278,7 +295,9 @@ SymbolOrType = Union{Symbol, DMType}
     # `isSupremumOf(τ₁, τ₂, σ)` means that `sup{τ₁, τ₂} = σ` should hold.
     isSupremumOf :: (DMType, DMType, DMType) => Constr
 
-    isChoice :: (DMType, Dict{Vector{<:DataType}, Arr}) => Constr
+    # for dispatch, dict maps user-given signature to a flag variable and the inferred function type.
+    # flag will be set to 0 or 1 according to which choice was picked.
+    isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},Arr}}) => Constr
 end
 
 "The type of constraints is simply a list of individual constraints."
@@ -286,6 +305,7 @@ Constraints = Vector{Constr}
 
 "We override the equality on constraints to be comparing by value instead of by reference."
 Base.isequal(a::T, aa::T) where {T<:Constr} = all(map(t->isequal(t...), [(getfield(a, i), getfield(aa, i)) for i in 1:(fieldcount(T))]))
+Base.isequal(c::isChoice, cc::isChoice) = isequal(c._1,cc._1) &&  isequal(keys(c._2), keys(cc._2)) && all([isequal(c._2[e],cc._2[e]) for e in keys(c._2)])
 
 "Pretty printing for constraints."
 Base.show(io::IO, C::Constraints) =
@@ -296,7 +316,6 @@ Base.show(io::IO, c::Constr) =
     @match c begin
         isNumeric(a) => print(io, a, " is numeric")
         isLessOrEqual(a,b) => print(io, a, " ≤ ", b)
-        isNotConstant(x) => print(io, x, " is not constant")
         isTypeOpResult(sens, τ, op) =>
             let
                 print(io, "(", join(map(string, sens), ", "), ", ", τ, ") = ")
@@ -314,16 +333,18 @@ Base.show(io::IO, c::Constr) =
 DeltaCtx = Tuple{DeltaNames,Constraints}
 #--- insert end
 
+"An error to throw upon finding a constraint that is violated."
+struct ConstraintViolation <: Exception
+msg::String
+end
 
 ####################################################################
 ## Interface of DMType and julia DataType.
-# we have to take care here that juliatype(create_DMType(T)) <: T for all T::DataType.
-# then we can use the inferred DMTypes to make dispatch decisions
-
+#TODO thoroughly review this
 
 "Make a proper `DMType` out of `τ`, adding sensitivity and type variables to `S` and `T` if necessary."
 function create_DMType(τ::DataType, S::SVarCtx, T::TVarCtx, C::Constraints) :: Tuple{DMType, SVarCtx, TVarCtx, Constraints}
-    if τ <: Int
+    if τ <: Integer
         return DMInt(), S, T, C
     elseif τ <: Real
         return DMReal(), S, T, C
@@ -354,7 +375,7 @@ end
 
 function juliatype(τ::DMType) :: DataType
    @match τ begin
-      DMInt() => Int
+      DMInt() => Integer
       DMReal() => Real
       Constant(Y, a) => juliatype(Y)
       DMTup(Ts) => Tuple{map(juliatype, Ts)...}
@@ -569,7 +590,6 @@ function free_SVars(c :: Constr) :: Vector{Symbol}
     @match c begin
         isNumeric(τ)             => free_SVars(τ)
         isLessOrEqual(n,m)       => union(free_SVars(n),free_SVars(m))
-        isNotConstant(τ)         => free_SVars(τ)
         isTypeOpResult(v, s, τ)  => union(map(free_SVars, v)..., free_SVars(s), free_SVars(τ))
         isEqual(s1, s2)          => union(free_SVars(s1), free_SVars(s2))
         isEqualType(s1, s2)      => union(free_SVars(s1), free_SVars(s2))
@@ -586,7 +606,6 @@ function free_TVars(c :: Constr) :: Vector{Symbol}
     @match c begin
         isNumeric(τ)             => free_TVars(τ)
         isLessOrEqual(n,m)       => union(free_TVars(n),free_TVars(m))
-        isNotConstant(τ)         => free_TVars(τ)
         isTypeOpResult(v, s, τ)  => union(map(free_TVars, v)..., free_TVars(s), free_TVars(τ))
         isEqual(s1, s2)          => union(free_TVars(s1), free_TVars(s2))
         isEqualType(s1, s2)      => union(free_TVars(s1), free_TVars(s2))

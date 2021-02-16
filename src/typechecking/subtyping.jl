@@ -103,6 +103,8 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
             newCs = [isSubtypeOf(β[2], α[2]) for (α, β) in zip(αs, βs)]
             push!(newCs, isSubtypeOf(ρ, ρ2))
 
+            newCs = [newCs; [isEqual(β[1], α[1]) for  (α, β) in zip(αs, βs)]]
+
             return (S,T,union(C, newCs),Σ)
         end;
         (TVar(_), Arr(αs, ρ)) => let
@@ -158,7 +160,10 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
                 # maybe the types can be unified
                 _, newC  = unify_nosubs(τ1, τ2)
                 return (S,T,union(C,newC),Σ)
-            catch
+            catch err
+                if !(err isa ConstraintViolation)
+                    rethrow(err)
+                end
                 # traverse the subtype relation graph upwards from τ1, to see if we come across τ2.
                 supers = try_get_direct_supertypes(τ1)
                 if isnothing(supers)

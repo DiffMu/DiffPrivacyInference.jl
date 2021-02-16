@@ -31,7 +31,7 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
             (S , svar) = addNewName(S, name_prefix(τ))
             (T , tvar) = addNewName(T, Symbol("res_", typeof(kind)))
             C2 = [
-                  isTypeOpResult([svar], tvar, Unary(kind, τ)),
+                  isTypeOpResult([symbols(svar)], TVar(tvar), Unary(kind, τ)),
                   isNumeric(τ)
                  ]
             C = vcat(C, C2)
@@ -43,7 +43,7 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
             (S , svar2) = addNewName(S, name_prefix(τ2))
             (T , tvar) = addNewName(T, Symbol("res_", typeof(kind)))
             C2 = [
-                  isTypeOpResult([svar1, svar2], tvar, Binary(kind, τ1, τ2)),
+                  isTypeOpResult([symbols(svar1), symbols(svar2)], TVar(tvar), Binary(kind, τ1, τ2)),
                   isNumeric(τ1),
                   isNumeric(τ2)
                  ]
@@ -74,7 +74,7 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
 
             # add a constraint so we can later decide whether it's a loop or an sloop
             C = [C;
-                 isTypeOpResult([s_n, s_c, s_b], τ_ret, Ternary(DMOpLoop(), τ_n, τ_c, τ_b));
+                 isTypeOpResult([symbols(s_n), symbols(s_c), symbols(s_b)], TVar(τ_ret), Ternary(DMOpLoop(), τ_n, τ_c, τ_b));
                  isNumeric(τ_n)]
 
             (S, T, C), τ_ret, [symbols(s_n), symbols(s_c), symbols(s_b)]

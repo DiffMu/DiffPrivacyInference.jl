@@ -1,56 +1,19 @@
 include("definitions.jl")
 
 ############################################################################################
-### Operations
-
-"Get a map from some argument `DMType`s to the `DMTypeOp` corresponding to the input julia function."
-getDMOp(_ :: typeof(ceil)) = τs -> Unary(DMOpCeil(), τs...)
-getDMOp(_ :: typeof(+)) = τs -> Binary(DMOpAdd(), τs...)
-getDMOp(_ :: typeof(-)) = τs -> Binary(DMOpSub(), τs...)
-getDMOp(_ :: typeof(*)) = τs -> Binary(DMOpMul(), τs...)
-getDMOp(_ :: typeof(/)) = τs -> Binary(DMOpDiv(), τs...)
-getDMOp(_ :: typeof(%)) = τs -> Binary(DMOpMod(), τs...)
-getDMOp(_ :: typeof(==)) = τs -> Binary(DMOpEq(), τs...)
-getDMOp(f) = error("Unsupported builtin op $f.")
-
-
-"Check whether `f` is a builtin operation."
-function is_builtin_op(f::Function)
-    try
-        getDMOp(f)
-        return true
-    catch
-        return false
-    end
-end
-
-
-############################################################################################
 ### Constancy Check
 
-"Check whether there is any constraint requiring that `TVar(t)` is non-constant."
-function check_TVar_not_constant(C :: Constraints, t :: Symbol) :: Bool
-    function f(c :: Constr) :: Bool
-        @match c begin
-            isNotConstant((TVar(s))) && if s == t end => true
-            _                                 => false
-        end
-    end
-    any([f(c) for c in C])
-end
-
-
 "Check whether `τ` contains any non-constant types."
-function check_not_constant(C :: Constraints, τ :: DMType) :: Bool
+function check_not_constant(τ :: DMType, tvars_nonconst::Bool) :: Bool
    @match τ begin
       DMInt() => true
       DMReal() => true
       #Idx(_) => true
       Constant(_, _) => false
-      DMTup(Ts) => any(map(T->check_not_constant(C, T), Ts))
+      DMTup(Ts) => any(map(T->check_not_constant(T, tvars_nonconst), Ts))
       DMVec(_) => true
       Arr(_, _) => true
-      TVar(t) => check_TVar_not_constant(C, t)
+      TVar(t) => tvars_nonconst
    end
 end
 
@@ -68,10 +31,10 @@ If the types of `top` are not yet sufficiently specified to determine the signat
 `nothing`. Else, return the signature as specified in the Duet paper, as well as the return
 type of the operation and the new context with new constraints in case the op required any.
 """
-function signature(STCΣ :: Full{SCtx}, top::DMTypeOp) :: Union{Nothing, Tuple{Array{Sensitivity}, DMType, Full{SCtx}}}
+function signature(STCΣ :: Full{SCtx}, top::DMTypeOp, tvars_nonconst = false) :: Union{Nothing, Tuple{Array{Sensitivity}, DMType, Full{SCtx}}}
 
     # ensure all types are non-constant
-    cINC(Xs::DMType...) = all(X -> check_not_constant(STCΣ[3], X), Xs)
+    cINC(Xs::DMType...) = all(X -> check_not_constant(X, tvars_nonconst), Xs)
 
     # if the types are equal most operations result in that same type, if they are not most default to real.
     comT(X, Y) = (X==Y ? X : DMReal())
@@ -105,32 +68,32 @@ function signature(STCΣ :: Full{SCtx}, top::DMTypeOp) :: Union{Nothing, Tuple{A
             (v1, v2, vt, co0) = @match (op, τ1, τ2) begin
                 (DMOpAdd(), Constant(X, η1), Constant(Y, η2))  => (0, 0, Constant(supremum(X,Y), η1 + η2), []);
                 (DMOpAdd(), X, Y)                              && if cINC(X,Y) end => (1, 1, supremum(X,Y), []);
-                (DMOpAdd(), Constant(X, η1), Y)                => (0, 1, supremum(X,Y), []);
-                (DMOpAdd(), X, Constant(Y, η2))                => (1, 0, supremum(X,Y), []);
+                (DMOpAdd(), Constant(X, η1), Y)                && if cINC(Y) end => (0, 1, supremum(X,Y), []);
+                (DMOpAdd(), X, Constant(Y, η2))                && if cINC(X) end => (1, 0, supremum(X,Y), []);
                 (DMOpAdd(), Constant(TVar(_), _), Y)           => return nothing;
                 (DMOpAdd(), X, Constant(TVar(_), _))           => return nothing;
                 (DMOpAdd(), TVar(_), Y)                        => return nothing;
                 (DMOpAdd(), X, TVar(_))                        => return nothing;
 
                 (DMOpMul(), Constant(X, η1), Constant(Y, η2))  => (0, 0, Constant(supremum(X,Y), η1 * η2), []);
-                (DMOpMul(), Constant(X, η1), Y)                => (0, η1, supremum(X,Y), []);
-                (DMOpMul(), X, Constant(Y, η2))                => (η2, 0, supremum(X,Y), []);
                 (DMOpMul(), X, Y)                              && if cINC(X,Y) end => (∞, ∞, supremum(X,Y), []);
+                (DMOpMul(), Constant(X, η1), Y)                && if cINC(Y) end => (0, η1, supremum(X,Y), []);
+                (DMOpMul(), X, Constant(Y, η2))                && if cINC(X) end => (η2, 0, supremum(X,Y), []);
                 (DMOpMul(), Constant(TVar(_), _), Y)           => return nothing;
                 (DMOpMul(), X, Constant(TVar(_), _))           => return nothing;
                 (DMOpMul(), TVar(_), Y)                        => return nothing;
                 (DMOpMul(), X, TVar(_))                        => return nothing;
 
                 (DMOpEq(), X, Y)                               && if cINC(X,Y) end => (1, 1, DMInt(), []);
-                (DMOpEq(), Constant(X, η1), Y)                 => (0, 1, DMInt(), []);
-                (DMOpEq(), X, Constant(Y, η2))                 => (1, 0, DMInt(), []);
+                (DMOpEq(), Constant(X, η1), Y)                 && if cINC(Y) end => (0, 1, DMInt(), []);
+                (DMOpEq(), X, Constant(Y, η2))                 && if cINC(X) end => (1, 0, DMInt(), []);
                 (DMOpEq(), Constant(TVar(_), _), Y)            => return nothing;
                 (DMOpEq(), X, Constant(TVar(_), _))            => return nothing;
                 (DMOpEq(), TVar(_), Y)                         => return nothing;
                 (DMOpEq(), X, TVar(_))                         => return nothing;
 
-                (DMOpSub(), X, Y)                              && if cINC(X,Y) end => (1, 1, comT(X,Y), []);
                 (DMOpSub(), Constant(X, η1), Constant(Y, η2))  => (0, 0, Constant(comT(X,Y), η1 - η2), [isLessOrEqual(η2, η1)]);
+                (DMOpSub(), X, Y)                              && if cINC(X,Y) end => (1, 1, comT(X,Y), []);
                 (DMOpSub(), Constant(_, _), Y)                 => return nothing;
                 (DMOpSub(), X, Constant(_, _))                 => return nothing;
                 (DMOpSub(), TVar(_), Y)                        => return nothing;
@@ -138,17 +101,17 @@ function signature(STCΣ :: Full{SCtx}, top::DMTypeOp) :: Union{Nothing, Tuple{A
 
                 (DMOpDiv(), Constant(X, η1), Constant(Y, η2))  => (0, 0, Constant(DMReal(), η1 / η2), []);
                 (DMOpDiv(), X, Y)                              && if cINC(X,Y) end => (∞, ∞, DMReal(), []);
-                (DMOpDiv(), Constant(X, η1), Y)                => (0, ∞, DMReal(), []);
-                (DMOpDiv(), X, Constant(Y, η2))                => (1/η2, 0, DMReal(), []);
+                (DMOpDiv(), Constant(X, η1), Y)                && if cINC(Y) end => (0, ∞, DMReal(), []);
+                (DMOpDiv(), X, Constant(Y, η2))                && if cINC(X) end => (1/η2, 0, DMReal(), []);
                 (DMOpDiv(), Constant(TVar(_), _), Y)           => return nothing;
                 (DMOpDiv(), X, Constant(TVar(_), _))           => return nothing;
                 (DMOpDiv(), TVar(_), Y)                        => return nothing;
                 (DMOpDiv(), X, TVar(_))                        => return nothing;
 
-                (DMOpMod(), X, Constant(Y, η2))                && if cINC(X,Y) end => (η2, 0, comT(X,Y), []);
                 (DMOpMod(), Constant(X, η1), Constant(Y, η2))  => (η2, η1, Constant(comT(X,Y), η1 % η2), []);
-                #(DMOpMod(), Idx(η1), Idx(η2))                 => (η1, η2, Idx(min(η1, η2)), []);
                 (DMOpMod(), X, Y)                              && if cINC(X,Y) end => (∞, ∞, comT(X,Y), []);
+                (DMOpMod(), X, Constant(Y, η2))                && if cINC(X) end => (η2, 0, comT(X,Y), []);
+                #(DMOpMod(), Idx(η1), Idx(η2))                 => (η1, η2, Idx(min(η1, η2)), []);
                 (DMOpMod(), Constant(TVar(_), _), Y)           => return nothing;
                 (DMOpMod(), X, Constant(TVar(_), _))           => return nothing;
                 (DMOpMod(), TVar(_), Y)                        => return nothing;

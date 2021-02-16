@@ -13,7 +13,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
     arg :: DataType => DMTerm
-    op :: (Function, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
+    op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
     ret :: DMTerm => DMTerm
     lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
@@ -62,7 +62,7 @@ function pretty_print(t::DMTerm) :: String
 end
 
 pretty_print(s::Symbol) = string(s)
-pretty_print(ta::TAsgmt) = string(ta[1])
+pretty_print((a,t)::TAsgmt) = string(a) * ((t == Any) ? "" : ("::"*string(t)))
 pretty_print(ts::Vector{<:TAsgmt}) = join(map(pretty_print, ts), ", ")
 pretty_print(ts::Vector{DMTerm}) = join(map(pretty_print, ts), ", ")
 
@@ -107,14 +107,13 @@ function forloop(body, iter, captures::Tuple)
     return captures
 end
 
-function fsig(vs :: Vector{TAsgmt}) :: Vector
+function fsig(vs :: Vector{<:TAsgmt}) :: Vector
     args = []
     for (dv,dt) in vs
-        t = juliatype(dt)
-        if  t == Any
+        if  dt == Any
             push!(args, dv)
         else
-            push!(args, :($dv::$t))
+            push!(args, :($dv::$dt))
         end
     end
     return args
@@ -134,48 +133,35 @@ function Base.isequal(τ1::DMType, τ2::DMType)
     end
 end
 
-function showPretty(io::IO, v::Vector, print_fn)
+function pretty_print(v::Vector, print_fn)
     @match v begin
-        [] => print(io, "()")
-        [x] =>
-            let
-                print(io, "(")
-                print_fn(io, x)
-                print(io, ")")
-            end
+        [] => "()"
+        [x] => "(" * print_fn(x) * ")"
         [x,xs...] =>
-            let
-                print(io, "(")
-                print_fn(io, x)
-                for y in xs
-                    print(io, ", ")
-                    print_fn(io, y)
-                end
-                print(io, ")")
+        let
+            s = "(" * print_fn(x)
+            for y in xs
+                s *=  ", " * print_fn(y)
             end
+            s * ")"
+        end
     end
 end
 
-function Base.show(io::IO, t::DMType)
+pretty_print(x) = string(x)
+
+function pretty_print(t::DMType)
     @match t begin
-        DMInt() => print(io, "Int")
-        DMReal() => print(io, "Real")
-        Constant(ty, te) => print(io, ty, "[", te, "]")
-        DMTup(tys) => showPretty(io, tys, Base.show)
-        DMVec(len, ty) => print(io, "Vec(", ty, ", ", len, ")")
-        TVar(symb) => print(io, "tvar.", symb)
+        DMInt() => "Int"
+        DMReal() => "Real"
+        Constant(ty, te) => pretty_print(ty) * "[" * pretty_print(te) * "]"
+        DMTup(tys) => pretty_print(tys, pretty_print)
+        DMVec(len, ty) => "Vec(" * pretty_print(ty) * ", " * pretty_print(len) * ")"
+        TVar(symb) =>  "tvar." * pretty_print(symb)
         Arr(args, ret) =>
             let
-                # print(io, "(")
-                # for (sens, ty) in args
-                #     print(io, ty, " @(", sens, ") ==> ")
-                # end
-                showPretty(io, args, (io, (sens,ty))-> print(io, ty, " @(", sens, ")"))
-                print(io, " ==> ", ret)
+                pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " ==> " * pretty_print(ret)
             end
-        ForAll(((ΔS, ΔT), ΔC), τ) => begin
-            print(io, "∀{", ΔS, ", ", ΔT, ", ", ΔC, "} ", τ)
-        end
     end
 end
 

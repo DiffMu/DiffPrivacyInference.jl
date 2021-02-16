@@ -1,9 +1,6 @@
 include("../core/DMIR.jl")
 include("sanitize.jl")
 
-# these get special treatment
-ops = [:+, :-, :*, :/, :%, :(==)]
-
 """
     file_to_dmterm(file::AbstractString)
 
@@ -27,6 +24,20 @@ function string_to_dmterm(code::String, ln=LineNumberNode(1, "none")) :: DMTerm
     # error upon modification of nonlocal variables
     sanitize([ast], ln)
     exprs_to_dmterm([ast], ln)
+end
+
+# we forbid number types finer than Integer and Real as function signatures, so we can
+# decide on dispatch without having to carry the exact julia type.
+function type_allowed(t::DataType)
+    if t in [Integer, Real, Number, Any]
+        return true
+    elseif t<: Vector
+        return type_allowed(t.parameters[1])
+    elseif t <: Tuple
+        return all(map(type_allowed, t.parameters))
+    else
+        return false
+    end
 end
 
 
@@ -60,13 +71,21 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 error("overwriting an existing function in a loop is not allowed in $ex, $(ln.file) line $(ln.line)")
             end
             name = head.args[1]
+            if is_builtin_op(name)
+                error("overwriting builtin function $name in $ex, $(ln.file) line $(ln.line) is not permitted.")
+            end
             vs = Symbol[]
             ts = DataType[]
             for a in head.args[2:end]
                 (v, t) = @match a begin
                     ::Symbol => (a, Any)
-                    Expr(:(::), s, T) => (s, eval(T))
-                    Expr(:curly, _) => (s, eval(T))
+                    Expr(:(::), s, T) => let
+                        Tt = eval(T)
+                        if !type_allowed(Tt)
+                            error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of function $head, $(ln.file) line $(ln.line)")
+                        end
+                        (s, Tt)
+                    end
                     _ => let
                         ln = body.args[1]
                         error("keyword/vararg/optional arguments not yet supported in function definition $head, $(ln.file) line $(ln.line)")
@@ -86,6 +105,8 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 ::Symbol => let
                     if ase in C
                         error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
+                    elseif is_builtin_op(ase)
+                        error("overwriting builtin function $ase in $ex, $(ln.file) line $(ln.line) is not permitted.")
                     end
                     v = (ase, Any)
                     newscope = (F, [[ase]; A], C, L)
@@ -94,6 +115,8 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 Expr(:(::), s, T) => let
                     if s in C
                         error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
+                    elseif is_builtin_op(ase)
+                        error("overwriting builtin function $ase in $ex, $(ln.file) line $(ln.line) is not permitted.")
                     end
                     v = (s, eval(T))
                     newscope = (F, [[s]; A], C, L)
@@ -267,9 +290,13 @@ function expr_to_dmterm(ex::Union{Number, Symbol, Expr}, ln::LineNumberNode, (F,
         end;
 
         Expr(:call, callee, args...) => let
-            if callee in ops
-                # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
-                return reduce((x,y)->op(eval(callee), [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
+            if is_builtin_op(callee)
+                if length(args) == 1
+                    return op(callee, [expr_to_dmterm(args[1], ln, scope)])
+                else
+                    # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
+                    return reduce((x,y)->op(callee, [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
+                end
             elseif callee in F
                 error("recursive call of $callee in $(ln.file) line $(ln.line)")
             else
@@ -292,8 +319,13 @@ function expr_to_dmterm(ex::Union{Number, Symbol, Expr}, ln::LineNumberNode, (F,
             for a in as
                 (v, t) = @match a begin
                     ::Symbol => (a, Any)
-                    Expr(:(::), s, T) => (s, eval(T))
-                    Expr(:curly, _) => (s, eval(T))
+                    Expr(:(::), s, T) => let
+                        Tt = eval(T)
+                        if !type_allowed(Tt)
+                            error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of anonymous function at $(ln.file) line $(ln.line)")
+                        end
+                        (s, eval(T))
+                    end
                     _ => let
                         ln = body.args[1]
                         error("keyword/vararg/optional arguments not yet supported in lambda definition $head, $(ln.file) line $(ln.line)")

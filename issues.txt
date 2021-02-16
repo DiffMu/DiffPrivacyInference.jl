@@ -1,0 +1,59 @@
+
+- general:
+    - document all that is different from duet in the typechecker...
+    - write more tests & documentation ;)
+    - make a proper julia module
+    - go public, write readme and some usage examples
+
+    - done:
+         - make try-catch blocks exception-type-safe
+
+
+
+- parser:
+    - handle nested loop variables seperately to avoid penalty
+    - globals in modules
+    - implement julia let syntax
+    - implement julia comprehension syntax
+    - explore static dispatch resolving more thoroughly
+    - find a way of dealing with indexed iterate (occuring in (x,y,z) = v statements)
+    - proper recursion handling, atm only gets detected if the function calls 
+      itself directly. check what kind of equations we get if we do that...
+
+    - done:
+        - make loop pass along captures as a tuple
+        - forbid returns in loops :(
+        - use single let for everything but loop
+        - forbid mutation of variables from outer scope! >:(
+        - forbid overloading builtins
+
+- sensitivity language:
+    - implement matrix foo
+    - understand huge vector penalty compared to tuples
+
+    - done:
+        - make a single let
+
+- privacy language:
+    - implement at least gauss and loop
+    - what about ln terms?
+
+- typechecker:
+    - monadify signatures
+    - monadify subtyping
+    - cleanup and monadify supremum
+    - handle finer julia types
+    - port all rules to the monad
+    - cycle detection in subtyping: detect a<b<...<a => a==...==b
+    - typecheck len
+    - allow indexing of tuples
+    - index types?
+    - https://arxiv.org/abs/1512.00136 for better forloops? :D
+
+
+    - done:
+        - make rules for single let, revisit forloop rule
+        - resolve max and inf in the results
+        - deltas: substitutions happen magically using a monad. we won't have to 
+      say distribute_substitute everywhere...
+        - fix lose_generality

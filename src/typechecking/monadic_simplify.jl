@@ -5,14 +5,8 @@ include("../core/monads.jl")
 using SimplePosets
 
 
-"An error to throw upon finding a constraint that is violated."
-struct ConstraintViolation <: Exception
-msg::String
-end
 
 function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
-
-    println("\n=== simplifying constraint $c\n")
 
     "If `τ` is numeric, return `()`. If it's unclear, return nothing. If it's not numeric, error."
     function check_numeric(τ::DMType) :: Union{Nothing,Tuple{}}
@@ -26,24 +20,6 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
         end
     end
 
-    function set_or_unify(a :: SymbolOrSens, b :: Sensitivity) :: Constraints
-        if a isa Symbol
-            [isEqual(symbols(a),b)]
-        else
-            (_, co) = unify_Sensitivity_nosubs(a, b)
-            co
-        end
-    end
-
-    function set_or_unify(a :: SymbolOrType, b :: DMType) :: Constraints
-        if a isa Symbol
-            [isEqualType(TVar(a),b)]
-        else
-            (_, co) = unify_nosubs(a, b)
-            co
-        end
-    end
-
     # This means the constraint could not be simplified.
     return_nothing() :: TC = mreturn(TC,nothing)
 
@@ -54,10 +30,12 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 
     # This means the simplification yielded new constraints.
     function return_simple(newCs :: Constraints) :: TC
-        function mconstr(S,T,C) :: MType{Tuple{}}
-            filter!(x -> !isequal(x, c), C)
-            C = union(C,newCs)
-            (S,T,C,SCtx()), ()
+            println("discarding $c, adding $newCs")
+        function mconstr(S,T,C,Σ) :: MType{Tuple{}}
+            Cc = filter(x -> !isequal(x, c), C)
+            println("discarding $c, got $Cc, adding $newCs")
+            Cc = union(Cc,newCs)
+            (S,T,Cc,Σ), ()
         end
         TC(mconstr)
     end
@@ -68,7 +46,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
         @match (newCs, σs) begin
             ([],[]) => return_discharge() # they were equal to begin with, we can toss the constraint
             _ => let
-                function mconstr(S,T,C) :: MType{Union{Nothing,Tuple{}}}
+                function mconstr(S,T,C,Σ) :: MType{Union{Nothing,Tuple{}}}
                     # remove c before substitute, we put it back later.
                     C_noc = Constr[cc for cc in C if !isequal(cc,c)]
                     Cs = apply_subs(C_noc,σs)
@@ -77,10 +55,10 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 
                     if isequal(Cs,C_noc) && issubset(newCs, [Cs; c])
                         # substitutions did not change anything and we knew all constraints alredy -> nothing happened.
-                        return (S,T,C,SCtx()), nothing
+                        return (S,T,C,Σ), nothing
                     else
                         # don't forget to put c back
-                        return (S,T,union(Cs,newCs,[c]),SCtx()), ()
+                        return (S,T,union(Cs,newCs,[c]),Σ), ()
                     end
                 end
                 TC(mconstr)
@@ -97,7 +75,6 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             _, co, σ = unify_DMType(t1, t2)
             return_substitute(co,σ)
         end
-
         isLessOrEqual(s1, s2) => let
             n1 , n2 = (try_destructure_Sensitivity(s1), try_destructure_Sensitivity(s2))
 
@@ -113,22 +90,18 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                 return_discharge()
             end
         end;
-        isNotConstant(a) => @match a begin
-            Constant(_, _) => throw(ConstraintViolation("Expected $a not to be a singleton type."))
-            TVar(_) => return_nothing()
-            _ => return_discharge()
-        end;
         isTypeOpResult(sv, τres, op) => let #TODO clean this up
-            function mconstr(S,T,C) :: MType{Union{Nothing, Tuple{}}}
+            function mconstr(S,T,C,Σ) :: MType{Union{Nothing, Tuple{}}}
                 otherCs = filter!(x -> !isequal(x, c), deepcopy(C))
-                res = signature((S,T,otherCs,SCtx()), op)
+                res = signature((S,T,otherCs,Σ), op)
                 if res isa Nothing
-                    return (S,T,C,SCtx()), nothing
+                    return (S,T,C,Σ), nothing
                 else
                     (vs, vt, (S,T,co,Σ)) = res
                     @assert length(vs) == length(sv) "operator argument number mismatch"
 
-                    co = [co; map(x->set_or_unify(x...), zip([sv; τres], [vs; vt]))...]
+                    co = [co; unify_nosubs(τres, vt)[2]]
+                    co = [co; map(x->unify_Sensitivity_nosubs(x...)[2], zip(sv, vs))...]
 
                     return ((S,T,co,Σ), ())
                 end
@@ -137,11 +110,11 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
         end;
         isSubtypeOf(τ1, τ2) =>
         let
-            function mconstr(S::SVarCtx,T::TVarCtx,C::Constraints) :: MType{Union{Nothing, Tuple{}}}
+            function mconstr(S::SVarCtx,T::TVarCtx,C::Constraints,Σ::SCtx) :: MType{Union{Nothing, Tuple{}}}
                 newC = filter(c -> !isequal(c,isSubtypeOf(τ1, τ2)), C)
-                res = try_eval_isSubtypeOf((S,T,newC,SCtx()), τ1, τ2)
+                res = try_eval_isSubtypeOf((S,T,newC,Σ), τ1, τ2)
                 if isnothing(res)
-                    return (S,T,C,SCtx()), nothing
+                    return (S,T,C,Σ), nothing
                 else
                     return res, ()
                 end
@@ -156,49 +129,73 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             else
                 return_simple(res)
             end
-
         end;
         isChoice(τ, choices) => begin
+    println("\n=== simplifying choice constraint $c\n")
             @match τ begin
                 Arr(args, _) => let
+
                     newchoices = Dict((s,c) for (s,c) in deepcopy(choices) if choice_could_match(args, s))
 
                     if isempty(newchoices)
-                        error("no matching choice for $τ found in $choices.");
+                        throw(ConstraintViolation("no matching choice for $τ found in $choices."));
                     else
-                        # if we don't know all types we cannot throw out more general methods, as eg for two methods
+                        # if there is no free tyepevars in τs arguments, throw out methods that are more general than others
+                        # if we don't know all types we cannot do this, as eg for two methods
                         # (Int, Int) => T
                         # (Real, Number) => T
                         # and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
                         # is a DMReal, the first one does not match even though it's less general.
                         if all(map(t->isempty(free_TVars(t)), args)) # no free tvars in the args
                             newchoices = keep_least_general(newchoices)
-
-                            if length(newchoices) == 1 # only one left, we can pick that one
-                                return_simple(Constr[isSubtypeOf(first(values(newchoices)), τ)])
-                            end
                         end
 
                         if length(newchoices) == length(choices)
                             return_nothing() # no choices were discarded, the constraint could not be simplified.
                         else
-                            return_simple(Constr[isChoice(τ, newchoices)])
+                            # null all flags of choices that were discarded, so their inferred sensitivities get nulled
+                            nullflags = Constr[]
+                            for s in setdiff(keys(choices), keys(newchoices))
+                                push!(nullflags, isEqual(choices[s][1], 0))
+                            end
+
+                            if length(newchoices) == 1 # only one left, we can pick that one
+                                println("got an arrow, discarding")
+                                flag, cτ = first(values(newchoices))
+
+                                # even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
+                                # as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
+                                # set this ones flag to 1
+                                return_simple([nullflags; isSubtypeOf(cτ, τ); isEqual(flag, 1)])
+                            else
+                                println("got an arrow, returning $newchoices")
+                                return_simple([nullflags; isChoice(τ, newchoices)])
+                            end
                         end
                     end
                 end;
-                TVar(_) => return_nothing(); #TODO in case there is only one choice, we could resolve...
+                TVar(_) => let
+                    if length(choices)==1
+                        # it's the only possible choice, set its flag to 1.
+                        # if it does not fit even though there is no other choices, we will get a type error later
+                        flag, cτ = first(values(choices))
+                        return_simple([isSubtypeOf(cτ, τ), isEqual(flag, 1)])
+                    else
+                        return_nothing()
+                    end
+                end;
                 _ => error("invalid constraint: $τ cannot be a choice.")
             end
         end
     end
 end
 
-"""See if a call with argument types `args` would fit a method with signature `cs`."""
-function choice_could_match(args::Vector{Tuple{Sensitivity, DMType}}, cs::Vector{<:DataType}) :: Bool
+"""See if a call with argument types `args` would fit a method with signature `cs`, if the type variables in `args` would resolve to the right thing."""
+function choice_could_match(args::Vector{<:Tuple{Sensitivity, DMType}}, cs::Vector{<:DataType}) :: Bool
     if length(args) != length(cs)
         return false # no. of arguments differs
     else
-        could_match(t,c) = t isa TVar ? true : juliatype(t) <: c
+        could_match(t,c) = t isa TVar ? true : juliatype(t) <: c # tvars could match everything
         return all(map((((_,t),c),) -> could_match(t,c), zip(args,cs)))
     end
 end
@@ -216,7 +213,7 @@ end
 =#
 
 """Remove entries from `cs` that are supertypes of some other entry."""
-function keep_least_general(cs::Dict{<:Vector{<:DataType}, Arr}) :: Dict{Vector{DataType}, Arr}
+function keep_least_general(cs::Dict{<:Vector{<:DataType}, Tuple{SymbolicUtils.Sym{Number}, Arr}}) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, Arr}}
     # make a poset from the subtype relation of signatures
     P = SimplePoset(Vector{DataType})
     sign = keys(cs)
@@ -235,8 +232,6 @@ Evaluate all constraints that can be simplified.
 """
 function msimplify_constraints() :: TC#{Tuple{}}
 
-    extract_Cs() = TC((S,T,C) -> ((S,T,C,SCtx()), deepcopy(C)))
-
     # try to simplify the first constraint in Ci.
     # in case there is a simplification, recurse msimplify_constraints with the new state.
     # else pop the constraint and recurse try_simplify_constraints with the next one in Ci.
@@ -246,6 +241,7 @@ function msimplify_constraints() :: TC#{Tuple{}}
         else
             @mdo TC begin
                 simpl <- mtry_simplify_Constr(Ci[1])
+                _ <-mreturn(println("---------> recursion pass  $(length(Ci)) on $(Ci[1]), got $simpl\n\n"))
                 ret <- (isnothing(simpl) ? try_simplify_constraints(Ci[2:end]) : msimplify_constraints())
                 return ret
             end
@@ -261,9 +257,8 @@ function msimplify_constraints() :: TC#{Tuple{}}
 end
 
 """Apply all substitutions encoded in the constraints of the TC monad `m` to the DMType `τ`."""
-function apply_subs(τ::DMType, m::TC) :: TC
-    function mconstr(S,T,C) :: MType{DMType}
-        (S,T,C,Σ), _ = m.func(S,T,C)
+function apply_subs(τ::DMType) :: TC
+    function mconstr(S,T,C,Σ) :: MType{DMType}
         for c in C
             τ = @match c begin
                 isEqual(s1, s2) => let
