@@ -1,4 +1,4 @@
-
+using DiffPrivacyInference, Test
 # say include("test/runtests.jl") to run
 
 #include("parsing.jl")

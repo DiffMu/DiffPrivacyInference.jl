@@ -1,12 +1,10 @@
 
-using Test
-
 function build_tc(t::DMTerm) :: TC
     d = Dict{Symbol,Array{DMTerm,1}}()
-    @mdo TC begin
-        r1m <- mcheck_sens(t, d)
-        tau <- simplify_constraints_lose_generality()
-        r <- apply_subs(r1m)
+    DiffPrivacyInference.@mdo TC begin
+        r1m <- DiffPrivacyInference.mcheck_sens(t, d)
+        tau <- DiffPrivacyInference.simplify_constraints_lose_generality()
+        r <- DiffPrivacyInference.apply_subs(r1m)
         return r
     end
 end
@@ -32,17 +30,17 @@ end
     tint =  lam(Tuple{Symbol,DataType}[(:i, Integer)], flet(:f, DataType[Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Integer), (:c, Any)], op(:*, DMTerm[sng(1), var(:x, Any)])), flet(:f, DataType[Number, Any], lam(Tuple{Symbol,DataType}[(:x, Number), (:c, Any)], op(:*, DMTerm[sng(2), var(:x, Any)])), flet(:f, DataType[Real, Any], lam(Tuple{Symbol,DataType}[(:x, Real), (:c, Any)], op(:*, DMTerm[sng(3), var(:x, Any)])), apply(var(:f, Any), DMTerm[var(:i, Any), sng(1)])))))
     mint = build_tc(tint)
     τint = Arr([(1, DMInt())], DMInt())
-    @test isequal(run(mint)[2], τint)
+    @test isequal(DiffPrivacyInference.run(mint)[2], τint)
 
     treal =  lam(Tuple{Symbol,DataType}[(:i, Real)], flet(:f, DataType[Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Integer), (:c, Any)], op(:*, DMTerm[sng(1), var(:x, Any)])), flet(:f, DataType[Number, Any], lam(Tuple{Symbol,DataType}[(:x, Number), (:c, Any)], op(:*, DMTerm[sng(2), var(:x, Any)])), flet(:f, DataType[Real, Any], lam(Tuple{Symbol,DataType}[(:x, Real), (:c, Any)], op(:*, DMTerm[sng(3), var(:x, Any)])), apply(var(:f, Any), DMTerm[var(:i, Any), sng(1)])))))
     mreal = build_tc(treal)
     τreal = Arr([(3, DMReal())], DMReal())
-    @test isequal(run(mreal)[2], τreal)
+    @test isequal(DiffPrivacyInference.run(mreal)[2], τreal)
 
     tnum =  lam(Tuple{Symbol,DataType}[(:i, Number)], flet(:f, DataType[Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Integer), (:c, Any)], op(:*, DMTerm[sng(1), var(:x, Any)])), flet(:f, DataType[Number, Any], lam(Tuple{Symbol,DataType}[(:x, Number), (:c, Any)], op(:*, DMTerm[sng(2), var(:x, Any)])), flet(:f, DataType[Real, Any], lam(Tuple{Symbol,DataType}[(:x, Real), (:c, Any)], op(:*, DMTerm[sng(3), var(:x, Any)])), apply(var(:f, Any), DMTerm[var(:i, Any), sng(1)])))))
     mnum = build_tc(tnum)
     τnum = Arr([(symbols(:sens_0), TVar(:sub_atype_23))], TVar(:ret20))
-    @test isequal(run(mnum)[2], τnum)
+    @test isequal(DiffPrivacyInference.run(mnum)[2], τnum)
 
 end;
 
@@ -55,7 +53,7 @@ end;
 
     m = build_tc(t)
     τ = Arr([(0.3333333333333333, TVar(:op_arg_43)), (3 + 2∞, TVar(:op_arg_39)), (7, TVar(:op_arg_34)), (∞, TVar(:op_arg_22))], DMReal())
-    @test isequal(run(m)[2], τ)
+    @test isequal(DiffPrivacyInference.run(m)[2], τ)
 end;
 
 
@@ -77,7 +75,7 @@ end;
 
     m = build_tc(t)
     τ = Arr([(200, TVar(:op_arg_10))], TVar(:sup_23))
-    @test isequal(run(m)[2], τ)
+    @test isequal(DiffPrivacyInference.run(m)[2], τ)
 end;
 
 @testset "simpl_capture" begin
@@ -97,7 +95,7 @@ end;
 
     m = build_tc(t)
     τ = Arr([(5, TVar(:any_17))], TVar(:sup_31))
-    @test isequal(run(m)[2], τ)
+    @test isequal(DiffPrivacyInference.run(m)[2], τ)
 end;
 
 
@@ -116,5 +114,5 @@ end;
 
     m = build_tc(t)
     τ = Arr([(400,TVar(:op_arg_11))], TVar(:sup_31))
-    @test isequal(run(m)[2], τ)
+    @test isequal(DiffPrivacyInference.run(m)[2], τ)
 end;

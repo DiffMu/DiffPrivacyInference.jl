@@ -29,5 +29,31 @@ include("typechecking/monadic_typecheck.jl")
 include("typechecking/lose_generality.jl")
 
 greet() = print("Hello World!")
+#=
+function infer_sensitivity(s::String)
+    t = string_to_dmterm(s)
+    infer_sensitivity(t)
+end
+
+function infer_sensitivity(file::AbstractString)
+    t = file_to_dmterm(file)
+    infer_sensitivity(t)
+end
+
+function infer_sensitivity(t::DMTerm)
+    d = Dict{Symbol,Array{DMTerm,1}}()
+    m = @mdo TC begin
+        checkr <- mcheck_sens(t, d)
+        tau <- simplify_constraints_lose_generality()
+        r <- apply_subs(checkr)
+        return r
+    end
+    (c, τ) = run(m)
+    println("Function type is $τ.")
+end
+=#
+
+#export infer_sensitivity, DMTerm, DMType
+export DMTerm, DMType
 
 end # module
