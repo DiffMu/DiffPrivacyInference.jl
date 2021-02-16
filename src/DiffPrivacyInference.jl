@@ -21,12 +21,8 @@ include("parsing/parse.jl")
 include("typechecking/subtyping.jl")
 include("typechecking/monadic_simplify.jl")
 include("typechecking/monadic_typecheck.jl")
-include("typechecking/monadic_simplify.jl")
-
-
-include("parsing/parse.jl")
-include("typechecking/monadic_typecheck.jl")
 include("typechecking/lose_generality.jl")
+
 
 include("utils/exposed.jl")
 
