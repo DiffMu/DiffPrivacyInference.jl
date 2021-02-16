@@ -9,12 +9,12 @@ function build_tc(t::DMTerm) :: TC
     end
 end
 
-function infer_sensitivity(s::String)
+function infer_sensitivity_from_string(s::String)
     t = string_to_dmterm(s)
     infer_sensitivity(t)
 end
 
-function infer_sensitivity(file::AbstractString)
+function infer_sensitivity_from_file(file::AbstractString)
     t = file_to_dmterm(file)
     infer_sensitivity(t)
 end

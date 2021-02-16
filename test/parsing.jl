@@ -2,28 +2,11 @@
 using Test
 
 @testset "Parsing" begin
-
-    include("../src/parsing/parse.jl")
-#=
-    dir = (@__DIR__)*"/files/looptest_parse.jl"
-    term = file_to_dmterm(dir)
+    code = "parse_ops(w,x,y,z) = 3*(x+y) - z*ceil(x) + ceil(y) % 4 - 3/x + w/3"
+    term = string_to_dmterm(code)
 
     evaled = eval(evaluate(term))
-
-    # generate some random input
-    as = rand(-100:1:100, 10)
-
-    for a in as
-        @test evaled(a) == looptest(a);
-    end
-
-    @test evaled(as) == looptest(as);
-=#
-
-    dir = (@__DIR__)*"/files/parse_ops.jl"
-    term = file_to_dmterm(dir)
-
-    evaled = eval(evaluate(term))
+    eval(code)
 
     # generate some random input
     for _ in 1:10
