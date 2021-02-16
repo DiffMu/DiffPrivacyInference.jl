@@ -3,8 +3,8 @@ language: julia
 julia:
   - nightly
 codecov: true
-script:
-  - bash scripts/custom-julia-build.sh
+# script:
+#   - bash scripts/custom-julia-build.sh
 
 
 
