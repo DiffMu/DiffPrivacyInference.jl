@@ -53,7 +53,9 @@ function infer_sensitivity(t::DMTerm)
 end
 =#
 
-#export infer_sensitivity, DMTerm, DMType
-export DMTerm, DMType
+export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
+export tup , tlet , loop , slet , vcreate , vect , index , len , chce
+
+export DMType, DMInt, DMReal, Constant, DMTyp, DMVec, TVar, Arr, ForAll
 
 end # module
