@@ -1,6 +1,4 @@
-using MLStyle
-# TODO with julia 1.6 parseall in order not to use the file info in LNN
-using Compat
+# TODO with julia 1.6 we can remove Compat and use parseall in order not to use the file info in LNN
 
 # make Expr matchable
 @as_record Expr

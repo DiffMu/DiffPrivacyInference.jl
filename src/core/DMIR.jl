@@ -1,12 +1,7 @@
 
-# module DMIR
 include("definitions.jl")
-using SymbolicUtils
-using MLStyle
-
 
 TAsgmt = Tuple{Symbol, <:DataType}
-
 
 # the terms that come out of the parser.
 @data DMTerm begin

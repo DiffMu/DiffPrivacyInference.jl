@@ -2,9 +2,6 @@ include("../core/DMIR.jl")
 include("../core/contexts.jl")
 include("../core/monads.jl")
 
-using SimplePosets
-
-
 
 function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 

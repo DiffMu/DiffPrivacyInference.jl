@@ -1,7 +1,4 @@
 
-using SymbolicUtils
-using MLStyle
-
 # This file contains most of the data types which are used in the delmu typechecker.
 # This means above all the typesystem,
 # whose components such as types, sensitivities, constraints, contexts are defined below.
