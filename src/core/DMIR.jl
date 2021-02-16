@@ -1,6 +1,4 @@
 
-include("definitions.jl")
-
 TAsgmt = Tuple{Symbol, <:DataType}
 
 # the terms that come out of the parser.

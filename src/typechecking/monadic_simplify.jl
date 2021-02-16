@@ -1,6 +1,3 @@
-include("../core/DMIR.jl")
-include("../core/contexts.jl")
-include("../core/monads.jl")
 
 
 function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}

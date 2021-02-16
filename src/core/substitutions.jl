@@ -1,6 +1,4 @@
 
-include("definitions.jl")
-include("operations.jl")
 ##### substitutions
 # In this file, we define functions for substituting metavariables by types or sensitivity terms.
 # Furthermore, these operations are extended to work on constraints, contexts, etc., i.e.,

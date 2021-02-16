@@ -1,5 +1,4 @@
 
-include("../typechecking/monadic_simplify.jl")
 
 """
 simplify_constraints_lose_generality() :: TC

@@ -1,9 +1,5 @@
 
 using Test
-include("../src/core/monads.jl")
-include("../src/core/DMIR.jl")
-    include("../src/typechecking/monadic_typecheck.jl")
-    include("../src/typechecking/lose_generality.jl")
 
 function build_tc(t::DMTerm) :: TC
     d = Dict{Symbol,Array{DMTerm,1}}()

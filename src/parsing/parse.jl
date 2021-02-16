@@ -1,5 +1,3 @@
-include("../core/DMIR.jl")
-include("sanitize.jl")
 
 """
     file_to_dmterm(file::AbstractString)

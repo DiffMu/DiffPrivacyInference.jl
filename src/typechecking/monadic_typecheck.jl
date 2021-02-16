@@ -1,8 +1,3 @@
-include("../core/DMIR.jl")
-include("../core/contexts.jl")
-include("../core/monads.jl")
-include("../core/unification.jl")
-include("../typechecking/subtyping.jl")
 
 function mcheck_sens(t::DMTerm, scope::Dict{Symbol, Vector{DMTerm}}) :: TC#{DMType}
 
