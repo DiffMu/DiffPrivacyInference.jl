@@ -35,5 +35,6 @@ export DMType, DMInt, DMReal, Constant, DMTyp, DMVec, TVar, Arr, ForAll
 
 export string_to_dmterm, file_to_dmterm, evaluate
 export infer_sensitivity, infer_sensitivity_from_string, infer_sensitivity_from_file
+export pretty_print
 
 end # module
