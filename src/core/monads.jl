@@ -12,8 +12,7 @@ mthen(k::Monad, m::Monad) = mbind(_ -> k, m)
 
 ## Friendly monad blocks/mdo
 macro mdo(mtype, body)
-    #println("mdo says: ",mdo_desugar(mdo_patch(mtype, body)))
-    println("mdo says: ",esc(mdo_desugar(mdo_patch(mtype, deepcopy(body)))))
+    #println("mdo says: ",esc(mdo_desugar(mdo_patch(mtype, deepcopy(body)))))
     esc(mdo_desugar(mdo_patch(mtype, body)))
 end
 
@@ -41,7 +40,6 @@ function mdo_desugar_helper(expr::Expr, rest)
         && expr.args[3].args[1] == Symbol("-"))
         # replace "<-" with monadic binding
         newExpr = expr.args[3].args[2:end];
-            println("mdo dings: mbind($newExpr) do $expr")
         quote
             mbind($(newExpr...)) do $(expr.args[2])
                 $rest
