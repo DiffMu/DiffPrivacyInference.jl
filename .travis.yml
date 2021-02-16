@@ -1,11 +1,13 @@
 
-# language: julia
-# julia:
-#   - nightly
-# codecov: true
-deploy:
-  provider: script
-  script: rvm use $TRAVIS_RUBY_VERSION do script.rb
+language: julia
+julia:
+  - nightly
+codecov: true
+script:
+  - bundle exec rake scripts/custom-julia.rb
+# deploy:
+#   provider: script
+#   script: rvm use $TRAVIS_RUBY_VERSION do script.rb
 
 
 
