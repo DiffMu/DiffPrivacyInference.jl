@@ -1,6 +1,11 @@
 
-language: julia
-julia:
-  - nightly
-codecov: true
+# language: julia
+# julia:
+#   - nightly
+# codecov: true
+deploy:
+  provider: script
+  script: rvm scripts/custom-julia.rb
+
+
 
