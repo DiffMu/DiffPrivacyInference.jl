@@ -112,8 +112,8 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 Expr(:(::), s, T) => let
                     if s in C
                         error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
-                    elseif is_builtin_op(ase)
-                        error("overwriting builtin function $ase in $ex, $(ln.file) line $(ln.line) is not permitted.")
+                    elseif is_builtin_op(s)
+                        error("overwriting builtin function $s in $ex, $(ln.file) line $(ln.line) is not permitted.")
                     end
                     v = (s, eval(T))
                     newscope = (F, [[s]; A], C, L)

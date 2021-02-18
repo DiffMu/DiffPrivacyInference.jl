@@ -19,7 +19,7 @@ expression is a function, it should be an `Arr` type with the argument sensitivi
 to the argument types.
 
 # Examples
-julia> infer_sensitivity_from_string("
+julia> t = infer_sensitivity_from_string("
          function test(x, y)
            f(x) = 500*(x + y)
            z = 1
@@ -28,11 +28,15 @@ julia> infer_sensitivity_from_string("
            f(g(x))
          end
          ")
-Arr([(200.0, DMInt()), (500, TVar(:op_arg_16))], TVar(:sup_28))
+         pretty_print(t)
+Arr(Tuple{Union{Number, SymbolicUtils.Symbolic, var"#s18"} where var"#s18"<:SymbolicUtils.Sym,DMType}[(200.0, TVar(:op_arg_3)), (500, TVar(:op_arg_17))], TVar(:sup_29))
+
+julia> pretty_print(t)
+"(tvar.op_arg_3 @(200.0), tvar.op_arg_17 @(500)) ==> tvar.sup_29"
 ```
 The output means that the expression is a two-argument function that is 200-sensitive in the first
 and 500-sensitive in the second argument. The first argument is an Integer, and the second arguments'
-and the return type could not be inferred.
+and the return type could not be inferred (that's what the TVar means).
 """
 function infer_sensitivity_from_string(s::String) :: DMType
     t = string_to_dmterm(s)
