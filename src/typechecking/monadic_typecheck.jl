@@ -102,7 +102,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
                 τ <- mcheck_sens(b, scope) # check body
                 τv <- lookup_var_type(v) # get inferred type of v (τv = nothing if it was not used in the body)
                 dτd <- mcreate_DMType(dτ)
-                _ <- ((isnothing(τv) || dτ == Any) ? mreturn(nothing) : subtype_of(τv, aτ)) # inferred type of v must be subtype of user annotation.
+                _ <- ((isnothing(τv) || dτ == Any) ? mreturn(nothing) : subtype_of(τv, dτd)) # inferred type of v must be subtype of user annotation.
                 _ <- (present ? mreturn(nothing) : remove_var(v)) #TODO really??
                 return τ
             end
