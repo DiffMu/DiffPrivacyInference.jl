@@ -25,7 +25,7 @@ include("typechecking/monadic_typecheck.jl")
 include("typechecking/lose_generality.jl")
 
 
-include("utils/exposed.jl")
+include("public/public.jl")
 
 greet() = print("Hello World!")
 

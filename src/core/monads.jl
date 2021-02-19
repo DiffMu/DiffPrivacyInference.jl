@@ -124,6 +124,16 @@ end
 #########################################################################################
 # convenience functions for TC monad
 
+"Construct a `TC` monad containing the computation of inferring `t`'s sensitivity."
+function build_tc(t::DMTerm) :: TC
+    @mdo TC begin
+        checkr <- check_term(t) # typecheck the term
+        tau <- simplify_constraints_lose_generality() # simplify all constraints
+        r <- apply_subs(checkr) # apply substitutions made during simplification
+        return r
+    end
+end
+
 "Add a `DMTypeOp` constraint for the  `nargs`-ary operation accoding to `opf`."
 function add_op(opf::Symbol, nargs::Int) :: TC#{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
     function mconstr(S,T,C,Σ) :: MType{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}

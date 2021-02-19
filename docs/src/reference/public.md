@@ -3,5 +3,5 @@
 
 ```@autodocs
 Modules = [DiffPrivacyInference]
-Pages = ["utils/exposed.jl"]
+Pages = ["public/public.jl"]
 ```
