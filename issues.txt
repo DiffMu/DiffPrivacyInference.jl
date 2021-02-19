@@ -2,15 +2,16 @@
 - general:
     - document all that is different from duet in the typechecker...
     - write more tests & documentation ;)
-    - make a proper julia module
-    - go public, write readme and some usage examples
 
     - done:
          - make try-catch blocks exception-type-safe
+         - go public, write readme and some usage examples
+         - make a proper julia module
 
 
 
 - parser:
+    - handle function return type annotations
     - handle nested loop variables seperately to avoid penalty
     - globals in modules
     - implement julia let syntax
@@ -39,6 +40,8 @@
     - what about ln terms?
 
 - typechecker:
+    - figure out how to handle negative numbers
+    - use isNumeric constraints for better choice resolving
     - monadify signatures
     - monadify subtyping
     - cleanup and monadify supremum
