@@ -6,7 +6,7 @@
 EvaluatedNumber = Union{Int, Real}
 
 
-"A special struct that [try_destructure_sensitivity](@ref) will return upon encountering the ∞ symbol."
+"A special struct that [`try_destructure_sensitivity`](@ref) will return upon encountering the ∞ symbol."
 struct Infty
 end
 
