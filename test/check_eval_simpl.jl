@@ -27,7 +27,7 @@
     @test isequal(infer_sensitivity(treal), τreal)
 
     tnum =  lam(Tuple{Symbol,DataType}[(:i, Number)], flet(:f, DataType[Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Integer), (:c, Any)], op(:*, DMTerm[sng(1), var(:x, Any)])), flet(:f, DataType[Number, Any], lam(Tuple{Symbol,DataType}[(:x, Number), (:c, Any)], op(:*, DMTerm[sng(2), var(:x, Any)])), flet(:f, DataType[Real, Any], lam(Tuple{Symbol,DataType}[(:x, Real), (:c, Any)], op(:*, DMTerm[sng(3), var(:x, Any)])), apply(var(:f, Any), DMTerm[var(:i, Any), sng(1)])))))
-    τnum = Arr([(DiffPrivacyInference.symbols(:sens_0), TVar(:sub_atype_23))], TVar(:ret20))
+    τnum = Arr([(DiffPrivacyInference.symbols(:sens_0), TVar(:num_0))], TVar(:ret20))
     @test isequal(infer_sensitivity(tnum), τnum)
 
 end;
@@ -80,7 +80,7 @@ end;
 
     t = flet(:capture, DataType[Any], lam(Tuple{Symbol,DataType}[(:y, Any)], flet(:g, DataType[Any], lam(Tuple{Symbol,DataType}[(:x, Any)], op(:+, DMTerm[var(:x, Any), sng(2)])), flet(:test, DataType[Any], lam(Tuple{Symbol,DataType}[(:a, Any)], lam(Tuple{Symbol,DataType}[(:b, Any)], op(:*, DMTerm[apply(var(:g, Any), DMTerm[var(:x, Any)]), var(:a, Any)]))), slet((:x, Any), sng(1), slet((:tt, Any), apply(var(:test, Any), DMTerm[var(:y, Any)]), slet((:x, Any), sng(3), apply(var(:tt, Any), DMTerm[var(:y, Any)]))))))), var(:capture, Any))
 
-    τ = Arr([(5, TVar(:any_17))], TVar(:sup_31))
+    τ = Arr([(5, TVar(:any_2))], TVar(:ret21))
     @test isequal(infer_sensitivity(t), τ)
 end;
 
@@ -98,6 +98,6 @@ end;
 
     t = flet(:higherorder, DataType[Any], lam(Tuple{Symbol,DataType}[(:x, Any)], flet(:f, DataType[Any], lam(Tuple{Symbol,DataType}[(:k, Any)], op(:*, DMTerm[var(:k, Any), var(:x, Any)])), flet(:g, DataType[Any], lam(Tuple{Symbol,DataType}[(:f1, Any)], op(:*, DMTerm[sng(2), apply(var(:f1, Any), DMTerm[sng(100)])])), flet(:h, DataType[Any], lam(Tuple{Symbol,DataType}[(:g1, Any)], op(:*, DMTerm[sng(2), apply(var(:g1, Any), DMTerm[var(:f, Any)])])), apply(var(:h, Any), DMTerm[var(:g, Any)]))))), var(:higherorder, Any))
 
-    τ = Arr([(400,TVar(:op_arg_11))], TVar(:sup_31))
+    τ = Arr([(400,TVar(:op_arg_11))], TVar(:sup22))
     @test isequal(infer_sensitivity(t), τ)
 end;

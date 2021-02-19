@@ -287,7 +287,7 @@ function expr_to_dmterm(ex::Union{Number, Symbol, Expr}, ln::LineNumberNode, (F,
         end;
 
         Expr(:call, callee, args...) => let
-            if is_builtin_op(callee)
+            if callee isa Symbol && is_builtin_op(callee)
                 if length(args) == 1
                     return op(callee, [expr_to_dmterm(args[1], ln, scope)])
                 else

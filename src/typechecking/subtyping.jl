@@ -93,6 +93,7 @@ and throw an error if the constraint is violated.
 """
 function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMType) :: Union{Nothing, Full{A}} where {A}
     @match (τ1, τ2) begin
+        (τ1, τ2) && if isequal(τ1, τ2) end => return (S,T,C,Σ)
         (Arr(αs, ρ), Arr(βs, ρ2)) => let
             # we add constraints
             # βi ⊑ αi and ρ ⊑ ρ2
@@ -153,41 +154,41 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
         end;
         (Arr(_,_), _) => throw(ConstraintViolation("Invalid subtyping constraint $τ1 ⊑ $τ2; second argument must be an Arrow."))
         (_, Arr(_,_)) => throw(ConstraintViolation("Invalid subtyping constraint $τ1 ⊑ $τ2; first argument must be an Arrow."))
+        (TVar(_), _) => return nothing
+        (_, TVar(_)) => let
+            # this kind of constraint can only appear from subtyping constraints made during apllication typechecking.
+            # the right-hand side is a type var A is only used as the argument type of the applied function in that
+            # specific single application, hence there can be no other subtype constraints B < A and we can safely
+            # unify the two.
+            _, newC  = unify_nosubs(τ1, τ2)
+            return (S,T,union(C,newC),Σ)
+        end
         _ => let
-            try
-                # maybe the types can be unified
-                _, newC  = unify_nosubs(τ1, τ2)
-                return (S,T,union(C,newC),Σ)
-            catch err
-                if !(err isa ConstraintViolation)
-                    rethrow(err)
-                end
-                # traverse the subtype relation graph upwards from τ1, to see if we come across τ2.
-                supers = try_get_direct_supertypes(τ1)
-                if isnothing(supers)
-                    # τ1 has free variables, so we cannot say anything about if τ1 ⊑ τ2
-                    return nothing
-                else
-                    # see if one of the supertypes of τ1 is a subtype of τ2
-                    maybe = false # to remember whether we found a super that may be a subtype of τ2 but we don't know.
-                    for σ in supers
-                        try
-                            res = try_eval_isSubtypeOf((S,T,C,Σ), σ, τ2) # this might throw
-                            if isnothing(res)
-                                maybe = true
-                            else
-                                return res
-                            end
-                        catch err
-                            if !(err isa ConstraintViolation)
-                                rethrow(err)
-                            end
+            # traverse the subtype relation graph upwards from τ1, to see if we come across τ2.
+            supers = try_get_direct_supertypes(τ1)
+            if isnothing(supers)
+                # we don't know the supertypes, so we cannot say anything about if τ1 ⊑ τ2
+                return nothing
+            else
+                # see if one of the supertypes of τ1 is a subtype of τ2
+                maybe = false # to remember whether we found a super that may be a subtype of τ2 but we don't know.
+                for σ in supers
+                    try
+                        res = try_eval_isSubtypeOf((S,T,C,Σ), σ, τ2) # this might throw
+                        if isnothing(res)
+                            maybe = true
+                        else
+                            return res
+                        end
+                    catch err
+                        if !(err isa ConstraintViolation)
+                            rethrow(err)
                         end
                     end
-                    # if τ1 has no supertypes (root of the tree) or none of the supers is a subtype of τ2,
-                    # τ1 can't be a subtype of τ2 either
-                    maybe ? nothing : throw(ConstraintViolation("Expected $τ1 to be a subtype of $τ2, but it is not."))
                 end
+                # if τ1 has no supertypes (root of the tree) or none of the supers is a subtype of τ2,
+                # τ1 can't be a subtype of τ2 either
+                maybe ? nothing : throw(ConstraintViolation("Expected $τ1 to be a subtype of $τ2, but it is not."))
             end
         end;
     end
