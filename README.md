@@ -35,7 +35,9 @@ julia> using DiffPrivacyInference
 
 We can parse Julia code from strings and do type inference:
 ```julia
-julia> pretty_print(infer_sensitivity_from_string("f(x::Integer) = 23*x"))
+julia> pretty_print(infer_sensitivity_from_string("
+                              f(x::Integer) = 23*x
+                    "))
 "(Int @(23)) ==> Int"
 ```
 The output tells us that the input expression is a one-argument function mapping an integer to another integer with sensitivity 23.
