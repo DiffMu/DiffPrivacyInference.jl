@@ -1,7 +1,7 @@
 
 
 """
-simplify_constraints_lose_generality() :: TC
+    simplify_constraints_lose_generality() :: TC
 
 Simplify as many constraints as possible, then assume all free type variables involved in
 DMTypeOps are non-constant and simplify again.

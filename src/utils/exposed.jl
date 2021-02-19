@@ -11,7 +11,7 @@ end
 
 
 """
-   infer_sensitivity_from_string(s::String) :: DMType
+    infer_sensitivity_from_string(s::String) :: DMType
 
 Given a `String` of julia code, infer the type of the corresponding expression. The return value
 is the type of the expression, a `DMType`, our custom types defined in `definitions.jl`. If the
@@ -19,6 +19,7 @@ expression is a function, it should be an `Arr` type with the argument sensitivi
 to the argument types.
 
 # Examples
+```
 julia> t = infer_sensitivity_from_string("
          function test(x, y)
            f(x) = 500*(x + y)
@@ -45,7 +46,7 @@ end
 
 
 """
-   infer_sensitivity_from_file(s::String) :: DMType
+    infer_sensitivity_from_file(s::String) :: DMType
 
 Given a filename pointing to some julia code, infer the type of the corresponding expression. `include`s
 are resolved and parsed as well. The return value is the type of the expression, a `DMType`, our custom

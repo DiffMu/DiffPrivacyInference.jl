@@ -214,7 +214,7 @@ end
 
 
 """
-simplify_constraints() :: TC{Tuple{}}
+    simplify_constraints() :: TC{Tuple{}}
 
 Evaluate all constraints that can be simplified.
 """
