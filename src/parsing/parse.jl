@@ -68,7 +68,9 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 error("overwriting an existing function in a loop is not allowed in $ex, $(ln.file) line $(ln.line)")
             end
             name = head.args[1]
-            if is_builtin_op(name)
+            if !(name isa Symbol)
+                error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
+            elseif is_builtin_op(name)
                 error("overwriting builtin function $name in $ex, $(ln.file) line $(ln.line) is not permitted.")
             end
             vs = Symbol[]
@@ -112,6 +114,8 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 Expr(:(::), s, T) => let
                     if s in C
                         error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
+                    elseif !(s isa Symbol)
+                        error("type assignment not yet supported for $s in  $ex, $(ln.file) line $(ln.line)")
                     elseif is_builtin_op(s)
                         error("overwriting builtin function $s in $ex, $(ln.file) line $(ln.line) is not permitted.")
                     end
