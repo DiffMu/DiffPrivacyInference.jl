@@ -1,6 +1,3 @@
-
-
-
 @testset "simpl_dispatch" begin
 
     # the terms are this lam with T in {Int, Real, Num}
@@ -61,7 +58,7 @@ end;
 
     t = flet(:scope, DataType[Any], lam(Tuple{Symbol,DataType}[(:y, Any)], slet((:v, Any), sng(100), slet((:x, Any), op(:*, DMTerm[sng(10), var(:v, Any)]), slet((:v, Any), op(:*, DMTerm[sng(100), var(:y, Any)]), slet((:v, Any), op(:+, DMTerm[var(:v, Any), var(:v, Any)]), var(:v, Any)))))), var(:scope, Any))
 
-    τ = Arr([(200, TVar(:op_arg_10))], TVar(:sup_23))
+    τ = Arr([(200, TVar(:op_arg_10))], TVar(:sup_17))
     @test isequal(infer_sensitivity(t), τ)
 end;
 
@@ -98,6 +95,6 @@ end;
 
     t = flet(:higherorder, DataType[Any], lam(Tuple{Symbol,DataType}[(:x, Any)], flet(:f, DataType[Any], lam(Tuple{Symbol,DataType}[(:k, Any)], op(:*, DMTerm[var(:k, Any), var(:x, Any)])), flet(:g, DataType[Any], lam(Tuple{Symbol,DataType}[(:f1, Any)], op(:*, DMTerm[sng(2), apply(var(:f1, Any), DMTerm[sng(100)])])), flet(:h, DataType[Any], lam(Tuple{Symbol,DataType}[(:g1, Any)], op(:*, DMTerm[sng(2), apply(var(:g1, Any), DMTerm[var(:f, Any)])])), apply(var(:h, Any), DMTerm[var(:g, Any)]))))), var(:higherorder, Any))
 
-    τ = Arr([(400,TVar(:op_arg_11))], TVar(:sup22))
+    τ = Arr([(400,TVar(:op_arg_11))], TVar(:ret22))
     @test isequal(infer_sensitivity(t), τ)
 end;
