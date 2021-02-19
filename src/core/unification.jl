@@ -147,62 +147,6 @@ function unify_DMType(τ :: DMType, ρ :: DMType) :: Tuple{DMType, Constraints, 
             end
             simpleReturn(DMTup(τs), co, σ)
         end
-            #=
-        (A, ForAll((Δ, C), B)) => begin
-            A, B, C2, σs2 = unify_DMType(A,B)
-            println("Unifying $τ ≈ $ρ")
-            println("=== Raw:")
-            println("    Type 1: $A")
-            println("    Type 2: $B")
-            println("    Constraints: $C2")
-            println("    Substitutions: $σs2")
-
-            (Δ, σs_global, σs_local, C_global, C_local) = splitByNames_reorientSubstitutions(Δ, σs2, C2)
-
-            # We have to apply the new local substitutions to our existing constraints
-            C = apply_subs(C, σs_local)
-            B = apply_subs(B, σs_local)
-
-            # NOTE: the order of A and B matters here
-            Res = ForAll((Δ, [C ; C_local]), B)
-
-            # println("Unifying $τ ≈ $ρ\nResult: $Res\nConstraints: $C_global\nGlobal Substs: $σs_global\nlocal (forgotten) substs: $σs_local\n")
-            println("=== Diffed:")
-            println("    Type: $Res")
-            println("    Constraints: $C_global")
-            println("    Global Substs: $σs_global")
-            println("    local (forgotten) substs: $σs_local\n")
-
-            Res, Res , C_global, σs_global
-            # A, ForAll((Δ, [C ; C_local]), B) , C_global, σs_global
-        end
-        (ForAll((Δ, C),B), A) => begin
-            A, B, C2, σs2 = unify_DMType(A,B)
-            println("Unifying $τ ≈ $ρ")
-            println("=== Raw:")
-            println("    Type 1: $B")
-            println("    Type 2: $A")
-            println("    Constraints: $C2")
-            println("    Substitutions: $σs2")
-
-            (Δ, σs_global, σs_local, C_global, C_local) = splitByNames_reorientSubstitutions(Δ, σs2, C2)
-
-            # We have to apply the new local substitutions to our existing constraints
-            C = apply_subs(C, σs_local)
-            B = apply_subs(B, σs_local)
-
-            # NOTE: the order of A and B matters here
-            Res = ForAll((Δ, [C ; C_local]), B)
-
-            println("=== Diffed:")
-            println("    Type: $Res")
-            println("    Constraints: $C_global")
-            println("    Global Substs: $σs_global")
-            println("    local (forgotten) substs: $σs_local\n")
-
-            Res, Res , C_global, σs_global
-        end
-        =#
         #=
         (DMTrtProduct(X1s), DMTrtProduct(X2s)) => let
         σ, co = [], []

@@ -84,8 +84,7 @@ ConstraintsAbstr = Vector{<:ConstrAbstr}
 # - The constructor for sensitivity arrow types, `Arr`, takes a vector of Types, instead of a single one,
 # in order to respect Julia's distinction between curried and uncurried function types.
 #
-# Note: Some type constructors are not implemented yet, for example `Idx`, or `ArrStar`, while, e.g., `ForAll`
-# is not fully functioning.
+# Note: Some type constructors are not implemented yet, for example `Idx`, or `ArrStar`
 #
 # Note: These types are those used during typechecking. Another set of types,
 # used during parsing is `DMDispatch`.
@@ -120,9 +119,6 @@ ConstraintsAbstr = Vector{<:ConstrAbstr}
     # Type of privacy functions. Currently not implemented.
     # ArrStar :: (Dict{Symbol, Tuple{Tuple{STerm, STerm}, DMType}}, DMType) => DMType
     Arr :: (Vector{Tuple{Sensitivity, DMType}}, DMType) => DMType
-
-    # Type for abstracting over sensitivity and type metavariables. Currently not fully working.
-    ForAll :: (Tuple{DeltaNames, Vector{<:ConstrAbstr}}, DMType) => DMType
 end
 
 
@@ -550,10 +546,6 @@ function free_SVars(t :: DMType) :: Vector{Symbol}
         DMVec(n,v)     => union(free_SVars(n),union(free_SVars(v)...))
         TVar(_)        => Vector()
         Arr(v, τ)   => union(map(free_SVars, v)... , free_SVars(τ))
-        ForAll(((ΔS, ΔT), C), τ) => begin
-            free_inside = union(free_SVars(C), free_SVars(τ))
-            setdiff(free_inside, ΔS)
-        end
     end
 end
 
@@ -570,10 +562,6 @@ function free_TVars(t :: DMType) :: Vector{Symbol}
         DMVec(n,v)     => union(free_TVars(n),union(free_TVars(v)...))
         TVar(a)        => Vector([a]) # THIS LINE IS different from the SVars version above (!)
         Arr(v, τ)   => union(map(free_TVars, v)... , free_TVars(τ))
-        ForAll(((ΔS, ΔT), C), τ) => begin
-            free_inside = union(free_TVars(C), free_TVars(τ))
-            setdiff(free_inside, ΔT)
-        end
     end
 end
 

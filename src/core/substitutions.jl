@@ -22,12 +22,6 @@ function singleTSub(τ :: DMType, (X,ξ) :: TSSub) :: DMType
       DMVec(l,A) => DMVec(l, singleTSub(A, (X, ξ)));
       TVar(Y) => X == Y ? ξ : TVar(Y);
       Arr(As,B) => Arr([(s, singleTSub(A, (X, ξ))) for (s,A) in As], singleTSub(B , (X, ξ)));
-       ForAll(((ΔS,ΔT), C), τ) => begin
-           if X in ΔT
-               error("INTERNAL (maybe) ERROR: We are substituting inside of a forall clause, one of its bound variables. This seems to be wrong. Is it?")
-           end
-           ForAll(((ΔS,ΔT), singleTSub(C, (X,ξ))), singleTSub(τ, (X,ξ)))
-       end
    end
 end
 
@@ -196,12 +190,6 @@ function singleSSub(T :: DMType, σ :: SSSub) :: DMType
       DMTup(τs) => DMTup(map(τ->singleSSub(τ, σ), τs))
       #DMTrtProduct(Ts) => DMTrtProduct(map(ηT -> (singleSSub(first(ηT), σ), singleSSub(last(ηT), σ)), Ts))
       DMVec(l, τ) => DMVec(singleSSub(l, σ), singleSSub(τ, σ))
-       ForAll(((ΔS,ΔT), C), τ) => begin
-           if σ[1] in ΔS
-               error("INTERNAL (maybe) ERROR: We are substituting inside of a forall clause, one of its bound variables. This seems to be wrong. Is it?")
-           end
-           ForAll(((ΔS,ΔT), singleSSub(C, σ)), singleSSub(τ, σ))
-       end
    end
 end
 

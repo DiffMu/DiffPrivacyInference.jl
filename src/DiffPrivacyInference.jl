@@ -31,7 +31,7 @@ greet() = print("Hello World!")
 export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
 export tup , tlet , loop , slet , vcreate , vect , index , len , chce
 
-export DMType, DMInt, DMReal, Constant, DMTyp, DMVec, TVar, Arr, ForAll
+export DMType, DMInt, DMReal, Constant, DMTyp, DMVec, TVar, Arr
 
 export string_to_dmterm, file_to_dmterm, evaluate
 export infer_sensitivity, infer_sensitivity_from_string, infer_sensitivity_from_file
