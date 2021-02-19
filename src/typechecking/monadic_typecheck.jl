@@ -1,5 +1,6 @@
+
 """
-   check_term(t::DMTerm, scope = Dict{Symbol, Vector{DMTerm}}()) :: TC
+    check_term(t::DMTerm, scope = Dict{Symbol, Vector{DMTerm}}()) :: TC
 
 Typecheck the input `DMTerm` and return the resulting computation as a `TC` monad. The
 result will have a lot of unresolved constraints.
