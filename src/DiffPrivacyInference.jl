@@ -7,6 +7,7 @@ using SimplePosets
 using Compat
 
 include("utils/logging.jl")
+include("utils/errors.jl")
 include("core/definitions.jl")
 include("core/DMIR.jl")
 include("core/operations.jl")
@@ -27,6 +28,8 @@ include("typechecking/lose_generality.jl")
 include("utils/exposed.jl")
 
 greet() = print("Hello World!")
+
+export NotInScope, ArithmeticsError, WrongNoOfArgs, WrongArgType, NotNumeric, NoChoiceFound, NotSubtype, NotSupremum, UnificationError, NotInScope
 
 export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
 export tup , tlet , loop , slet , vcreate , vect , index , len , chce

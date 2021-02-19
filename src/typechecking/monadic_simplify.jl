@@ -10,7 +10,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             DMReal() => ()
             #Idx(_) => ()
             Constant(τ2, a) => check_numeric(τ2)
-            _ => throw(ConstraintViolation("Expected $τ to be a numeric type."));
+            _ => throw(NotNumeric("Expected $τ to be a numeric type."));
         end
     end
 
@@ -68,10 +68,10 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             return_substitute(co,σ)
         end
         isLessOrEqual(s1, s2) => let
-            n1 , n2 = (try_destructure_Sensitivity(s1), try_destructure_Sensitivity(s2))
+            n1 , n2 = (try_destructure_sensitivity(s1), try_destructure_sensitivity(s2))
 
             @match (n1, n2) begin
-                (::EvaluatedNumber, ::EvaluatedNumber) => n1 <= n2 ? return_discharge() : throw(ConstraintViolation("exprected $n1 <= $n2"))
+                (::EvaluatedNumber, ::EvaluatedNumber) => n1 <= n2 ? return_discharge() : throw(ArithmeticsError("exprected $n1 <= $n2"))
                 (_ , _) => return_nothing()
             end
         end
@@ -129,7 +129,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                     newchoices = Dict((s,c) for (s,c) in deepcopy(choices) if choice_could_match(args, s))
 
                     if isempty(newchoices)
-                        throw(ConstraintViolation("no matching choice for $τ found in $choices."));
+                        throw(NoChoiceFound("no matching choice for $τ found in $choices."));
                     else
                         # if there is no free tyepevars in τs arguments, throw out methods that are more general than others
                         # if we don't know all types we cannot do this, as eg for two methods
@@ -173,7 +173,6 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                         return_nothing()
                     end
                 end;
-                _ => error("invalid constraint: $τ cannot be a choice.")
             end
         end
     end

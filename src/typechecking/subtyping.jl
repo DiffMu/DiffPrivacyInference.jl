@@ -46,7 +46,7 @@ function try_eval_isSupremumOf_noarr(orig1 :: DMType, orig2 :: DMType, old1s :: 
         [] =>
         let
             if τ1s == [] && τ2s == []
-                throw(ConstraintViolation("The types $τ1 and $τ2 do not have a common supertype!"))
+                throw(NotSupremum("The types $τ1 and $τ2 do not have a common supertype!"))
             end
             τ1s_next = Vector{DMType}()
             for τ1 in τ1s
@@ -76,7 +76,7 @@ function try_eval_isSupremumOf_noarr(orig1 :: DMType, orig2 :: DMType, old1s :: 
             # println("#####################\n# Found sup($orig1, $orig2) = $ρ")
             ρ
         end
-        many => throw(ConstraintViolation("Could not find unique supremum of $orig1 and $orig2.\n Solutions are: $many"))
+        many => throw(NotSupremum("Could not find unique supremum of $orig1 and $orig2.\n Solutions are: $many"))
     end
 end
 
@@ -95,6 +95,11 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
     @match (τ1, τ2) begin
         (τ1, τ2) && if isequal(τ1, τ2) end => return (S,T,C,Σ)
         (Arr(αs, ρ), Arr(βs, ρ2)) => let
+
+            if length(αs) != length(βs)
+                throw(WrongNoOfArgs("Invalid subtyping constraint $τ1 ⊑ $τ2; number of function arguments does not match."))
+            end
+
             # we add constraints
             # βi ⊑ αi and ρ ⊑ ρ2
             # and hence
@@ -152,8 +157,8 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
 
             (S,T,union(C, newCs, uCs), Σ)
         end;
-        (Arr(_,_), _) => throw(ConstraintViolation("Invalid subtyping constraint $τ1 ⊑ $τ2; second argument must be an Arrow."))
-        (_, Arr(_,_)) => throw(ConstraintViolation("Invalid subtyping constraint $τ1 ⊑ $τ2; first argument must be an Arrow."))
+        (Arr(_,_), _) => throw(NotSubtype("Invalid subtyping constraint $τ1 ⊑ $τ2; second argument must be an Arrow."))
+        (_, Arr(_,_)) => throw(NotSubtype("Invalid subtyping constraint $τ1 ⊑ $τ2; first argument must be an Arrow."))
         (TVar(_), _) => return nothing
         (_, TVar(_)) => let
             # this kind of constraint can only appear from subtyping constraints made during apllication typechecking.
@@ -181,14 +186,14 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
                             return res
                         end
                     catch err
-                        if !(err isa ConstraintViolation)
+                        if !(err isa NotSubtype)
                             rethrow(err)
                         end
                     end
                 end
                 # if τ1 has no supertypes (root of the tree) or none of the supers is a subtype of τ2,
                 # τ1 can't be a subtype of τ2 either
-                maybe ? nothing : throw(ConstraintViolation("Expected $τ1 to be a subtype of $τ2, but it is not."))
+                maybe ? nothing : throw(NotSubtype("Expected $τ1 to be a subtype of $τ2, but it is not."))
             end
         end;
     end

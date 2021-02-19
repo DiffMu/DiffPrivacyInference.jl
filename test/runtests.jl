@@ -3,3 +3,4 @@ using DiffPrivacyInference, Test
 
 # include("parsing.jl")
 include("check_eval_simpl.jl")
+include("errors.jl")

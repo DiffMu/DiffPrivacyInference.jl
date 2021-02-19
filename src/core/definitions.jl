@@ -326,11 +326,6 @@ Base.show(io::IO, c::Constr) =
 DeltaCtx = Tuple{DeltaNames,Constraints}
 #--- insert end
 
-"An error to throw upon finding a constraint that is violated."
-struct ConstraintViolation <: Exception
-msg::String
-end
-
 ####################################################################
 ## Interface of DMType and julia DataType.
 #TODO thoroughly review this

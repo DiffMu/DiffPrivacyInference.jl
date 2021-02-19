@@ -59,7 +59,7 @@ function unify_Sensitivity(s1 :: Sensitivity, s2 :: Sensitivity) :: Tuple{Sensit
          (::EvaluatedNumber, ::EvaluatedNumber) => if ds1 == ds2
              (ds1, [], [])
          else
-             throw(ConstraintViolation("impossible constraint: $ds1 = $ds2"))
+             throw(UnificationError("impossible constraint: $ds1 = $ds2"))
          end
          (::Infty, ::Infty) => (ds1, [], [])
          (x :: Symbol, _) => (s2, [], [(x, s2)])
@@ -166,7 +166,7 @@ function unify_DMType(τ :: DMType, ρ :: DMType) :: Tuple{DMType, Constraints, 
         (Arr(X1s,Y1), Arr(X2s,Y2)) =>
         let
             if length(X1s) != length(X2s)
-                throw(ConstraintViolation("trying to unify arrows with different no. of arguments:\n   $τ\nand\n   $ρ"))
+                throw(WrongNoOfArgs("trying to unify arrows with different no. of arguments:\n   $τ\nand\n   $ρ"))
             end
             σ = Substitutions()
             co = []
@@ -203,6 +203,6 @@ function unify_DMType(τ :: DMType, ρ :: DMType) :: Tuple{DMType, Constraints, 
         (TVar(t1), TVar(t2)) && if t1 == t2 end => simpleReturn(TVar(t1), [], [])
         (TVar(n1), Y)                           => simpleReturn(Y, [], [(n1, Y)])
         (X, TVar(n2))                           => simpleReturn(X, [], [(n2, X)])
-        (_ , _) => throw(ConstraintViolation("could not unify the types $τ and $ρ."))
+        (_ , _) => throw(UnificationError("could not unify the types $τ and $ρ."))
     end
 end

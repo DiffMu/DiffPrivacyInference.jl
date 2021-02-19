@@ -126,7 +126,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
                 end
 
             else
-                error("Variable $x not in scope!")
+                throw(NotInScope("Variable $x not in scope!"))
             end
         end;
 

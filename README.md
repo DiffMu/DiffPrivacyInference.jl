@@ -4,8 +4,8 @@
 [![codecov](https://codecov.io/gh/DiffMu/DiffPrivacyInference.jl/branch/main/graph/badge.svg?token=AFOE37PKNT)](https://codecov.io/gh/DiffMu/DiffPrivacyInference.jl)
 
 The goal of this project is to create a type checker which can automatically analyze [Julia](https://julialang.org/) programs with respect to [differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) guarantees.
-
-This is a work in progress. We intend to implement a type inference algorithm for Julia code based on the type system described in [this paper](https://arxiv.org/abs/1909.02481) and the corresponding [haskell implementation](https://github.com/uvm-plaid/duet).
+ 
+This is a work in progress. We intend to implement a type inference algorithm for Julia code based on the [Duet type system](https://arxiv.org/abs/1909.02481) and the corresponding [haskell implementation](https://github.com/uvm-plaid/duet).
 
 Currently, we can do the following:
 - Parse a very basic subset of Julia code into a representation suitable for type checking. We support arithmetics on Real and Integer types, procedural variable and function declarations and multiple dispatch.
