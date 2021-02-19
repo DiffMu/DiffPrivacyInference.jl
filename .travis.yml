@@ -6,6 +6,17 @@ codecov: true
 # script:
 #   - bash scripts/custom-julia-build.sh
 
+after_success:
+  # push coverage results to Coveralls
+  # - julia -e 'cd(Pkg.dir("DiscretePredictors")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  # # push coverage results to Codecov
+  # - julia -e 'cd(Pkg.dir("DiscretePredictors")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+
+  # run tests
+  - julia -O0 --compile=min --check-bounds=yes --color=yes -e "using Pkg; Pkg.test(coverage=true);"
+  # coverage
+  - julia -O0 --compile=min --color=yes -e "using Pkg; Pkg.add(\"Coverage\"); using Coverage; Codecov.submit(process_folder())"
+
 jobs:
   include:
     - stage: "Documentation"
