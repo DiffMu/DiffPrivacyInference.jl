@@ -31,8 +31,9 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
             scope = deepcopy(scope)
 
             for (x,τ) in xτs
-                # put a special term to memorize the type signature
-                scope[x] = [arg(τ)]
+                # put a special term to mark x as a function argument. those get special tratment
+                # because we're interested in their sensitivity
+                scope[x] = [arg(x,τ)]
             end
 
             @mdo TC begin
@@ -93,27 +94,15 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
 
         slet((v, dτ), t, b) => let
 
+            # TODO this requires saving the annotation in the dict.
+            @assert dτ == Any "Type annotations on variables not yet supported."
+
             # we're very lazy, only adding the new term for v to its scope entry
             scope = deepcopy(scope)
             present = haskey(scope,v)
             present ? push!(scope[v], t) : scope[v] = [t]
 
-            result = @mdo TC begin
-                τ <- mcheck_sens(b, scope) # check body
-                τv <- lookup_var_type(v) # get inferred type of v (τv = nothing if it was not used in the body)
-                dτd <- mcreate_DMType(dτ)
-                _ <- ((isnothing(τv) || dτ == Any) ? mreturn(nothing) : subtype_of(τv, dτd)) # inferred type of v must be subtype of user annotation.
-                _ <- (present ? mreturn(nothing) : remove_var(v)) #TODO really??
-                return τ
-            end
-
-            # last step in the mdo:
-            # remove v from the return context
-            # if it was present we need to keep it in the scope:
-            # v = y
-            # v = v+v
-            # v
-            # should be 2-sensitive in v.
+            return  mcheck_sens(b, scope) # check body, this will put the seinsitivity it has in the arguments in the monad context.
         end;
 
         var(x,dτ) => let
@@ -131,7 +120,6 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
 
                 @mdo TC begin
                     τ <- mcheck_sens(vt, scope) # check the term
-                    τ <- set_var(x, 1, τ) # set sensitivity = 1 and type = τ for x
                     dτd <- mcreate_DMType(dτ) # get user annotation DMType
                     _ <- (dτ == Any ? mreturn(nothing) : subtype_of(τ, dτd)) # inferred type must be a subtype of the user annotation
                     return τ
@@ -142,8 +130,12 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
             end
         end;
 
-        arg(dτ) => let # a special term recording user-given function argument types (τ :: DataType)
-            mcreate_DMType(dτ)
+        arg(x, dτ) => let # a special term for function argument variables. those get sensitivity 1, all other variables are var terms
+            @mdo TC begin
+                τ <- mcreate_DMType(dτ)
+                τ <- set_var(x, 1, τ) # set sensitivity = 1 and type = τ for x
+                return τ
+            end
         end;
 
         op(opf, args) => let

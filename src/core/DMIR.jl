@@ -5,7 +5,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
 @data DMTerm begin
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
-    arg :: DataType => DMTerm
+    arg :: (Symbol, DataType) => DMTerm
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
     ret :: DMTerm => DMTerm
