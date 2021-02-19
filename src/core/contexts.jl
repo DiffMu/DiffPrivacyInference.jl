@@ -48,12 +48,13 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
             C = vcat(C, C2)
 
             # for subtraction of constants, make sure the result is non-negative
-            @match (kind, τ1, τ2) begin
-                (DMOpSub(), Constant(_, η1), Constant(_, η2)) => let
-                    C = [C; isLessOrEqual(η2, η1)]
-                end;
-                _ => nothing
-            end
+            # TODO figure out how to handle non-negative numbers
+            #@match (kind, τ1, τ2) begin
+            #    (DMOpSub(), Constant(_, η1), Constant(_, η2)) => let
+            #        C = [C; isLessOrEqual(η2, η1)]
+            #    end;
+            #    _ => nothing
+            #end
 
             (S, T, C), TVar(tvar), [symbols(svar1), symbols(svar2)]
         end;
@@ -108,7 +109,6 @@ function merge_contexts(combine::Function, S::SVarCtx, T::TVarCtx, C::Constraint
     (S, T, C, Σ)
 end
 
-
 """
     merge_contexts(combine::Function, S, T, C, Σs::Array)
 
@@ -120,26 +120,8 @@ function merge_contexts(combine::Function, S::SVarCtx, T::TVarCtx, C::Constraint
     foldl((Σ1,Σ2) -> merge_contexts(combine,S,T,C,Σ1,Σ2), Σs)
 end
 
-
-maxannotation(a1::Privacy, a2::Privacy) = (max(a1[1],a2[1]), max(a1[2],a2[2]))
-maxannotation(a1::Sensitivity, a2::Sensitivity) = max(a1, a2)
-
-
-"Combine `Σs` using the maximum of annotations, unifying types of variables where the contexts disagree of the type."
-upperbound(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:Context} = merge_contexts(maxannotation, S, T, C, [Σs...])
-
-
 "Add all `Σs`, unifying types of variables where the contexts disagree of the type."
 add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:Context} = merge_contexts(+, S, T, C, [Σs...])
 
-
-"Scale all sensitivities in `Σ` by `r`."
-scale(r::Number, Σ::SensitivityContext) = SensitivityContext(v => (simplify(r*s), t) for (v,(s,t)) in Σ)
 "Scale all sensitivities in `Σ` by `r`."
 scale(r::STerm, Σ::SensitivityContext) = SensitivityContext(v => (r*s, t) for (v,(s,t)) in Σ)
-"Scale all sensitivities in `Σ` by `r`."
-scale(r::STerm, (S,T,C,Σ)::Full{SensitivityContext}) = (S, T, C, scale(r, Σ))
-
-
-"Return new context with the given entries removed."
-remove(c::Context, vars::Array{Symbol}) = Dict(e for e in c if !(e[1] in vars))
