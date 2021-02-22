@@ -1,15 +1,4 @@
 
-"Construct a `TC` monad containing the computation of inferring `t`'s sensitivity."
-function build_tc(t::DMTerm) :: TC
-    @mdo TC begin
-        checkr <- check_term(t) # typecheck the term
-        tau <- simplify_constraints_lose_generality() # simplify all constraints
-        r <- apply_subs(checkr) # apply substitutions made during simplification
-        return r
-    end
-end
-
-
 """
     infer_sensitivity_from_string(s::String) :: DMType
 
