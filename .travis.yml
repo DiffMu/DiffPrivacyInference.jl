@@ -7,7 +7,7 @@ before_script:
   - while sleep 30; do tail ~/build/DiffMu/DiffPrivacyInference.jl/deps/build.log -f ; done &
 language: julia
 julia:
-  - nightly
+  - 1.5.3
 codecov: true
 # script:
 #   - bash scripts/custom-julia-build.sh
