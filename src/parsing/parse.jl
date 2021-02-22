@@ -257,6 +257,9 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
 end
 
 
+expr_to_dmterm(ex::Number, ln::LineNumberNode, (F, A, C, L)) :: DMTerm = sng(ex)
+expr_to_dmterm(ex::Symbol, ln::LineNumberNode, (F, A, C, L)) :: DMTerm = var(ex, Any)
+
 """
     expr_to_dmterm(ex::Union{Number, Symbol, Expr}, ln::LineNumberNode, scope = ([],[],[], false))
 
@@ -268,16 +271,67 @@ expression of a block are allowed here. `ln` is the current line and file.
   - `C`: Names of variables captured from outside the innermost function -- these cannot be assigned to.
   - `L`: `bool` variable indicating whether the parsed expressions are inside a loop body, as different rules apply there.
 """
-function expr_to_dmterm(ex::Union{Number, Symbol, Expr}, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
+function expr_to_dmterm(ex::Expr, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
 
     scope = (F, A, C, L)
 
+    if ex.head == :block
+        args = ex.args
+        if args[1] isa LineNumberNode
+            return exprs_to_dmterm(args[2:end], args[1], scope)
+        else
+            return exprs_to_dmterm(args, ln, scope)
+        end
+
+    elseif ex.head == :call
+        eargs = ex.args
+        callee = eargs[1]
+        args = eargs[2:end]
+        if callee isa Symbol && is_builtin_op(callee)
+            if length(args) == 1
+                return op(callee, [expr_to_dmterm(args[1], ln, scope)])
+            else
+                # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
+                return reduce((x,y)->op(callee, [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
+            end
+        elseif callee in F
+            error("recursive call of $callee in $(ln.file) line $(ln.line)")
+        else
+            return apply(expr_to_dmterm(callee, ln, scope), map(a->expr_to_dmterm(a, ln, scope), args)) #TODO DMDFunc type?
+        end
+
+    elseif ex.head == :(->)
+        argt, body = ex.args
+        as = argt isa Expr && argt.head == :tuple ? argt.args : [argt]
+        vs = Symbol[]
+        ts = DataType[]
+        for a in as
+            (v, t) = @match a begin
+                ::Symbol => (a, Any)
+                Expr(:(::), s, T) => let
+                    Tt = eval(T)
+                    if !type_allowed(Tt)
+                        error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of anonymous function at $(ln.file) line $(ln.line)")
+                    end
+                    (s, eval(T))
+                end
+                _ => let
+                    ln = body.args[1]
+                    error("keyword/vararg/optional arguments not yet supported in lambda definition $head, $(ln.file) line $(ln.line)")
+                end
+            end;
+            push!(vs, v)
+            push!(ts, t)
+        end
+        newscope = (F, vs, union(C, setdiff(A, vs)), L)
+        @assert body.head == :block
+        return lam(collect(zip(vs, ts)), exprs_to_dmterm(body.args[2:end], body.args[1], newscope))
+    else
+        error("something unsupported: $ex with head $(ex.head), $(ln.file) line $(ln.line)")
+    end
+
+    #=
     @match ex begin
-
-        ::Number => sng(ex)
-
-        ::Symbol => var(ex, Any)
-
         Expr(:vect, args...) => let
             vect(map(e -> expr_to_dmterm(e, ln, scope), args))
         end;
@@ -289,58 +343,7 @@ function expr_to_dmterm(ex::Union{Number, Symbol, Expr}, ln::LineNumberNode, (F,
                 error("unsupported reference $ex in $(ln.file) line $(ln.line)")
             end
         end;
-
-        Expr(:call, callee, args...) => let
-            if callee isa Symbol && is_builtin_op(callee)
-                if length(args) == 1
-                    return op(callee, [expr_to_dmterm(args[1], ln, scope)])
-                else
-                    # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
-                    return reduce((x,y)->op(callee, [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
-                end
-            elseif callee in F
-                error("recursive call of $callee in $(ln.file) line $(ln.line)")
-            else
-                apply(expr_to_dmterm(callee, ln, scope), map(a->expr_to_dmterm(a, ln, scope), args)) #TODO DMDFunc type?
-            end
-        end;
-
-        Expr(:block, args...) => let
-            if args[1] isa LineNumberNode
-                exprs_to_dmterm(args[2:end], args[1], scope)
-            else
-                exprs_to_dmterm(args, ln, scope)
-            end
-        end;
-
-        Expr(:(->), argt, body) => let
-            as = argt isa Expr && argt.head == :tuple ? argt.args : [argt]
-            vs = Symbol[]
-            ts = DataType[]
-            for a in as
-                (v, t) = @match a begin
-                    ::Symbol => (a, Any)
-                    Expr(:(::), s, T) => let
-                        Tt = eval(T)
-                        if !type_allowed(Tt)
-                            error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of anonymous function at $(ln.file) line $(ln.line)")
-                        end
-                        (s, eval(T))
-                    end
-                    _ => let
-                        ln = body.args[1]
-                        error("keyword/vararg/optional arguments not yet supported in lambda definition $head, $(ln.file) line $(ln.line)")
-                    end
-                end;
-                push!(vs, v)
-                push!(ts, t)
-            end
-            newscope = (F, vs, union(C, setdiff(A, vs)), L)
-            @assert body.head == :block
-            return lam(collect(zip(vs, ts)), exprs_to_dmterm(body.args[2:end], body.args[1], newscope))
-        end;
-
-        _ => error("something unsupported: $ex, $(ln.file) line $(ln.line)")
     end
+    =#
 end
 
