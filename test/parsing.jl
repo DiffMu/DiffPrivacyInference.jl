@@ -2,7 +2,16 @@
 using Test
 
 @testset "Parsing" begin
-    code = "parse_ops(w,x,y,z) = 3*(x+y) - z*ceil(x) + ceil(y) % 4 - 3/x + w/3"
+    code = "function parse_test(w::Integer,x,y::Real,z)
+                x = 3*(x+y) - z*ceil(x) + ceil(y) % 4 - 3/x + w/3
+                l :: Integer = 100
+                if l < 1
+                   p = x*y
+                else
+                   p = ((x, y::Integer) -> x+1-y)(l,x)
+                end
+                return p
+            end"
     term = string_to_dmterm(code)
 
     evaled = eval(evaluate(term))
