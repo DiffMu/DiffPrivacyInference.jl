@@ -306,22 +306,21 @@ function expr_to_dmterm(ex::Expr, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
         vs = Symbol[]
         ts = DataType[]
         for a in as
-            (v, t) = @match a begin
-                ::Symbol => (a, Any)
-                Expr(:(::), s, T) => let
-                    Tt = eval(T)
-                    if !type_allowed(Tt)
-                        error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of anonymous function at $(ln.file) line $(ln.line)")
-                    end
-                    (s, eval(T))
+            if a isa Symbol
+                push!(vs, a)
+                push!(ts, Any)
+            elseif a isa Expr && a.head == :(::)
+                s, T = a.args
+                Tt = eval(T)
+                if !type_allowed(Tt)
+                    error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of anonymous function at $(ln.file) line $(ln.line)")
                 end
-                _ => let
-                    ln = body.args[1]
-                    error("keyword/vararg/optional arguments not yet supported in lambda definition $head, $(ln.file) line $(ln.line)")
-                end
-            end;
-            push!(vs, v)
-            push!(ts, t)
+                push!(vs, s)
+                push!(ts, Tt)
+            else
+                ln = body.args[1]
+                error("keyword/vararg/optional arguments not yet supported in lambda definition $head, $(ln.file) line $(ln.line)")
+            end
         end
         newscope = (F, vs, union(C, setdiff(A, vs)), L)
         @assert body.head == :block
