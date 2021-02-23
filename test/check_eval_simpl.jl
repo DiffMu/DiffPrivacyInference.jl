@@ -98,3 +98,25 @@ end;
     τ = Arr([(400,TVar(:op_arg_11))], TVar(:ret22))
     @test isequal(infer_sensitivity(t), τ)
 end;
+
+@testset "simpl_ifelse" begin
+    #=
+    julia function:
+        function ifelse(x,y::Integer,z)
+            xx = 3*y
+            f(k) = 2*x+z
+            if f(y) == 1
+                xx
+            elseif z == 5
+                3
+            else
+                xx
+            end
+        end
+    =#
+
+    t = flet(:ifelse, DataType[Any, Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Any), (:y, Integer), (:z, Any)], slet((:xx, Any), op(:*, DMTerm[sng(3), var(:y, Any)]), flet(:f, DataType[Any], lam(Tuple{Symbol,DataType}[(:k, Any)], op(:+, DMTerm[op(:*, DMTerm[sng(2), var(:x, Any)]), var(:z, Any)])), phi(op(:(==), DMTerm[apply(var(:f, Any), DMTerm[var(:y, Any)]), sng(1)]), var(:xx, Any), phi(op(:(==), DMTerm[var(:z, Any), sng(5)]), sng(3), var(:xx, Any)))))), var(:ifelse, Any))
+
+    τ = Arr([(6 + 2(4 + (2∞)), TVar(:op_arg_8)), (6, DMInt()), (7 + 2∞, TVar(:op_arg_5))], DMInt())
+    @test isequal(infer_sensitivity(t), τ)
+end;

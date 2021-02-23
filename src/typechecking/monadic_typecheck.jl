@@ -156,7 +156,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
                 _ <- msum(map(check_op_arg, zip(args,τs,vs))) # check operands seperately and sum result contexts
                 return τ_res
             end
-        end;
+       end;
 
         apply(f, args) => let
 
@@ -174,6 +174,15 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
                 (sτs_args, τ_lam) <- msum(msum(map(check_arg, args)), mcheck_sens(f, scope)) # check function and args seperately
                 τ_ret <- add_type(T -> add_new_type(T, :ret)) # create a tvar for the return type
                 a <- subtype_of(τ_lam, Arr(sτs_args,τ_ret)) # add the right subtype constraint
+                return τ_ret
+            end
+        end;
+
+        phi(c,tr,fs) => let
+            @mdo TC begin
+                τ_c <- mcheck_sens(c,scope)
+                (_, τ_tr, τ_fs) <- msum(mscale(∞), mcheck_sens(tr,scope),mcheck_sens(fs,scope)) # check condition and both branches
+                τ_ret <- msupremum(τ_tr, τ_fs) # branches return type must be the same, or at least the non-constant version
                 return τ_ret
             end
         end;

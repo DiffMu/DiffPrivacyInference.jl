@@ -162,6 +162,10 @@ end
 "Add a subtype constraint `τ1 ⊑ τ2` to the monad's constraint list."
 subtype_of(τ1::DMType, τ2::DMType) = TC((S,T,C,Σ) -> ((S,T,union(C, [isSubtypeOf(τ1, τ2)]),Σ), ()))
 
+"Get the supremum of `τ1` and `τ2`, without simplifying constraints."
+msupremum(τ1 :: DMType, τ2 :: DMType) = TC((S,T,C,Σ) -> getSupremumOf((S,T,C,Σ), τ1, τ2))
+
+
 "Return the current constraint list."
 extract_Cs() = TC((S,T,C,Σ) -> ((S,T,C,Σ), deepcopy(C)))
 

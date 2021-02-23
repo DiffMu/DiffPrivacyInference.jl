@@ -133,19 +133,23 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
         Expr(:(/=), ase, asd) => exprs_to_dmterm([[:($ase = $ase / $asd)]; tail], ln, scope)
 
         Expr(:if, cond, ife) => let
+            @assert cond isa Symbol || cond isa Number || cond.head == :call "unsupported if condition $cond in $ex, $(ln.file) line $(ln.line)."
             phi(expr_to_dmterm(cond, ln, scope), exprs_to_dmterm([[ife]; tail], ln, scope), exprs_to_dmterm(tail, ln, scope))
         end
         Expr(:if, cond, ife, ele) => let
+            @assert cond isa Symbol || cond isa Number || cond.head == :call "unsupported if condition $cond in $ex, $(ln.file) line $(ln.line)."
             phi(expr_to_dmterm(cond, ln, scope), exprs_to_dmterm([[ife]; tail], ln, scope), exprs_to_dmterm([[ele]; tail], ln, scope))
         end;
         Expr(:elseif, cond, ife) => let
             @assert cond.head == :block && length(cond.args) == 2 "it seems elseif conditions can be various..."
+            @assert cond isa Symbol || cond isa Number || cond.args[2].head == :call "unsupported if condition $cond in $ex, $(ln.file) line $(ln.line)."
             phi(expr_to_dmterm(cond.args[2], cond.args[1], scope),
                 exprs_to_dmterm([[ife]; tail], ln, scope),
                 exprs_to_dmterm(tail, ln, scope))
         end;
         Expr(:elseif, cond, ife, ele) => let
             @assert cond.head == :block && length(cond.args) == 2 "it seems elseif conditions can be various..."
+            @assert cond isa Symbol || cond isa Number || cond.args[2].head == :call "unsupported if condition $cond in $ex, $(ln.file) line $(ln.line)."
             phi(expr_to_dmterm(cond.args[2], cond.args[1], scope),
                 exprs_to_dmterm([[ife]; tail], ln, scope),
                 exprs_to_dmterm([[ele]; tail], ln, scope))
@@ -291,6 +295,9 @@ function expr_to_dmterm(ex::Expr, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
             if length(args) == 1
                 return op(callee, [expr_to_dmterm(args[1], ln, scope)])
             else
+                if callee == :(==) && length(args) != 2
+                    error("invalid number of arguments for == in $(ln.file) line $(ln.line)")
+                end
                 # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
                 return reduce((x,y)->op(callee, [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
             end

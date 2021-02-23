@@ -83,6 +83,7 @@ function signature(STCΣ :: Full{SCtx}, top::DMTypeOp, tvars_nonconst = false) :
                 (DMOpMul(), TVar(_), Y)                        => return nothing;
                 (DMOpMul(), X, TVar(_))                        => return nothing;
 
+                (DMOpEq(), Constant(X, η1), Constant(Y, η2))  => (0, 0, DMInt(), []);
                 (DMOpEq(), X, Y)                               && if cINC(X,Y) end => (1, 1, DMInt(), []);
                 (DMOpEq(), Constant(X, η1), Y)                 && if cINC(Y) end => (0, 1, DMInt(), []);
                 (DMOpEq(), X, Constant(Y, η2))                 && if cINC(X) end => (1, 0, DMInt(), []);

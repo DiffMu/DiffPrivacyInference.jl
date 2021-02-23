@@ -7,8 +7,11 @@ using Test
                 l :: Integer = 100
                 if l < 1
                    p = x*y
-                else
+                elseif l > 1
                    p = ((x, y::Integer) -> x+1-y)(l,x)
+                else
+                   f(x) = 100
+                   p = f(l)
                 end
                 return p
             end"
