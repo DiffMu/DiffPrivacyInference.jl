@@ -100,6 +100,7 @@ end;
 end;
 
 @testset "simpl_ifelse" begin
+    ∞ = DiffPrivacyInference.∞
     #=
     julia function:
         function ifelse(x,y::Integer,z)
