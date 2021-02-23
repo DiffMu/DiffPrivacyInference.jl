@@ -23,7 +23,7 @@ using Test
     # generate some random input
     for _ in 1:10
         as = rand(-100:1:100, 4)
-        @test evaled(as...) == parse_ops(as...);
+        @test evaled(as...) == parse_test(as...);
     end
 end;
 
