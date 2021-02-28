@@ -220,6 +220,44 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
             end
         end;
 
+        papply(f, args) => let
+
+            # execute all monads in args seperately with the same input Σ, only passing on S,T,C
+            # then sum the resulting contexts and return execution results as a vector
+            # function takes τ and Σ
+            function mconstr(S,T,C,Σ) :: MType{Tuple{DMType, Vector}}
+                (S,T,C,Σ1), τ_lam = mcheck_sens(f, scope).func(S,T,C,deepcopy(Σ))
+                τs = []
+                Σ1 = truncate(Σ1, (∞,∞))
+                for arg in args
+                    # TODO func should not be modifying Σ, but deepcopy just in case...
+                    (S,T,C,Σ2), τ = check_parg(arg).func(S,T,C,deepcopy(Σ))
+                    τs = push!(τs, τ)
+                    (S,T,C,Σ1) = add(S,T,C,Σ1,Σ2)
+                end
+                return (S,T,C,Σ1), (τ_lam, τs)
+            end
+
+            # check a single argument, append the resulting (Sensitivity, DMType) tuple to sτs
+            function check_parg(arg::DMTerm) :: TC
+                @mdo TC begin
+                    τ_res <- mcheck_sens(arg, scope) # check the argument term
+                    ϵ <- add_svar() # add a new svar for this argument's sensitivity
+                    δ <- add_svar() # add a new svar for this argument's sensitivity
+                    _ <- mtruncate((ϵ,δ)) # scale the context with it
+                    return ((ϵ, δ), τ_res)
+                end
+            end
+
+            @mdo TC begin
+                (τ_lam, aτs) <- TC(mconstr)
+                τ_ret <- add_type(T -> add_new_type(T, :ret)) # create a tvar for the return type
+                a <- subtype_of(τ_lam, ArrStar(aτs, τ_ret)) # add the right subtype constraint
+                return τ_ret
+            end
+        end;
+
+
         phi(c,tr,fs) => let
             @mdo TC begin
                 τ_c <- mcheck_sens(c,scope)

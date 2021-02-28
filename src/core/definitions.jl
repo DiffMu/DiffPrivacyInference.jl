@@ -524,12 +524,12 @@ end
 
 ### For Type Sensitivity Declarations
 "Computes the free sensitivity variables in an assignment."
-function free_SVars((s,τ) :: Tuple{Sensitivity,DMType}) :: Vector{Symbol}
+function free_SVars((s,τ) :: Tuple{Annotation,DMType}) :: Vector{Symbol}
     union(free_SVars(s),free_SVars(τ))
 end
 
 "Computes the free sensitivity variables in an assignment."
-function free_TVars((s,τ) :: Tuple{Sensitivity,DMType}) :: Vector{Symbol}
+function free_TVars((s,τ) :: Tuple{Annotation,DMType}) :: Vector{Symbol}
     union(free_TVars(s),free_TVars(τ))
 end
 

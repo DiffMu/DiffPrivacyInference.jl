@@ -13,6 +13,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     lam_star :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
     dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
+    papply :: (DMTerm, Vector{DMTerm}) => DMTerm # for user annotations of application of privacy functions
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
     flet :: (Symbol, Vector{<:DataType}, lam, DMTerm) => DMTerm
     abstr :: DMTerm => DMTerm
@@ -40,6 +41,7 @@ function pretty_print(t::DMTerm) :: String
         lam(vs, b)           => "λ (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         lam_star(vs, b)      => "λ* (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         apply(l, as)         => pretty_print(l) *"(" * pretty_print(as) * ")"
+        papply(l, as)         => pretty_print(l) *"*(" * pretty_print(as) * ")"
         iter(f, s, l)        => "range(" * pretty_print([f,s,l]) * ")"
         loop(it, cs, b)      => "loop { " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
@@ -72,6 +74,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         lam(vs, b)           => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         lam_star(vs, b)      => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         apply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
+        papply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
         iter(f, s, l)        => Expr(:call, :(:), map(evaluate, [f, s, l])...)
         loop(it, cs, b)      => Expr(:call, :forloop, evaluate(b), evaluate(it), evaluate(cs))
 #        trttup(ts)           => Expr(:tuple, map(evaluate,ts)...)

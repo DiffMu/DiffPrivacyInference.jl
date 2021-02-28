@@ -301,6 +301,8 @@ function expr_to_dmterm(ex::Expr, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
                 # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
                 return reduce((x,y)->op(callee, [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
             end
+        elseif callee == :privacy_apply
+            return papply(expr_to_dmterm(args[1], ln, scope), map(a->expr_to_dmterm(a, ln, scope), args[2:end]))
         elseif callee in F
             error("recursive call of $callee in $(ln.file) line $(ln.line)")
         else

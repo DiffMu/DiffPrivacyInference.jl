@@ -187,7 +187,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 end
 
 """See if a call with argument types `args` would fit a method with signature `cs`, if the type variables in `args` would resolve to the right thing."""
-function choice_could_match(args::Vector{<:Tuple{Sensitivity, DMType}}, cs::Vector{<:DataType}) :: Bool
+function choice_could_match(args::Vector{<:Tuple{Annotation, DMType}}, cs::Vector{<:DataType}) :: Bool
     if length(args) != length(cs)
         return false # no. of arguments differs
     else
