@@ -22,6 +22,7 @@ function singleTSub(τ :: DMType, (X,ξ) :: TSSub) :: DMType
       DMVec(l,A) => DMVec(l, singleTSub(A, (X, ξ)));
       TVar(Y) => X == Y ? ξ : TVar(Y);
       Arr(As,B) => Arr([(s, singleTSub(A, (X, ξ))) for (s,A) in As], singleTSub(B , (X, ξ)));
+      ArrStar(As,B) => ArrStar([(p, singleTSub(A, (X, ξ))) for (p,A) in As], singleTSub(B , (X, ξ)));
    end
 end
 
@@ -65,7 +66,8 @@ function singleTSub(c :: Constr, σ :: TSSub) :: Constr
     @match c begin
         isNumeric(s) => isNumeric(singleTSub(s, σ))
         isTypeOpResult(sv, τ, op) => isTypeOpResult(sv, singleTSub(τ, σ), singleTSub(op, σ))
-        isEqual(s1, s2) => isEqual(s1, s2)
+        isEqualSens(s1, s2) => isEqualSens(s1, s2)
+        isEqualPriv(s1, s2) => isEqualPriv(s1, s2)
         isLessOrEqual(s1, s2) => isLessOrEqual(s1, s2)
         isSubtypeOf(τ1, τ2) => isSubtypeOf(singleTSub(τ1, σ), singleTSub(τ2, σ))
         isSupremumOf(τ1, τ2, ρ) => isSupremumOf(singleTSub(τ1, σ), singleTSub(τ2, σ), singleTSub(ρ, σ))
@@ -175,6 +177,8 @@ function singleSSub(s :: Sensitivity, (X, η) :: SSSub) :: Sensitivity
    end
 end
 
+singleSSub((e,d) :: Privacy, σ :: SSSub) :: Privacy = (singleSSub(e,σ), singleSSub(d,σ))
+
 """
 Apply the single sensitivity substition `σ` to the type `T`. This is necessary, since types
 may contain sensitivity terms.
@@ -187,6 +191,7 @@ function singleSSub(T :: DMType, σ :: SSSub) :: DMType
       Constant(X, n) => Constant(singleSSub(X, σ), singleSSub(n, σ))
       TVar(a) => TVar(a)
       Arr(τs, τ2) => Arr([(singleSSub(s, σ),singleSSub(τ, σ)) for (s,τ) in τs], singleSSub(τ2, σ))
+      ArrStar(τs, τ2) => ArrStar([(singleSSub((ϵ,δ), σ),singleSSub(τ, σ)) for ((ϵ,δ),τ) in τs], singleSSub(τ2, σ))
       DMTup(τs) => DMTup(map(τ->singleSSub(τ, σ), τs))
       #DMTrtProduct(Ts) => DMTrtProduct(map(ηT -> (singleSSub(first(ηT), σ), singleSSub(last(ηT), σ)), Ts))
       DMVec(l, τ) => DMVec(singleSSub(l, σ), singleSSub(τ, σ))
@@ -209,7 +214,8 @@ Apply the single sensitivity substitution `σ` to the constraint `c`.
 """
 function singleSSub(c :: Constr, σ::SSSub) :: Constr
     @match c begin
-        isEqual(s1, s2) => isEqual(singleSSub(s1, σ), singleSSub(s2, σ))
+        isEqualSens(s1, s2) => isEqualSens(singleSSub(s1, σ), singleSSub(s2, σ))
+        isEqualPriv(p1, p2) => isEqualPriv(singleSSub(p1, σ), singleSSub(p2, σ))
         isLessOrEqual(s1, s2) => isLessOrEqual(singleSSub(s1, σ), singleSSub(s2, σ))
         isNumeric(τ) => isNumeric(singleSSub(τ, σ))
         isTypeOpResult(sv, τ, op) => isTypeOpResult(map(x->singleSSub(x, σ), sv), singleSSub(τ, σ), singleSSub(op, σ))

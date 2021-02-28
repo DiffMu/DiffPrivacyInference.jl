@@ -116,13 +116,12 @@ ConstraintsAbstr = Vector{<:ConstrAbstr}
     # A (meta-) typevariable.
     TVar :: Symbol => DMType
 
-    # Type of privacy functions. Currently not implemented.
-    # ArrStar :: (Dict{Symbol, Tuple{Tuple{STerm, STerm}, DMType}}, DMType) => DMType
+    # Type of sensitivity functions.
     Arr :: (Vector{Tuple{Sensitivity, DMType}}, DMType) => DMType
+
+    # Type of privacy functions.
+    ArrStar :: (Vector{Tuple{Privacy, DMType}}, DMType) => DMType
 end
-
-
-
 
 
 ####################################################################
@@ -140,6 +139,7 @@ free_symbols(ex::STerm) = @match ex begin
     ::SymbolicUtils.Term => vcat(map(free_symbols, ex.arguments)...)
     ::Number => []
 end;
+
 
 
 ####################################################################
@@ -277,7 +277,8 @@ SymbolOrType = Union{Symbol, DMType}
     isTypeOpResult :: (Vector{Sensitivity}, DMType, DMTypeOp) => Constr
 
     # `isEqual(s₁, s₂)` means that the sensitivities `s₁` and `s₂` should be equal.
-    isEqual :: (Sensitivity, Sensitivity) => Constr
+    isEqualSens :: (Sensitivity, Sensitivity) => Constr
+    isEqualPriv :: (Privacy, Privacy) => Constr
 
     # `isEqual(τ₁, τ₂)` means that the types `τ₁` and `τ₂` should be equal.
     isEqualType :: (DMType, DMType) => Constr
@@ -290,7 +291,7 @@ SymbolOrType = Union{Symbol, DMType}
 
     # for dispatch, dict maps user-given signature to a flag variable and the inferred function type.
     # flag will be set to 0 or 1 according to which choice was picked.
-    isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},Arr}}) => Constr
+    isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},Union{Arr,ArrStar}}}) => Constr
 end
 
 "The type of constraints is simply a list of individual constraints."
@@ -314,7 +315,8 @@ Base.show(io::IO, c::Constr) =
                 print(io, "(", join(map(string, sens), ", "), ", ", τ, ") = ")
                 showPretty(io, op)
             end
-        isEqual(s1, s2) => print(io, s1, " == ", s2)
+        isEqualSens(s1, s2) => print(io, s1, " == ", s2)
+        isEqualPriv(p1, p2) => print(io, p1, " == ", p2)
         isSubtypeOf(τ1, τ2) => print(io, τ1, " ⊑ ", τ2)
         isSupremumOf(τ1, τ2, σ) => print(io, σ, " = sup{", τ1, ", ", τ2, "}")
         isEqualType(s1,s2) => print(io, s1, " == ", s2)
@@ -370,6 +372,7 @@ function juliatype(τ::DMType) :: DataType
       DMVec(l,A) => Vector{juliatype(A)}
       TVar(Y) => error("unknown type")
       Arr(As,B) => Function
+      ArrStar(As,B) => Function
       _ => error("not implemented")
   end
 end
@@ -397,6 +400,11 @@ Context = Union{PrivacyContext, SensitivityContext}
 PCtx = PrivacyContext
 SCtx = SensitivityContext
 TCtx = TypeContext
+
+
+zero(::SCtx) = 0
+zero(::PCtx) = (0,0)
+
 
 """
 We usually carry around not only a context `Γ`, but additionaly a sensitivity variable context `S`,
@@ -475,11 +483,19 @@ function free_SVars(s :: Sensitivity) :: Vector{Symbol}
     Vector(free_symbols(s))
 end
 
+function free_SVars((e,d) :: Privacy) :: Vector{Symbol}
+    [free_symbols(d); free_symbols(d)]
+end
+
 """
     free_TVars(s :: Sensitivity) :: Vector{Symbol}
 Computes the free sensitivity variables in a type. Always returns an empty vector.
 """
 function free_TVars(s :: Sensitivity) :: Vector{Symbol}
+    Vector()
+end
+
+function free_TVars((e,d) :: Privacy) :: Vector{Symbol}
     Vector()
 end
 
@@ -541,6 +557,7 @@ function free_SVars(t :: DMType) :: Vector{Symbol}
         DMVec(n,v)     => union(free_SVars(n),union(free_SVars(v)...))
         TVar(_)        => Vector()
         Arr(v, τ)   => union(map(free_SVars, v)... , free_SVars(τ))
+        ArrStar(v, τ)   => union(map(free_SVars, v)... , free_SVars(τ))
     end
 end
 
@@ -557,6 +574,7 @@ function free_TVars(t :: DMType) :: Vector{Symbol}
         DMVec(n,v)     => union(free_TVars(n),union(free_TVars(v)...))
         TVar(a)        => Vector([a]) # THIS LINE IS different from the SVars version above (!)
         Arr(v, τ)   => union(map(free_TVars, v)... , free_TVars(τ))
+        ArrStar(v, τ)   => union(map(free_TVars, v)... , free_TVars(τ))
     end
 end
 
@@ -571,7 +589,8 @@ function free_SVars(c :: Constr) :: Vector{Symbol}
         isNumeric(τ)             => free_SVars(τ)
         isLessOrEqual(n,m)       => union(free_SVars(n),free_SVars(m))
         isTypeOpResult(v, s, τ)  => union(map(free_SVars, v)..., free_SVars(s), free_SVars(τ))
-        isEqual(s1, s2)          => union(free_SVars(s1), free_SVars(s2))
+        isEqualSens(s1, s2)          => union(free_SVars(s1), free_SVars(s2))
+        isEqualPriv(p1, p2)          => union(free_SVars(p1), free_SVars(p2))
         isEqualType(s1, s2)      => union(free_SVars(s1), free_SVars(s2))
         isSubtypeOf(s1, s2)      => union(free_SVars(s1), free_SVars(s2))
         isSupremumOf(s1, s2, s3) => union(free_SVars(s1), free_SVars(s2), free_SVars(s3))
@@ -587,7 +606,8 @@ function free_TVars(c :: Constr) :: Vector{Symbol}
         isNumeric(τ)             => free_TVars(τ)
         isLessOrEqual(n,m)       => union(free_TVars(n),free_TVars(m))
         isTypeOpResult(v, s, τ)  => union(map(free_TVars, v)..., free_TVars(s), free_TVars(τ))
-        isEqual(s1, s2)          => union(free_TVars(s1), free_TVars(s2))
+        isEqualSens(s1, s2)          => union(free_TVars(s1), free_TVars(s2))
+        isEqualPriv(p1, p2)          => union(free_TVars(p1), free_TVars(p2))
         isEqualType(s1, s2)      => union(free_TVars(s1), free_TVars(s2))
         isSubtypeOf(s1, s2)      => union(free_TVars(s1), free_TVars(s2))
         isSupremumOf(s1, s2, s3) => union(free_TVars(s1), free_TVars(s2), free_TVars(s3))

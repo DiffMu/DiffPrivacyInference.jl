@@ -36,7 +36,6 @@ function try_destructure_sensitivity(s :: Sensitivity) :: Union{Nothing, Symbol,
    end
 end
 
-#TODO do this properly
 function unify_Sensitivity_nosubs(s1 :: Sensitivity, s2 :: Sensitivity) :: Tuple{Sensitivity, Constraints}
     s, Cs, subs = unify_Sensitivity(s1,s2)
     Cs = [Cs; substitutions_to_constraints(subs)]
@@ -64,9 +63,16 @@ function unify_Sensitivity(s1 :: Sensitivity, s2 :: Sensitivity) :: Tuple{Sensit
          (::Infty, ::Infty) => (ds1, [], [])
          (x :: Symbol, _) => (s2, [], [(x, s2)])
          (_, y :: Symbol) => (s1, [], [(y, s1)])
-         (_ , _) => (s1, [isEqual(s1, s2)], [])
+         (_ , _) => (s1, [isEqualSens(s1, s2)], [])
       end
    end
+end
+
+function unify_Privacy((p1,q1)::Privacy, (p2,q2)::Privacy)
+    pp, C1, σ1 = unify_Sensitivity(p1,p2)
+    (q1,q2) = distribute_substitute((q1,q2), σ1)
+    qq, C2, σ2 = unify_Sensitivity(q1,q2)
+    (pp,qq), union(C1,C2), [σ1; σ2]
 end
 
 ############################################################################################
@@ -81,7 +87,7 @@ function substitutions_to_constraints(σs :: Substitutions) :: Constraints
             push!(c, isEqualType(TVar(var), value))
         elseif σ isa SSSub
             var, value = σ
-            push!(c, isEqual(symbols(var), value))
+            push!(c, isEqualSens(symbols(var), value))
         else
             error("INTERNAL ERROR: Unexpected substitution type.")
         end
@@ -199,6 +205,43 @@ function unify_DMType(τ :: DMType, ρ :: DMType) :: Tuple{DMType, Constraints, 
             Xs, S, co = distribute_substitute((Xs, S, co), σ)
 
             simpleReturn((Arr(collect(zip(S, Xs)), Y)), co, σ)
+        end;
+        (ArrStar(X1s,Y1), ArrStar(X2s,Y2)) =>
+        let
+            if length(X1s) != length(X2s)
+                throw(WrongNoOfArgs("trying to unify arrows with different no. of arguments:\n   $τ\nand\n   $ρ"))
+            end
+            σ = Substitutions()
+            co = []
+            Xs = DMType[]
+            S = Sensitivity[]
+            for i in 1:length(X1s)
+                # unify argument types
+                X1, X2 = X1s[i][2], X2s[i][2]
+                (X, cot, σt) = unify_DMType(X1, X2)
+                X1s, X2s = distribute_substitute((X1s,X2s), σt)
+                push!(Xs, X)
+                σ = vcat(σ, σt)
+                co = vcat(co, cot)
+
+                # unify argument sensitivities
+                s1, s2 = X1s[i][1], X2s[i][1]
+                (s, cos, σs) = unify_Privacy(s1, s2)
+                X1s, X2s = distribute_substitute((X1s,X2s), σs)
+                push!(S, s)
+                σ = vcat(σ, σs)
+                co = vcat(co, cos)
+            end
+
+            # unify result type
+            Y1, Y2 = distribute_substitute((Y1, Y2), σ)
+            (Y, cor, σr) = unify_DMType(Y1, Y2)
+            σ = vcat(σ, σr)
+            co = vcat(co, cor)
+
+            Xs, S, co = distribute_substitute((Xs, S, co), σ)
+
+            simpleReturn((ArrStar(collect(zip(S, Xs)), Y)), co, σ)
         end;
         (TVar(t1), TVar(t2)) && if t1 == t2 end => simpleReturn(TVar(t1), [], [])
         (TVar(n1), Y)                           => simpleReturn(Y, [], [(n1, Y)])

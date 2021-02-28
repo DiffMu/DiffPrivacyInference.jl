@@ -107,8 +107,17 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
             newCs = [isSubtypeOf(β[2], α[2]) for (α, β) in zip(αs, βs)]
             push!(newCs, isSubtypeOf(ρ, ρ2))
 
-            newCs = [newCs; [isEqual(β[1], α[1]) for  (α, β) in zip(αs, βs)]]
+            newCs = [newCs; [isEqualSens(β[1], α[1]) for  (α, β) in zip(αs, βs)]]
 
+            return (S,T,union(C, newCs),Σ)
+        end;
+        (ArrStar(αs, ρ), ArrStar(βs, ρ2)) => let
+            if length(αs) != length(βs)
+                throw(WrongNoOfArgs("Invalid subtyping constraint $τ1 ⊑ $τ2; number of function arguments does not match."))
+            end
+            newCs = [isSubtypeOf(β[2], α[2]) for (α, β) in zip(αs, βs)]
+            push!(newCs, isSubtypeOf(ρ, ρ2))
+            newCs = [newCs; [isEqualPriv(β[1], α[1]) for  (α, β) in zip(αs, βs)]]
             return (S,T,union(C, newCs),Σ)
         end;
         (TVar(_), Arr(αs, ρ)) => let
@@ -134,6 +143,21 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
 
             (S,T,union(C, newCs, uCs), Σ)
         end;
+        (TVar(_), ArrStar(αs, ρ)) => let
+            newCs = Constraints()
+            βs = []
+            for (s, α) in αs
+                T, β = addNewName(T, Symbol("sub_atype_"))
+                β = TVar(β)
+                push!(βs, (s, β))
+                push!(newCs, isSubtypeOf(α, β))
+            end
+            T, ρ2 = addNewName(T, Symbol("sub_rtype_"))
+            ρ2 = TVar(ρ2)
+            push!(newCs, isSubtypeOf(ρ2, ρ))
+            _, uCs = unify_nosubs(τ1, ArrStar(βs, ρ2))
+            (S,T,union(C, newCs, uCs), Σ)
+        end;
         (Arr(αs, ρ), TVar(_)) => let
             # τ2 must be an Arr too, so we invent variables ds, βs and ρ2 and say τ2 = Arr(βs, ρ2)
             # we also add constraints
@@ -157,8 +181,25 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
 
             (S,T,union(C, newCs, uCs), Σ)
         end;
+        (ArrStar(αs, ρ), TVar(_)) => let
+            newCs = Constraints()
+            βs = []
+            for (s, α) in αs
+                T, β = addNewName(T, Symbol("sub_atype_"))
+                β = TVar(β)
+                push!(βs, (s, β))
+                push!(newCs, isSubtypeOf(β,α))
+            end
+            T, ρ2 = addNewName(T, Symbol("sub_rtype_"))
+            ρ2 = TVar(ρ2)
+            push!(newCs, isSubtypeOf(ρ, ρ2))
+            _, uCs = unify_nosubs(τ2, ArrStar(βs, ρ2))
+            (S,T,union(C, newCs, uCs), Σ)
+        end;
         (Arr(_,_), _) => throw(NotSubtype("Invalid subtyping constraint $τ1 ⊑ $τ2; second argument must be an Arrow."))
         (_, Arr(_,_)) => throw(NotSubtype("Invalid subtyping constraint $τ1 ⊑ $τ2; first argument must be an Arrow."))
+        (ArrStar(_,_), _) => throw(NotSubtype("Invalid subtyping constraint $τ1 ⊑ $τ2; second argument must be an Arrow."))
+        (_, ArrStar(_,_)) => throw(NotSubtype("Invalid subtyping constraint $τ1 ⊑ $τ2; first argument must be an Arrow."))
         (TVar(_), _) => return nothing
         (_, TVar(_)) => let
             # this kind of constraint can only appear from subtyping constraints made during apllication typechecking.
@@ -243,6 +284,7 @@ function try_get_direct_supertypes(τ :: DMType) :: Union{Nothing,Vector{DMType}
         DMReal()               => []
 
         Arr(_, _)           => error("Unreachable location reached. Tried to get direct super types of an arrow type.")
+        ArrStar(_, _)           => error("Unreachable location reached. Tried to get direct super types of an arrow type.")
 
         _                      => nothing
     end

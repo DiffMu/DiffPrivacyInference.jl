@@ -40,7 +40,12 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
             @mdo TC begin
                 τr <- mcheck_sens(body, scope) # check body to obtain lambda return type
                 xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
-                return Arr(xrτs, τr)
+                pmode <- is_in_privacy_mode()
+                _  = println("checked body, got $τr. vars are $xrτs. pmode is $pmode.")
+                τ_arr <- (pmode ? mreturn(ArrStar(xrτs, τr)) : mreturn(Arr(xrτs, τr)))
+                _ = println("return type is $τ_arr")
+                n <- (pmode ? mtruncate(∞) : mreturn(nothing))
+                return τ_arr
             end
 
         end
@@ -160,8 +165,34 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
 
         apply(f, args) => let
 
+            # execute all monads in args seperately with the same input Σ, only passing on S,T,C
+            # then sum the resulting contexts and return execution results as a vector
+            # function takes τ and Σ
+            function mconstr(S,T,C,Σ) :: MType{Tuple{DMType, Vector}}
+                (S,T,C,Σ1), τ_lam = mcheck_sens(f, scope).func(S,T,C,deepcopy(Σ))
+                if τ_lam isa ArrStar
+                    τs = [] 
+                    Σ1 = truncate(Σ1, (∞,∞))
+                    for arg in args
+                        # TODO func should not be modifying Σ, but deepcopy just in case...
+                        (S,T,C,Σ2), τ = check_parg(arg).func(S,T,C,deepcopy(Σ))
+                        τs = push!(τs, τ)
+                        (S,T,C,Σ1) = add(S,T,C,Σ1,Σ2)
+                    end
+                else
+                    τs = []
+                    for arg in args
+                        # TODO func should not be modifying Σ, but deepcopy just in case...
+                        (S,T,C,Σ2), τ = check_sarg(arg).func(S,T,C,deepcopy(Σ))
+                        τs = push!(τs, τ)
+                        (S,T,C,Σ1) = add(S,T,C,Σ1,Σ2)
+                    end
+                end
+                return (S,T,C,Σ1), (τ_lam, τs)
+            end
+
             # check a single argument, append the resulting (Sensitivity, DMType) tuple to sτs
-            function check_arg(arg::DMTerm) :: TC
+            function check_sarg(arg::DMTerm) :: TC
                 @mdo TC begin
                     τ_res <- mcheck_sens(arg, scope) # check the argument term
                     s <- add_svar() # add a new svar for this argument's sensitivity
@@ -170,10 +201,21 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
                 end
             end
 
+            # check a single argument, append the resulting (Sensitivity, DMType) tuple to sτs
+            function check_parg(arg::DMTerm) :: TC
+                @mdo TC begin
+                    τ_res <- mcheck_sens(arg, scope) # check the argument term
+                    ϵ <- add_svar() # add a new svar for this argument's sensitivity
+                    δ <- add_svar() # add a new svar for this argument's sensitivity
+                    _ <- mtruncate((ϵ,δ)) # scale the context with it
+                    return ((ϵ, δ), τ_res)
+                end
+            end
+
             @mdo TC begin
-                (sτs_args, τ_lam) <- msum(msum(map(check_arg, args)), mcheck_sens(f, scope)) # check function and args seperately
+                (τ_lam, aτs) <- TC(mconstr)
                 τ_ret <- add_type(T -> add_new_type(T, :ret)) # create a tvar for the return type
-                a <- subtype_of(τ_lam, Arr(sτs_args,τ_ret)) # add the right subtype constraint
+                a <- (τ_lam isa ArrStar ? subtype_of(τ_lam, ArrStar(aτs, τ_ret)) : subtype_of(τ_lam, Arr(aτs, τ_ret))) # add the right subtype constraint
                 return τ_ret
             end
         end;
@@ -186,6 +228,14 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}) :: TC#{DM
                 return τ_ret
             end
         end;
+
+        ret(rt) => let
+            @mdo TC begin
+                τ <- mcheck_sens(rt, scope)
+                _ <- mtruncate((∞,∞))
+                return τ
+            end
+        end
 
         _ => error("something unsupported: $t")
 

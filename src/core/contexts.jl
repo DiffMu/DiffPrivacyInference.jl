@@ -125,3 +125,24 @@ add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:Context} = merg
 
 "Scale all sensitivities in `Σ` by `r`."
 scale(r::STerm, Σ::SensitivityContext) = SensitivityContext(v => (r*s, t) for (v,(s,t)) in Σ)
+
+maxannotation(a1::Privacy, a2::Privacy) = (max(a1[1],a2[1]), max(a1[2],a2[2]))
+maxannotation(a1::Sensitivity, a2::Sensitivity) = max(a1, a2)
+
+
+"Combine `Σs` using the maximum of annotations, unifying types of variables where the contexts disagree of the type."
+upperbound(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:Context} = merge_contexts(maxannotation, S, T, C, [Σs...])
+
+zeroa(T::Type) = T <: Sensitivity ? 0 : (0,0)
+truncate(s1::A1, s2::A2) where {A1<:Annotation,A2<:Annotation} = isequal(s1, zeroa(A1)) ? zeroa(A2) : s2
+
+# this is denoted ⌉c⌈^s in the paper
+# if applied eg to SensitivityContext and a Privacy, this changes colour of the context!
+truncate(c::Context, p::Privacy) = PrivacyContext(v => (truncate(p1, p), t) for (v,(p1,t)) in c)
+truncate(c::Context, s::Sensitivity) = SensitivityContext(v => (truncate(s1, s), t) for (v,(s1,t)) in c)
+
+# this is denoted ⌊c⌋_{vars} in the paper
+restrict(c::C, vars::Vector{Symbol}) where {C<:Context} = C(v => c[v] for v in vars)
+
+# this is denoted ⌉⌊c⌋⌈^p_{vars} in the paper
+restrict_truncate(c::PrivacyContext, vars::Vector{Symbol}, p::Privacy) = truncate(restrict(c, vars), p)

@@ -12,6 +12,7 @@ function check_not_constant(τ :: DMType, tvars_nonconst::Bool) :: Bool
       DMTup(Ts) => any(map(T->check_not_constant(T, tvars_nonconst), Ts))
       DMVec(_) => true
       Arr(_, _) => true
+      ArrStar(_, _) => true
       TVar(t) => tvars_nonconst
    end
 end
@@ -22,7 +23,7 @@ end
 
 
 """
-    signature(STCΣ :: Full{SCtx}, top::DMTypeOp)
+    signature(STCΣ :: Full{A}, top::DMTypeOp)
 
 Return the sensitivity signature of `top`, if it is clear yet.
 
@@ -30,7 +31,7 @@ If the types of `top` are not yet sufficiently specified to determine the signat
 `nothing`. Else, return the signature as specified in the Duet paper, as well as the return
 type of the operation and the new context with new constraints in case the op required any.
 """
-function signature(STCΣ :: Full{SCtx}, top::DMTypeOp, tvars_nonconst = false) :: Union{Nothing, Tuple{Array{Sensitivity}, DMType, Full{SCtx}}}
+function signature(STCΣ :: Full{A}, top::DMTypeOp, tvars_nonconst = false) :: Union{Nothing, Tuple{Array{Sensitivity}, DMType, Full{A}}} where A
 
     # ensure all types are non-constant
     cINC(Xs::DMType...) = all(X -> check_not_constant(X, tvars_nonconst), Xs)

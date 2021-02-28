@@ -71,10 +71,10 @@ end
 
 # TC has a hidden type parameter A that i cannot express. i use MType{A} as a cheap substitute...
 struct TC <: Monad
-func :: Function # (Full{SCtx}) -> (Full{SCtx} x A)
+func :: Function # (Full{Ctx}) -> (Full{Ctx} x A)
 end
 
-MType{A} = Tuple{Full{SCtx}, A}
+MType{A} = Tuple{Full, A}
 
 # execute the computation within a TC monad.
 run(m::TC) = m.func(emptySVarCtx(),emptyTVarCtx(),emptyConstraints(),SCtx())
@@ -93,13 +93,33 @@ end
 # then sum the resulting contexts and return execution results as a vector
 function msum(args::Vector{TC}) :: TC#{Vector}
     function mconstr(S,T,C,Σ) :: MType{Vector}
-        Σ1 = SCtx()
+        Σ1 = typeof(Σ)()
         τs = []
         for arg in args
              # TODO func should not be modifying Σ, but deepcopy just in case...
             (S,T,C,Σ2), τ = arg.func(S,T,C,deepcopy(Σ))
             τs = push!(τs, τ)
             (S,T,C,Σ1) = add(S,T,C,Σ1,Σ2)
+        end
+        return (S,T,C,Σ1), τs
+    end
+    TC(mconstr)
+end
+
+# execute all monads in args seperately with the same input Σ, only passing on S,T,C
+# then sum the resulting contexts and return execution results as a vector
+# function takes τ and Σ
+function msum(args::Vector{TC}, weights::Function) :: TC#{Vector}
+    function mconstr(S,T,C,Σ) :: MType{Vector}
+        Σ1, τ1 = arg.func(S,T,C,deepcopy(Σ))
+        weight = weights(τ1)
+        Σ1 = weight(Σ1)
+        τs = [τ1]
+        for arg in args
+             # TODO func should not be modifying Σ, but deepcopy just in case...
+            (S,T,C,Σ2), τ = arg.func(S,T,C,deepcopy(Σ))
+            τs = push!(τs, τ)
+            (S,T,C,Σ1) = add(S,T,C,Σ1,weight(Σ2))
         end
         return (S,T,C,Σ1), τs
     end
@@ -124,12 +144,19 @@ end
 #########################################################################################
 # convenience functions for TC monad
 
+is_in_privacy_mode() = TC((S,T,C,Σ) -> ((S,T,C,Σ), Σ isa PCtx))
+
+mtruncate(s::Annotation) = TC((S,T,C,Σ) -> ((S,T,C,truncate(Σ, s)), ()))
+
 "Construct a `TC` monad containing the computation of inferring `t`'s sensitivity."
 function build_tc(t::DMTerm) :: TC
     @mdo TC begin
         checkr <- check_term(t) # typecheck the term
+        _ = println("type after check: $checkr")
         tau <- simplify_constraints_lose_generality() # simplify all constraints
+        _ = println("type after simpl: $checkr")
         r <- apply_subs(checkr) # apply substitutions made during simplification
+        _ = println("type after subs: $r")
         return r
     end
 end
@@ -216,11 +243,11 @@ function add_svar() :: TC#{Sensitivity}
     TC(mconstr)
 end
 
-"Set sensitivity of `x` to `s` and type to `τ`."
-function set_var(x::Symbol, s, τ::DMType) :: TC#{DMTypen}
+"Set annotation of `x` to `s` and type to `τ`."
+function set_var(x::Symbol, s::Annotation, τ::DMType) :: TC#{DMType}
     function mconstr(S,T,C,Σ) :: MType{DMType}
-        # x gets sensitivity s, and the inferred type
         Σ = deepcopy(Σ)
+        # x gets annotation s type τ
         Σ[x] = (s,τ)
         (S,T,C,Σ), τ
     end
@@ -240,18 +267,18 @@ lookup_var_type(x::Symbol) = TC((S,T,C,Σ) -> ((S,T,C,Σ), haskey(Σ,x) ? Σ[x][
 """
     get_arglist(xτs::Vector{<:TAsgmt}) :: TC
 
-Look up the types and sensitivities of the variables in `xτs` from the current context.
+Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 If a variable is not present in Σ (this means it was not used in the lambda body),
-create a new type/typevar according to type hint given in `xτs`
+create a new type/typevar according to type hint given in `xτs` and give it zero annotation
 """
 # then remove the xs from Σ
 function get_arglist(xτs::Vector{<:TAsgmt}) :: TC#{Vect{Sens x DMType}}
-    function mconstr(S,T,C,Σ) :: MType{Vector{Tuple{Sensitivity, DMType}}}
+    function mconstr(S,T,C,Σ) :: MType{Vector{Tuple{Annotation, DMType}}}
 
         function make_type(dτ::DataType)
             # if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
             τx, S, T, C = create_DMType(dτ, S, T, C)
-            (0, τx)
+            (zero(Σ), τx) # set variable sensitivity/privacy to zero
         end
 
         Σ = deepcopy(Σ)

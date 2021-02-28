@@ -3,14 +3,14 @@ TAsgmt = Tuple{Symbol, <:DataType}
 
 # the terms that come out of the parser.
 @data DMTerm begin
+    ret :: DMTerm => DMTerm # just for testing privacy language.
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
     arg :: (Symbol, DataType) => DMTerm
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
-    ret :: DMTerm => DMTerm
     lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
-    lam_star :: (Vector{TAsgmt}, DMTerm) => DMTerm
+    lam_star :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
     dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
@@ -122,6 +122,7 @@ function Base.isequal(τ1::DMType, τ2::DMType)
         (DMVec(s, X), DMVec(t, Y)) => isequal(s, t) && isequal(X, Y);
         (TVar(s), TVar(t)) => isequal(s, t);
         (Arr(v, s), Arr(w, t)) => isequal(v, w) && isequal(s, t);
+        (ArrStar(v, s), ArrStar(w, t)) => isequal(v, w) && isequal(s, t);
         (_, _) => false;
     end
 end
@@ -154,6 +155,10 @@ function pretty_print(t::DMType)
         Arr(args, ret) =>
             let
                 pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " ==> " * pretty_print(ret)
+            end
+            ArrStar(args, ret) =>
+            let
+                pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " *=*=>* " * pretty_print(ret)
             end
     end
 end

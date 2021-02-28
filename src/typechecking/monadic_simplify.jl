@@ -45,7 +45,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 
                     newCs = union(newCs, substitutions_to_constraints(σs))
 
-                    if isequal(Cs,C_noc) && issubset(newCs, [Cs; c])
+                    if isequal(Cs,C_noc) && issubset(Set(newCs), Set(C))
                         # substitutions did not change anything and we knew all constraints alredy -> nothing happened.
                         return (S,T,C,Σ), nothing
                     else
@@ -59,9 +59,14 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
     end
 
     @match c begin
-        isEqual(s1,s2) => let
+        isEqualSens(s1,s2) => let
             _, co, σ = unify_Sensitivity(s1,s2)
             return_substitute(co,σ)
+        end;
+        isEqualPriv((s1,s2),(t1,t2)) => let
+            _, co1, σ1 = unify_Sensitivity(s1,t1)
+            _, co2, σ2 = unify_Sensitivity(s2,t2)
+            return_substitute([co1;co2],[σ1;σ2])
         end;
         isEqualType(t1, t2) => begin
             _, co, σ = unify_DMType(t1, t2)
@@ -102,7 +107,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
         end;
         isSubtypeOf(τ1, τ2) =>
         let
-            function mconstr(S::SVarCtx,T::TVarCtx,C::Constraints,Σ::SCtx) :: MType{Union{Nothing, Tuple{}}}
+            function mconstr(S::SVarCtx,T::TVarCtx,C::Constraints,Σ::Context) :: MType{Union{Nothing, Tuple{}}}
                 newC = filter(c -> !isequal(c,isSubtypeOf(τ1, τ2)), C)
                 res = try_eval_isSubtypeOf((S,T,newC,Σ), τ1, τ2)
                 if isnothing(res)
@@ -123,52 +128,55 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             end
         end;
         isChoice(τ, choices) => begin
-            @match τ begin
-                Arr(args, _) => let
 
-                    newchoices = Dict((s,c) for (s,c) in deepcopy(choices) if choice_could_match(args, s))
+            function match_args(args::Vector{<:Tuple})
+                newchoices = Dict((s,c) for (s,c) in deepcopy(choices) if choice_could_match(args, s))
 
-                    if isempty(newchoices)
-                        throw(NoChoiceFound("no matching choice for $τ found in $choices."));
+                if isempty(newchoices)
+                    throw(NoChoiceFound("no matching choice for $τ found in $choices."));
+                else
+                    # if there is no free tyepevars in τs arguments, throw out methods that are more general than others
+                    # if we don't know all types we cannot do this, as eg for two methods
+                    # (Int, Int) => T
+                    # (Real, Number) => T
+                    # and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
+                    # is a DMReal, the first one does not match even though it's less general.
+                    if all(map(t->isempty(free_TVars(t)), args)) # no free tvars in the args
+                        newchoices = keep_least_general(newchoices)
+                    end
+
+                    if length(newchoices) == length(choices)
+                        return_nothing() # no choices were discarded, the constraint could not be simplified.
                     else
-                        # if there is no free tyepevars in τs arguments, throw out methods that are more general than others
-                        # if we don't know all types we cannot do this, as eg for two methods
-                        # (Int, Int) => T
-                        # (Real, Number) => T
-                        # and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
-                        # is a DMReal, the first one does not match even though it's less general.
-                        if all(map(t->isempty(free_TVars(t)), args)) # no free tvars in the args
-                            newchoices = keep_least_general(newchoices)
+                        # null all flags of choices that were discarded, so their inferred sensitivities get nulled
+                        nullflags = Constr[]
+                        for s in setdiff(keys(choices), keys(newchoices))
+                            push!(nullflags, isEqualSens(choices[s][1], 0))
                         end
 
-                        if length(newchoices) == length(choices)
-                            return_nothing() # no choices were discarded, the constraint could not be simplified.
+                        if length(newchoices) == 1 # only one left, we can pick that one
+                            flag, cτ = first(values(newchoices))
+
+                            # even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
+                            # as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
+                            # set this ones flag to 1
+                            return_simple([nullflags; isSubtypeOf(cτ, τ); isEqualSens(flag, 1)])
                         else
-                            # null all flags of choices that were discarded, so their inferred sensitivities get nulled
-                            nullflags = Constr[]
-                            for s in setdiff(keys(choices), keys(newchoices))
-                                push!(nullflags, isEqual(choices[s][1], 0))
-                            end
-
-                            if length(newchoices) == 1 # only one left, we can pick that one
-                                flag, cτ = first(values(newchoices))
-
-                                # even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
-                                # as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
-                                # set this ones flag to 1
-                                return_simple([nullflags; isSubtypeOf(cτ, τ); isEqual(flag, 1)])
-                            else
-                                return_simple([nullflags; isChoice(τ, newchoices)])
-                            end
+                            return_simple([nullflags; isChoice(τ, newchoices)])
                         end
                     end
-                end;
+                end
+            end
+
+            @match τ begin
+                Arr(args, _) => match_args(args)
+                ArrStar(args, _) => match_args(args)
                 TVar(_) => let
                     if length(choices)==1
                         # it's the only possible choice, set its flag to 1.
                         # if it does not fit even though there is no other choices, we will get a type error later
                         flag, cτ = first(values(choices))
-                        return_simple([isSubtypeOf(cτ, τ), isEqual(flag, 1)])
+                        return_simple([isSubtypeOf(cτ, τ), isEqualSens(flag, 1)])
                     else
                         return_nothing()
                     end
@@ -201,7 +209,7 @@ end
 =#
 
 """Remove entries from `cs` that are supertypes of some other entry."""
-function keep_least_general(cs::Dict{<:Vector{<:DataType}, Tuple{SymbolicUtils.Sym{Number}, Arr}}) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, Arr}}
+function keep_least_general(cs::Dict{<:Vector{<:DataType}, Tuple{SymbolicUtils.Sym{Number}, A}}) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, A}} where {A<:Union{Arr,ArrStar}}
     # make a poset from the subtype relation of signatures
     P = SimplePoset(Vector{DataType})
     sign = keys(cs)
@@ -229,6 +237,7 @@ function msimplify_constraints() :: TC#{Tuple{}}
         else
             @mdo TC begin
                 simpl <- mtry_simplify_Constr(Ci[1])
+                _ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]).\n"))
                 ret <- (isnothing(simpl) ? try_simplify_constraints(Ci[2:end]) : msimplify_constraints())
                 return ret
             end
@@ -237,6 +246,7 @@ function msimplify_constraints() :: TC#{Tuple{}}
 
     @mdo TC begin
         Cs <- extract_Cs()
+        _ = println("simplifying constraints $Cs")
         _ <- try_simplify_constraints(Cs) # see if the constraints changed. recurse, if so.
         return ()
     end
@@ -247,9 +257,14 @@ function apply_subs(τ::DMType) :: TC
     function mconstr(S,T,C,Σ) :: MType{DMType}
         for c in C
             τ = @match c begin
-                isEqual(s1, s2) => let
+                isEqualSens(s1, s2) => let
                     _, _, σ = unify_Sensitivity(s1, s2)
                     apply_subs(τ, σ)
+                end
+                isEqualPriv((s1, s2), (t1, t2)) => let
+                    _, _, σ1 = unify_Sensitivity(s1, t1)
+                    _, _, σ2 = unify_Sensitivity(s2, t2)
+                    apply_subs(τ, [σ1; σ2])
                 end
                 isEqualType(t1, t2) => let
                     _, _, σ = unify_DMType(t1, t2)
