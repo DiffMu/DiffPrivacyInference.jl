@@ -209,7 +209,7 @@ end
 =#
 
 """Remove entries from `cs` that are supertypes of some other entry."""
-function keep_least_general(cs::Dict{<:Vector{<:DataType}, Tuple{SymbolicUtils.Sym{Number}, A}}) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, A}} where {A<:Union{Arr,ArrStar}}
+function keep_least_general(cs::Dict{<:Vector{<:DataType}, Tuple{SymbolicUtils.Sym{Number}, DMType}}) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, DMType}}
     # make a poset from the subtype relation of signatures
     P = SimplePoset(Vector{DataType})
     sign = keys(cs)

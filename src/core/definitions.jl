@@ -291,7 +291,7 @@ SymbolOrType = Union{Symbol, DMType}
 
     # for dispatch, dict maps user-given signature to a flag variable and the inferred function type.
     # flag will be set to 0 or 1 according to which choice was picked.
-    isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},Union{Arr,ArrStar}}}) => Constr
+    isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},DMType}}) => Constr
 end
 
 "The type of constraints is simply a list of individual constraints."
