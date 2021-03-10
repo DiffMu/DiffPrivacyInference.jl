@@ -45,7 +45,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 
                     newCs = union(newCs, substitutions_to_constraints(σs))
 
-                    if isequal(Cs,C_noc) && issubset(Set(newCs), Set(C))
+                    if isequal(Cs,C_noc) && all(any(isequal(cc,nc) for cc in C) for nc in newCs)
                         # substitutions did not change anything and we knew all constraints alredy -> nothing happened.
                         return (S,T,C,Σ), nothing
                     else
@@ -209,7 +209,7 @@ end
 =#
 
 """Remove entries from `cs` that are supertypes of some other entry."""
-function keep_least_general(cs::Dict{<:Vector{<:DataType}, Tuple{SymbolicUtils.Sym{Number}, DMType}}) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, DMType}}
+function keep_least_general(cs::Dict) :: Dict{Vector{DataType}, Tuple{SymbolicUtils.Sym{Number}, DMType}}
     # make a poset from the subtype relation of signatures
     P = SimplePoset(Vector{DataType})
     sign = keys(cs)
@@ -253,8 +253,8 @@ function msimplify_constraints() :: TC#{Tuple{}}
 end
 
 """Apply all substitutions encoded in the constraints of the TC monad `m` to the DMType `τ`."""
-function apply_subs(τ::DMType) :: TC
-    function mconstr(S,T,C,Σ) :: MType{DMType}
+function apply_subs(τ::A) :: TC where {A}
+    function mconstr(S,T,C,Σ) :: MType{A}
         for c in C
             τ = @match c begin
                 isEqualSens(s1, s2) => let

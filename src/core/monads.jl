@@ -144,8 +144,6 @@ end
 #########################################################################################
 # convenience functions for TC monad
 
-is_in_privacy_mode() = TC((S,T,C,Σ) -> ((S,T,C,Σ), Σ isa PCtx))
-
 mtruncate(s::Annotation) = TC((S,T,C,Σ) -> ((S,T,C,truncate(Σ, s)), ()))
 
 "Construct a `TC` monad containing the computation of inferring `t`'s sensitivity."
