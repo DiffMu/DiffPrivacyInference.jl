@@ -55,6 +55,10 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
             ::LineNumberNode => begin ln = ex end;
 
             Expr(:function, head, body) => let
+                if  head.head  == :(::)
+                    head = head.args[1] # ignore annotation
+                end
+
                 # collect this function's variables
                 vs = []
                 for a in head.args[2:end]

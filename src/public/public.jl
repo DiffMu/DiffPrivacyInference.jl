@@ -53,3 +53,6 @@ function infer_sensitivity(t::DMTerm)
     (c, τ) = run(m)
     return τ
 end
+
+Priv() = Any
+Priv(T::DataType) = T

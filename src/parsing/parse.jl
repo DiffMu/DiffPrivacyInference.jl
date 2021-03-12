@@ -64,12 +64,25 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
         ::LineNumberNode => exprs_to_dmterm(tail, ex, scope)
 
         Expr(:function, head, body) => let
+            constr = lam
+            name = head.args[1]
             if L && head in C
                 error("overwriting an existing function in a loop is not allowed in $ex, $(ln.file) line $(ln.line)")
-            end
-            name = head.args[1]
-            if !(name isa Symbol)
-                error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
+            elseif !(name isa Symbol)
+                println(name)
+                if head.head == :(::)
+                    annotation = head.args[2]
+                    println(annotation)
+                    if annotation.head == :call && annotation.args[1] == :Priv
+                        constr = lam_star
+                        head = head.args[1]
+                        name = head.args[1]
+                    else
+                        error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
+                    end
+                else
+                    error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
+                end
             elseif is_builtin_op(name)
                 error("overwriting builtin function $name in $ex, $(ln.file) line $(ln.line) is not permitted.")
             end
@@ -95,7 +108,7 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
             end
             tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
             newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
-            return flet(name, ts, lam(collect(zip(vs, ts)), expr_to_dmterm(body, ln, newscope)), tailex)
+            return flet(name, ts, constr(collect(zip(vs, ts)), expr_to_dmterm(body, ln, newscope)), tailex)
         end;
 
         Expr(:(=), ase, asd) => let
