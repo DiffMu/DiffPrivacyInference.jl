@@ -1,5 +1,5 @@
 """
-    check_term(t::DMTerm, scope = Dict{Symbol, Vector{DMTerm}}()) :: TC
+check_term(t::DMTerm, scope = Dict{Symbol, Vector{DMTerm}}()) :: TC
 
 Typecheck the input `DMTerm` and return the resulting computation as a `TC` monad. The
 result will have a lot of unresolved constraints.
@@ -11,9 +11,12 @@ check_term(t::DMTerm) = mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}(), false)
 # a variable gets assigned. this is analogous to the julia interpreter's traversal of the
 # corresponding julia expression and serves to keep track of the current state of a variable
 # at the point in execution where it is actually used as a function argument.
+# expect_priv flags whether we expect the term to be a privacy/"red" term.
 function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_priv::Bool) :: TC#{DMType}
 
     result = @match (t, expect_priv) begin
+
+        ############################################## these terms can only be sensitivity terms.
 
         (sng(n), false) => let
             # maybe n actually is a constant. get n's type
@@ -65,15 +68,15 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 scope[x] = [arg(x,τ)]
             end
 
-                @mdo TC begin
-                    τr <- mcheck_sens(body, scope, false) # check body to obtain lambda return type
-                    xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
-                    _  = println("checked body, got $τr. vars are $xrτs.")
-                    return Arr(xrτs, τr)
-                end
+            @mdo TC begin
+                τr <- mcheck_sens(body, scope, false) # check body to obtain lambda return type
+                xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
+                return Arr(xrτs, τr)
+            end
         end;
 
         (lam_star(xτs, body), false) => let
+
             scope = deepcopy(scope)
 
             for (x,τ) in xτs
@@ -82,14 +85,13 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 scope[x] = [arg(x,τ)]
             end
 
-            # check body in priv mode if so
-                @mdo TC begin
-                    τr <- mcheck_sens(body, scope, true) # check body to obtain lambda return type.
-                    xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
-                    _  = println("checked body, got $τr. vars are $xrτs.")
-                    _ <- mtruncate(∞)
-                    return ArrStar(xrτs, τr)
-                end
+            # check body in privacy mode.
+            @mdo TC begin
+                τr <- mcheck_sens(body, scope, true) # check body to obtain lambda return type.
+                xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
+                _ <- mtruncate(∞)
+                return ArrStar(xrτs, τr)
+            end
         end;
 
         (chce(Cs), false) => let # a special term for storing choices, can only appear during typechecking (not from parsing)
@@ -142,29 +144,29 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
-        ##############################################
-
         (apply(f, args), false) => let
-                # check a single argument, append the resulting (Sensitivity, DMType) tuple to sτs
-                function check_sarg(arg::DMTerm) :: TC
-                    @mdo TC begin
-                        τ_res <- mcheck_sens(arg, scope, false) # check the argument term
-                    _  = println("checking arg $arg , got $τ_res.")
-                        s <- add_svar() # add a new svar for this argument's sensitivity
-                        _ <- mscale(s) # scale the context with it
-                        return (s, τ_res)
-                    end
-                end
-
+            # check a single argument, append the resulting (Sensitivity, DMType) tuple to sτs
+            function check_sarg(arg::DMTerm) :: TC
                 @mdo TC begin
-                    (sτs_args, τ_lam) <- msum(msum(map(check_sarg, args)), mcheck_sens(f, scope, false)) # check function and args seperately
-                    τ_ret <- add_type(T -> add_new_type(T, :ret)) # create a tvar for the return type
-                    a <- subtype_of(τ_lam, Arr(sτs_args,τ_ret)) # add the right subtype constraint
-                    return τ_ret
+                    τ_res <- mcheck_sens(arg, scope, false) # check the argument term
+                    _  = println("checking arg $arg , got $τ_res.")
+                    s <- add_svar() # add a new svar for this argument's sensitivity
+                    _ <- mscale(s) # scale the context with it
+                    return (s, τ_res)
                 end
+            end
+
+            @mdo TC begin
+                (sτs_args, τ_lam) <- msum(msum(map(check_sarg, args)), mcheck_sens(f, scope, false)) # check function and args seperately
+                τ_ret <- add_type(T -> add_new_type(T, :ret)) # create a tvar for the return type
+                a <- subtype_of(τ_lam, Arr(sτs_args,τ_ret)) # add the right subtype constraint
+                return τ_ret
+            end
         end;
 
-        (slet((v, dτ), t, b), ) => let
+        ############################################## these can be privacy _or_ sensitivity terms
+
+        (slet((v, dτ), t, b), _) => let
 
             # TODO this requires saving the annotation in the dict.
             @assert dτ == Any "Type annotations on variables not yet supported."
@@ -202,14 +204,14 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
         (phi(c,tr,fs), _) => let
             @mdo TC begin
-                τ_c <- mcheck_sens(c, scope, false)
-                (_, τ_tr, τ_fs) <- msum(mscale(∞), mcheck_sens(tr,scope,expect_priv),mcheck_sens(fs,scope,expect_priv)) # check condition and both branches
+                τ_c <- mcheck_sens(c, scope, false) # check condition. must be a sensitivity term
+                (_, τ_tr, τ_fs) <- msum(mscale(∞), mcheck_sens(tr,scope,expect_priv), mcheck_sens(fs,scope,expect_priv)) # check both branches and sum
                 τ_ret <- msupremum(τ_tr, τ_fs) # branches return type must be the same, or at least the non-constant version
                 return τ_ret
             end
         end;
 
-        ####################################################
+        #################################################### these can only be privacy terms
 
         (ret(rt), true) => let
             @mdo TC begin
@@ -241,20 +243,22 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             function check_parg(arg::DMTerm) :: TC
                 @mdo TC begin
                     τ_res <- mcheck_sens(arg, scope, false) # check the argument term
-                    ϵ <- add_svar() # add a new svar for this argument's sensitivity
-                    δ <- add_svar() # add a new svar for this argument's sensitivity
-                    _ <- mtruncate((ϵ,δ)) # scale the context with it
+                    ϵ <- add_svar() # add a new svars for this argument's privacy
+                    δ <- add_svar()
+                    _ <- mtruncate((ϵ,δ)) # truncate the context with it
                     return ((ϵ, δ), τ_res)
                 end
             end
 
             @mdo TC begin
-                (τ_lam, aτs) <- TC(mconstr)
+                (τ_lam, aτs) <- TC(mconstr) # check the function
                 τ_ret <- add_type(T -> add_new_type(T, :ret)) # create a tvar for the return type
                 a <- subtype_of(τ_lam, ArrStar(aτs, τ_ret)) # add the right subtype constraint
                 return τ_ret
             end
         end;
+
+        (_, true) => mcheck_sens(ret(t), scope, true) # if a priv term was expected but a sens term given, just ret it.
 
         _ => error("could not check $t, expected a privacy term $expect_priv")
 
