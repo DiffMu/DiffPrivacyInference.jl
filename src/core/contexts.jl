@@ -95,7 +95,7 @@ function merge_contexts(combine::Function, S::SVarCtx, T::TVarCtx, C::Constraint
     Σ = deepcopy(Σ1)
     for (v, (s, τ)) in Σ2
         if haskey(Σ1, v)
-            sa = simplify(combine(s, Σ1[v][1]))
+            sa = simplify_sensitivity(combine(s, Σ1[v][1]))
             # if the contexts disagree on the type of v, unify.
             if haskey(Σ, v)
                 τ, Cu = unify_nosubs(Σ1[v][2], τ)

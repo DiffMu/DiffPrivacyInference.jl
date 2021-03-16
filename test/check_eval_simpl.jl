@@ -37,7 +37,7 @@ end;
     # julia: arith(w,x,y,z) = 3*(x+y) - z*ceil(x) + ceil(y) % 4 - 3/x + w/3
     t = flet(:arith, DataType[Any, Any, Any, Any], lam(Tuple{Symbol,DataType}[(:w, Any), (:x, Any), (:y, Any), (:z, Any)], op(:+, DMTerm[op(:-, DMTerm[op(:+, DMTerm[op(:-, DMTerm[op(:*, DMTerm[sng(3), op(:+, DMTerm[var(:x, Any), var(:y, Any)])]), op(:*, DMTerm[var(:z, Any), op(:ceil, DMTerm[var(:x, Any)])])]), op(:rem, DMTerm[op(:ceil, DMTerm[var(:y, Any)]), sng(4)])]), op(:/, DMTerm[sng(3), var(:x, Any)])]), op(:/, DMTerm[var(:w, Any), sng(3)])])), var(:arith, Any))
 
-    τ = Arr([(0.3333333333333333, TVar(:op_arg_43)), (3 + 2∞, TVar(:op_arg_39)), (7, TVar(:op_arg_34)), (∞, TVar(:op_arg_22))], DMReal())
+    τ = Arr([(0.3333333333333333, TVar(:op_arg_43)), (∞, TVar(:op_arg_39)), (7, TVar(:op_arg_34)), (∞, TVar(:op_arg_22))], DMReal())
     @test isequal(infer_sensitivity(t), τ)
 end;
 
@@ -118,6 +118,6 @@ end;
 
     t = flet(:ifelse, DataType[Any, Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Any), (:y, Integer), (:z, Any)], slet((:xx, Any), op(:*, DMTerm[sng(3), var(:y, Any)]), flet(:f, DataType[Any], lam(Tuple{Symbol,DataType}[(:k, Any)], op(:+, DMTerm[op(:*, DMTerm[sng(2), var(:x, Any)]), var(:z, Any)])), phi(op(:(==), DMTerm[apply(var(:f, Any), DMTerm[var(:y, Any)]), sng(1)]), var(:xx, Any), phi(op(:(==), DMTerm[var(:z, Any), sng(5)]), sng(3), var(:xx, Any)))))), var(:ifelse, Any))
 
-    τ = Arr([(6 + 2(4 + (2∞)), TVar(:op_arg_8)), (6, DMInt()), (7 + 2∞, TVar(:op_arg_5))], DMInt())
+    τ = Arr([(∞, TVar(:op_arg_8)), (6, DMInt()), (∞, TVar(:op_arg_5))], DMInt())
     @test isequal(infer_sensitivity(t), τ)
 end;
