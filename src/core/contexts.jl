@@ -121,7 +121,10 @@ function merge_contexts(combine::Function, S::SVarCtx, T::TVarCtx, C::Constraint
 end
 
 "Add all `Σs`, unifying types of variables where the contexts disagree of the type."
-add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:Context} = merge_contexts(+, S, T, C, [Σs...])
+add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:SensitivityContext} = merge_contexts(+, S, T, C, [Σs...])
+add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:PrivacyContext} = merge_contexts((p,q)->p.+q, S, T, C, [Σs...])
+
+add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs...) = error("trying to add contexts of different types!")
 
 "Scale all sensitivities in `Σ` by `r`."
 scale(r::STerm, Σ::SensitivityContext) = SensitivityContext(v => (r*s, t) for (v,(s,t)) in Σ)
@@ -143,6 +146,7 @@ truncate(c::Context, s::Sensitivity) = SensitivityContext(v => (truncate(s1, s),
 
 # this is denoted ⌊c⌋_{vars} in the paper
 restrict(c::C, vars::Vector{Symbol}) where {C<:Context} = C(v => c[v] for v in vars)
+complement(c::C, vars::Vector{Symbol}) where {C<:Context} = C(v => c[v] for v in setdiff(keys(c), vars))
 
 # this is denoted ⌉⌊c⌋⌈^p_{vars} in the paper
-restrict_truncate(c::PrivacyContext, vars::Vector{Symbol}, p::Privacy) = truncate(restrict(c, vars), p)
+restrict_truncate(c::Context, vars::Vector{Symbol}, p::Privacy) = truncate(restrict(c, vars), p)

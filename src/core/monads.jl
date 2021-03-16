@@ -89,6 +89,28 @@ function mbind(f::Function, m::TC) :: TC # f :: A -> TC{B}
     TC(mconstr)
 end
 
+# map f over as, returning the collected results.
+# mapM ::(a -> m b) -> [a] -> m [b]
+function mapM(f::Function, as::Vector) :: TC#{Vector}
+    function k(a, r)
+        @mdo TC begin
+            x <- f(a)
+            xs <- r
+            return [x; xs]
+        end
+    end
+    return foldr(k, [as; mreturn(TC, [])])
+end
+
+# map f over as, returning the collected results.
+# mapM ::(a -> m b) -> (a) -> m (b)
+function mapM(f::Function, as::Tuple) :: TC#{Tuple}
+    @mdo TC begin
+        res <- mapM(f, [as...])
+        return (res...,)
+    end
+end
+
 # execute all monads in args seperately with the same input Σ, only passing on S,T,C
 # then sum the resulting contexts and return execution results as a vector
 function msum(args::Vector{TC}) :: TC#{Vector}
@@ -100,26 +122,6 @@ function msum(args::Vector{TC}) :: TC#{Vector}
             (S,T,C,Σ2), τ = arg.func(S,T,C,deepcopy(Σ))
             τs = push!(τs, τ)
             (S,T,C,Σ1) = add(S,T,C,Σ1,Σ2)
-        end
-        return (S,T,C,Σ1), τs
-    end
-    TC(mconstr)
-end
-
-# execute all monads in args seperately with the same input Σ, only passing on S,T,C
-# then sum the resulting contexts and return execution results as a vector
-# function takes τ and Σ
-function msum(args::Vector{TC}, weights::Function) :: TC#{Vector}
-    function mconstr(S,T,C,Σ) :: MType{Vector}
-        Σ1, τ1 = arg.func(S,T,C,deepcopy(Σ))
-        weight = weights(τ1)
-        Σ1 = weight(Σ1)
-        τs = [τ1]
-        for arg in args
-             # TODO func should not be modifying Σ, but deepcopy just in case...
-            (S,T,C,Σ2), τ = arg.func(S,T,C,deepcopy(Σ))
-            τs = push!(τs, τ)
-            (S,T,C,Σ1) = add(S,T,C,Σ1,weight(Σ2))
         end
         return (S,T,C,Σ1), τs
     end
@@ -145,6 +147,8 @@ end
 # convenience functions for TC monad
 
 mtruncate(s::Annotation) = TC((S,T,C,Σ) -> ((S,T,C,truncate(Σ, s)), ()))
+mtruncate_restrict(vars::Vector{Symbol}, s::Annotation) = TC((S,T,C,Σ) -> ((S,T,C,truncate(restrict(Σ, vars), s)), ()))
+mcomplement(vars::Vector{Symbol}) = TC((S,T,C,Σ) -> ((S,T,C,complement(Σ, vars)), ()))
 
 "Construct a `TC` monad containing the computation of inferring `t`'s sensitivity."
 function build_tc(t::DMTerm) :: TC
@@ -202,6 +206,16 @@ function add_Cs(Cs::Constraints) :: TC
     TC(mconstr)
 end
 
+function mprint() :: TC
+    function mconstr(S,T,C,Σ) :: MType{Nothing}
+        println("monad content:\nS:\n$S\nT:\n$T\n:C\n$C\nΣ:\n$Σ\n\n")
+        (S,T,C,Σ), nothing
+    end
+    TC(mconstr)
+end
+
+
+
 "Convert a given julia type into a `DMType` and return it."
 function mcreate_DMType(dτ::DataType) :: TC
     function mconstr(S,T,C,Σ) :: MType{DMType}
@@ -251,6 +265,24 @@ function set_var(x::Symbol, s::Annotation, τ::DMType) :: TC#{DMType}
     end
     TC(mconstr)
 end
+
+"Set annotation of `x` to `s`."
+function set_annotation(x::Symbol, s::Annotation) :: TC#{DMType}
+    function mconstr(S,T,C,Σ) :: MType{DMType}
+        Σ = deepcopy(Σ)
+        # x gets annotation s type τ
+        if haskey(Σ, x)
+            (_, τ) = Σ[x]
+        else
+            T,τ = make_type(T)
+        end
+        Σ[x] = (s,τ)
+        (S,T,C,Σ), τ
+    end
+    TC(mconstr)
+end
+
+
 
 "Delete `x` from the current context."
 remove_var(x::Symbol) :: TC = TC((S,T,C,Σ) -> ((S,T,C,delete!(deepcopy(Σ), x)),()))

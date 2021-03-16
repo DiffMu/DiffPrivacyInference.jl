@@ -13,7 +13,6 @@ TAsgmt = Tuple{Symbol, <:DataType}
     lam_star :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
     dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
-    papply :: (DMTerm, Vector{DMTerm}) => DMTerm # for user annotations of application of privacy functions
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
     flet :: (Symbol, Vector{<:DataType}, lam, DMTerm) => DMTerm
     abstr :: DMTerm => DMTerm
@@ -29,6 +28,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     index :: (DMTerm, DMTerm) => DMTerm
     len :: DMTerm => DMTerm # length of a vector
     chce :: Dict{Vector{<:DataType}, DMTerm} => DMTerm
+    gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, Vector{Symbol}, DMTerm) => DMTerm
 end
 
 function pretty_print(t::DMTerm) :: String
@@ -41,7 +41,6 @@ function pretty_print(t::DMTerm) :: String
         lam(vs, b)           => "λ (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         lam_star(vs, b)      => "λ* (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         apply(l, as)         => pretty_print(l) *"(" * pretty_print(as) * ")"
-        papply(l, as)         => pretty_print(l) *"*(" * pretty_print(as) * ")"
         iter(f, s, l)        => "range(" * pretty_print([f,s,l]) * ")"
         loop(it, cs, b)      => "loop { " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
@@ -51,7 +50,8 @@ function pretty_print(t::DMTerm) :: String
 #        vcreate(s, l)        => 
         vect(vs)             => "[" * pretty_print(vs) * "]"
         index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
-#        len(v)               => 
+        gauss(ps, xs, b)      => "gauss [ " * pretty_print(ps) * " ] <" * pretty_print(xs) * "> { " *pretty_print(b) *  " }"
+        #        len(v)               => 
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
 end
@@ -74,7 +74,6 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         lam(vs, b)           => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         lam_star(vs, b)      => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         apply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
-        papply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
         iter(f, s, l)        => Expr(:call, :(:), map(evaluate, [f, s, l])...)
         loop(it, cs, b)      => Expr(:call, :forloop, evaluate(b), evaluate(it), evaluate(cs))
 #        trttup(ts)           => Expr(:tuple, map(evaluate,ts)...)
@@ -87,6 +86,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         vect(vs)             => Expr(:vect,  map(evaluate,ts)...)
         index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
         len(v)               => :(length($(evaluate(v))))
+        gauss((s,ϵ,δ),_,f)   => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
 end
@@ -101,6 +101,10 @@ function forloop(body, iter, captures::Tuple)
         captures = body(i, captures)
     end
     return captures
+end
+
+function gaussian_mechanism(s, ϵ, δ, f)
+    f + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
 end
 
 function fsig(vs :: Vector{<:TAsgmt}) :: Vector

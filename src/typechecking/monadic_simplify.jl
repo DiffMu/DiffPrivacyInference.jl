@@ -77,7 +77,11 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
 
             @match (n1, n2) begin
                 (::EvaluatedNumber, ::EvaluatedNumber) => n1 <= n2 ? return_discharge() : throw(ArithmeticsError("exprected $n1 <= $n2"))
-                (_ , _) => return_nothing()
+                (::Infty, ::Infty) => return_discharge()
+                (::Infty, _) => throw(ArithmeticsError("exprected $n1 <= $n2"))
+                (_ , _) => let
+                    return_nothing()
+                end
             end
         end
         isNumeric(a) => let
@@ -237,7 +241,7 @@ function msimplify_constraints() :: TC#{Tuple{}}
         else
             @mdo TC begin
                 simpl <- mtry_simplify_Constr(Ci[1])
-                _ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]).\n"))
+                #_ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]).\n"))
                 ret <- (isnothing(simpl) ? try_simplify_constraints(Ci[2:end]) : msimplify_constraints())
                 return ret
             end
@@ -246,7 +250,7 @@ function msimplify_constraints() :: TC#{Tuple{}}
 
     @mdo TC begin
         Cs <- extract_Cs()
-        _ = println("simplifying constraints $Cs")
+        #_ = println("simplifying constraints $Cs")
         _ <- try_simplify_constraints(Cs) # see if the constraints changed. recurse, if so.
         return ()
     end

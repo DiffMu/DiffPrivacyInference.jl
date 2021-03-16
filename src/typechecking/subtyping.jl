@@ -209,6 +209,18 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
             _, newC  = unify_nosubs(τ1, τ2)
             return (S,T,union(C,newC),Σ)
         end
+        (Constant(A,ν), Constant(A,μ)) => let
+            try
+                _, newC = unify_Sensitivity_nosubs(ν,μ)
+                return (S,T,union(C,newC),Σ)
+            catch err
+                if !(err isa UnificationError)
+                    rethrow(err)
+                else
+                    throw(NotSubtype("Expected $τ1 to be a subtype of $τ2, but it is not."))
+                end
+            end
+        end
         _ => let
             # traverse the subtype relation graph upwards from τ1, to see if we come across τ2.
             supers = try_get_direct_supertypes(τ1)

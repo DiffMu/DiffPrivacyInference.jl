@@ -5,6 +5,7 @@ using CodeTracking
 using MLStyle
 using SimplePosets
 using Compat
+using Distributions
 
 include("utils/logging.jl")
 include("utils/errors.jl")
@@ -33,7 +34,7 @@ greet() = print("Hello World!")
 export NotInScope, ArithmeticsError, WrongNoOfArgs, WrongArgType, NotNumeric, NoChoiceFound, NotSubtype, NotSupremum, UnificationError, NotInScope
 
 export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
-export tup , tlet , loop , slet , vcreate , vect , index , len , chce, papply
+export tup , tlet , loop , slet , vcreate , vect , index , len , chce, gauss
 
 export DMType, DMInt, DMReal, Constant, DMTyp, DMVec, TVar, Arr
 

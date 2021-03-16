@@ -69,10 +69,9 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
             if L && head in C
                 error("overwriting an existing function in a loop is not allowed in $ex, $(ln.file) line $(ln.line)")
             elseif !(name isa Symbol)
-                println(name)
                 if head.head == :(::)
                     annotation = head.args[2]
-                    println(annotation)
+                    # check for privacy lambda annotation
                     if annotation.head == :call && annotation.args[1] == :Priv
                         constr = lam_star
                         head = head.args[1]

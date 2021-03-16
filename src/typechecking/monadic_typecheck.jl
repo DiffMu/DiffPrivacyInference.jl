@@ -14,6 +14,7 @@ check_term(t::DMTerm) = mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}(), false)
 # expect_priv flags whether we expect the term to be a privacy/"red" term.
 function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_priv::Bool) :: TC#{DMType}
 
+    println("checking $t with $expect_priv")
     result = @match (t, expect_priv) begin
 
         ############################################## these terms can only be sensitivity terms.
@@ -87,6 +88,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
             # check body in privacy mode.
             @mdo TC begin
+                _ = println("checking lamstar body $body")
                 τr <- mcheck_sens(body, scope, true) # check body to obtain lambda return type.
                 xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
                 _ <- mtruncate(∞)
@@ -219,6 +221,41 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 _ <- mtruncate((∞,∞))
                 return τ
             end
+        end;
+
+        (gauss(ps, xs, b), true) => let
+
+            (r, ϵ, δ) = ps
+
+            # make x's sensitivity be <= sr
+            function constrain_sens(x, sr) :: TC
+                @mdo TC begin
+                    sx <- lookup_var_sens(x)
+                    _ <- add_Cs(Constr[isLessOrEqual(sx,sr)])
+                    return ()
+                end
+
+            end
+
+            # check tt and set it to be a subtype of some Const Real.
+            function set_type_sng(tt::DMTerm) :: TC
+                @mdo TC begin
+                    τ <- mcheck_sens(tt, scope, false)
+                    v <- add_svar()
+                    τ <- subtype_of(τ, Constant(DMReal(), v))
+                    return v
+                end
+            end
+
+           @mdo TC begin
+               τ_b <- mcheck_sens(b, scope, false)
+               τ_b <- subtype_of(τ_b, DMReal()) # body has to be numeric
+               (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
+               _ <- mapM(x -> constrain_sens(x,rv), xs) # all sensitivities of xs have to be bounded by r
+               _ <- mtruncate((∞,∞)) # all non-xs privacies go to infinity
+               _ <- msum(mcomplement(xs), mtruncate_restrict(xs, (ϵv,δv)))  # xs privacies go to (ϵ,δ)
+               return DMReal() # returns a real
+           end
         end;
 
         (apply(f, args), true) => let
