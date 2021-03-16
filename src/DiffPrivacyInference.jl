@@ -8,6 +8,7 @@ using Compat
 
 include("utils/logging.jl")
 include("utils/errors.jl")
+include("utils/symbolic.jl")
 include("core/definitions.jl")
 include("core/DMIR.jl")
 include("core/operations.jl")

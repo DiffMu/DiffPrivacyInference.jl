@@ -167,7 +167,7 @@ function singleSSub(s :: Sensitivity, (X, η) :: SSSub) :: Sensitivity
 #    println("### SUBSTITUTING:\n  in $s we do $X := $η\n")
    if s isa STerm
        s = substitute(s, Dict((symbols(X)=> η)))
-       η isa Number ? simplify(s) : s
+       η isa Number ? simplify_sensitivity(s) : s
    elseif (s isa Real) || (s isa Int)
       s
    else
