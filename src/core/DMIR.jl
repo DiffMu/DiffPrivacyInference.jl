@@ -28,7 +28,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     index :: (DMTerm, DMTerm) => DMTerm
     len :: DMTerm => DMTerm # length of a vector
     chce :: Dict{Vector{<:DataType}, DMTerm} => DMTerm
-    gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, Vector{Symbol}, DMTerm) => DMTerm
+    gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
 end
 
 function pretty_print(t::DMTerm) :: String
@@ -50,7 +50,7 @@ function pretty_print(t::DMTerm) :: String
 #        vcreate(s, l)        => 
         vect(vs)             => "[" * pretty_print(vs) * "]"
         index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
-        gauss(ps, xs, b)      => "gauss [ " * pretty_print(ps) * " ] <" * pretty_print(xs) * "> { " *pretty_print(b) *  " }"
+        gauss(ps, b)      => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         #        len(v)               => 
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
@@ -86,7 +86,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         vect(vs)             => Expr(:vect,  map(evaluate,ts)...)
         index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
         len(v)               => :(length($(evaluate(v))))
-        gauss((s,ϵ,δ),_,f)   => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
+        gauss((s,ϵ,δ),f)   => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
 end
@@ -103,8 +103,9 @@ function forloop(body, iter, captures::Tuple)
     return captures
 end
 
-function gaussian_mechanism(s, ϵ, δ, f)
-    f + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
+"Make the input function DP by applying the gaussian mechanism."
+function gaussian_mechanism(s<:Real, ϵ<:Real, δ<:Real, f::Function)
+    (x...) -> f(x...) + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
 end
 
 function fsig(vs :: Vector{<:TAsgmt}) :: Vector

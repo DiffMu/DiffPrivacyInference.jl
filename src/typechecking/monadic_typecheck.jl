@@ -223,19 +223,9 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
-        (gauss(ps, xs, b), true) => let
+        (gauss(ps, f), false) => let
 
             (r, ϵ, δ) = ps
-
-            # make x's sensitivity be <= sr
-            function constrain_sens(x, sr) :: TC
-                @mdo TC begin
-                    sx <- lookup_var_sens(x)
-                    _ <- add_Cs(Constr[isLessOrEqual(sx,sr)])
-                    return ()
-                end
-
-            end
 
             # check tt and set it to be a subtype of some Const Real.
             function set_type_sng(tt::DMTerm) :: TC
@@ -248,13 +238,13 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
 
            @mdo TC begin
-               τ_b <- mcheck_sens(b, scope, false)
-               τ_b <- subtype_of(τ_b, DMReal()) # body has to be numeric
+               τ_f <- mcheck_sens(f, scope, false)
+               xs, ts, τ_ret = @match τ_f begin
+                   Arr(xts, τ_ret) => (map(first, xts), map(last, xts), τ_ret)
+               end
                (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
-               _ <- mapM(x -> constrain_sens(x,rv), xs) # all sensitivities of xs have to be bounded by r
-               _ <- mtruncate((∞,∞)) # all non-xs privacies go to infinity
-               _ <- msum(mcomplement(xs), mtruncate_restrict(xs, (ϵv,δv)))  # xs privacies go to (ϵ,δ)
-               return DMReal() # returns a real
+               _ <- add_Cs([[isLessOrEqual(s, rv) for s in xs]; isNumeric(τ_ret)]) # all sensitivities of f have to be bounded by rv
+               return ArrStar([((ϵv,δv), t) for t in ts], DMReal()) # returns a real
            end
         end;
 
