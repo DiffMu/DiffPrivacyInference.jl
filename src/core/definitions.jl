@@ -46,6 +46,17 @@ DeltaNames = Tuple{Names,Names}
 "Alternative name for Constraints"
 ConstraintsAbstr = Vector{<:ConstrAbstr}
 
+@data Norm begin
+    L1
+    L2
+    L∞
+end
+@data Unbounded begin
+    U
+end
+
+Clip = Union{Norm, Unbounded}
+
 # The definition of the types in our type system.
 # This is mostly based on the description of the duet language in:
 # http://david.darais.com/assets/papers/duet/duet.pdf
@@ -91,8 +102,24 @@ ConstraintsAbstr = Vector{<:ConstrAbstr}
 
     # Type of privacy functions.
     ArrStar :: (Vector{Tuple{Privacy, DMType}}, DMType) => DMType
+
+    DMMatrix :: (Norm, Clip, Tuple{Sensitivity, Sensitivity}, DMType) => DMType
 end
 
+function Base.isequal(τ1::DMType, τ2::DMType)
+    @match (τ1, τ2) begin
+        (DMInt(), DMInt()) => true;
+        (DMReal(), DMReal()) => true;
+        (Constant(X, c), Constant(Y, d)) => isequal(X, Y) && isequal(c, d);
+        (DMTup(Xs), DMTup(Ys)) => isequal(Xs, Ys);
+        (DMVec(s, X), DMVec(t, Y)) => isequal(s, t) && isequal(X, Y);
+        (TVar(s), TVar(t)) => isequal(s, t);
+        (Arr(v, s), Arr(w, t)) => isequal(v, w) && isequal(s, t);
+        (ArrStar(v, s), ArrStar(w, t)) => isequal(v, w) && isequal(s, t);
+        (DMMatrix(n1,c1,s1,t1), DMMatrix(n2,c2,s2,t2)) => all(map(((v,w),)->isequal(v, w),[(n1,n2),(c1,c2),(s1,s2),(t1,t2)]));
+        (_, _) => false;
+    end
+end
 ####################################################################
 ## Substitutions
 
@@ -144,6 +171,7 @@ end
    Ternary :: (DMTypeOps_Ternary, DMType, DMType, DMType) => DMTypeOp
 end
 
+####################################################################
 # julia interface
 
 builtin_ops = Dict(
@@ -305,6 +333,13 @@ function create_DMType(τ::DataType, S::SVarCtx, T::TVarCtx, C::Constraints) :: 
         # get element type DMType
         τelem, S, T, C = create_DMType(τ.parameters[1], S, T, C)
         return DMVec(symbols(svar), τelem), S, T, C
+    elseif τ <: Matrix
+        # add sens vars for dims
+        (S, rvar) = addNewName(S, Symbol("mrows_"))
+        (S, cvar) = addNewName(S, Symbol("mcols_"))
+        # get element type DMType
+        τelem, S, T, C = create_DMType(τ.parameters[1], S, T, C)
+        return DMMatrix(L2, U, (symbols(rvar), symbols(cvar)), τelem), S, T, C
     elseif τ == Any
         # just a type var.
         (T, tvar) = addNewName(T, Symbol("any_"))

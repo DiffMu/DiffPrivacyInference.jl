@@ -258,7 +258,7 @@ end
 
 """Apply all substitutions encoded in the constraints of the TC monad `m` to the DMType `τ`."""
 function apply_subs(τ::A) :: TC where {A}
-    function mconstr(S,T,C,Σ) :: MType{A}
+    function mconstr(S,T,C,Σ)
         for c in C
             τ = @match c begin
                 isEqualSens(s1, s2) => let

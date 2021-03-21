@@ -24,6 +24,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     loop :: (iter, tup, lam) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     vcreate :: (DMTerm, lam) => DMTerm
+    mcreate :: (Norm, DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     vect :: Vector{DMTerm} => DMTerm
     index :: (DMTerm, DMTerm) => DMTerm
     len :: DMTerm => DMTerm # length of a vector
@@ -48,7 +49,7 @@ function pretty_print(t::DMTerm) :: String
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
         flet(f, s, l, t)        => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
 #        vcreate(s, l)        => 
-        vect(vs)             => "[" * pretty_print(vs) * "]"
+        #vect(vs)             => "[" * pretty_print(vs) * "]"
         index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
         gauss(ps, b)      => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         #        len(v)               => 
@@ -121,19 +122,6 @@ function fsig(vs :: Vector{<:TAsgmt}) :: Vector
 end
 
 
-function Base.isequal(τ1::DMType, τ2::DMType)
-    @match (τ1, τ2) begin
-        (DMInt(), DMInt()) => true;
-        (DMReal(), DMReal()) => true;
-        (Constant(X, c), Constant(Y, d)) => isequal(X, Y) && isequal(c, d);
-        (DMTup(Xs), DMTup(Ys)) => isequal(Xs, Ys);
-        (DMVec(s, X), DMVec(t, Y)) => isequal(s, t) && isequal(X, Y);
-        (TVar(s), TVar(t)) => isequal(s, t);
-        (Arr(v, s), Arr(w, t)) => isequal(v, w) && isequal(s, t);
-        (ArrStar(v, s), ArrStar(w, t)) => isequal(v, w) && isequal(s, t);
-        (_, _) => false;
-    end
-end
 
 function pretty_print(v::Vector, print_fn)
     @match v begin

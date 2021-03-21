@@ -26,7 +26,7 @@ function simplify_constraints_lose_generality() :: TC
                         otherCs = filter!(x -> !isequal(x, Ci[1]), deepcopy(C))
                         res = signature((S,T,otherCs,Σ), op, true) # pass the flag for making typevars nonconst
                         if res isa Nothing
-                            try_simplify_constraints(Ci[2:end]) # nothing happened, try the next constraint.
+                            return ((S,T,C,Σ), nothing)
                         else
                             (vs, vt, (S,T,co,_)) = res
                             @assert length(vs) == length(sv) "operator argument number mismatch"
@@ -40,7 +40,7 @@ function simplify_constraints_lose_generality() :: TC
 
                     @mdo TC begin
                         M <- TC(mconstr)
-                        _ <- simplify_constraints_lose_generality()
+                        _ <- (isnothing(M) ? try_simplify_constraints(Ci[2:end]) : simplify_constraints_lose_generality())
                         return ()
                     end
                 end;

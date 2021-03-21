@@ -28,7 +28,7 @@ end
 function type_allowed(t::DataType)
     if t in [Integer, Real, Number, Any]
         return true
-    elseif t<: Vector
+    elseif t <: Array
         return type_allowed(t.parameters[1])
     elseif t <: Tuple
         return all(map(type_allowed, t.parameters))

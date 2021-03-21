@@ -59,6 +59,38 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
+        (mcreate(norm, n, m, xs, body), false) => let
+
+            function setdim(v::DMTerm, s) :: TC
+                @mdo TC begin
+                    t <- mcheck_sens(v, scope, false)
+                    _ <- unify(t, Constant(DMInt(),s))
+                    _ <- mscale(0)
+                    return s
+                end
+            end
+
+            function setarg(x::Symbol) :: TC
+                @mdo TC begin
+                    t <- lookup_var_type(x)
+                    _ <- (isnothing(t) ? mreturn(()) : subtype_of(t, DMInt()))
+                    return ()
+                end
+            end
+
+            @mdo TC begin
+                (nv, mv) <- mapM(x->add_svar(), (n,m))
+                scope[xs[1]] = [arg(xs[1],Int)]
+                scope[xs[2]] = [arg(xs[2],Int)]
+                tbody <- mcheck_sens(body, scope, false)
+                _ <- mscale(nv*mv)
+                _ <- msum(mreturn(tbody), setdim(n, nv), setdim(m, mv))
+                _ <- mapM(setarg, xs)
+                return DMMatrix(norm, U, (nv, mv), tbody)
+            end
+        end;
+
+
         (lam(xτs, body), false) => let
 
             scope = deepcopy(scope)
