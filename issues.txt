@@ -38,6 +38,8 @@
 - privacy language:
     - implement at least gauss and loop
     - what about ln terms?
+    - make gauss use the inferred sensitivity instead of relying on user 
+      annotation (memorize sensitivity and modify/"auto-fill-in" user code?)
 
 - typechecker:
     - figure out how to handle negative numbers
