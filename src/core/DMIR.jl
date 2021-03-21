@@ -105,7 +105,7 @@ function forloop(body, iter, captures::Tuple)
 end
 
 "Make the input function DP by applying the gaussian mechanism."
-function gaussian_mechanism(s<:Real, ϵ<:Real, δ<:Real, f::Function)
+function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f::Function)
     (x...) -> f(x...) + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
 end
 
