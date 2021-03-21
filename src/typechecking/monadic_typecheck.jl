@@ -274,9 +274,11 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                xs, ts, τ_ret = @match τ_f begin
                    Arr(xts, τ_ret) => (map(first, xts), map(last, xts), τ_ret)
                end
+               (τ_res, τs, _) <- add_op(:gauss, 1) # add typeop
+               _ <- unify(τs[1], τ_ret)
                (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
-               _ <- add_Cs([[isLessOrEqual(s, rv) for s in xs]; isNumeric(τ_ret)]) # all sensitivities of f have to be bounded by rv
-               return ArrStar([((ϵv,δv), t) for t in ts], DMReal()) # returns a real
+               _ <- add_Cs(Constr[isLessOrEqual(s, rv) for s in xs]) # all sensitivities of f have to be bounded by rv
+               return ArrStar([((ϵv,δv), t) for t in ts], τ_res) # returns a real
            end
         end;
 

@@ -28,10 +28,10 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
         Unary(kind, τ) => let
             (S , svar) = addNewName(S, name_prefix(τ))
             (T , tvar) = addNewName(T, Symbol("res_", typeof(kind)))
-            C2 = [
-                  isTypeOpResult([symbols(svar)], TVar(tvar), Unary(kind, τ)),
-                  isNumeric(τ)
-                 ]
+            C2 = [isTypeOpResult([symbols(svar)], TVar(tvar), Unary(kind, τ))]
+            if kind isa DMOpCeil
+                C2 = [C2 ; isNumeric(τ)]
+            end
             C = vcat(C, C2)
 
             (S, T, C), TVar(tvar), [symbols(svar)]

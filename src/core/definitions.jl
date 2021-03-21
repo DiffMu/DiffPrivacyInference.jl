@@ -147,6 +147,7 @@ Substitutions = Vector{AnySSub}
 # The type of all possible unary type operations.
 @data DMTypeOps_Unary begin
    DMOpCeil :: () => DMTypeOps_Unary
+   DMOpGauss :: () => DMTypeOps_Unary
 end
 
 # "The type of all possible binary type operations."
@@ -185,11 +186,17 @@ builtin_ops = Dict(
                    :(==) => τs -> Binary(DMOpEq(), τs...)
                   )
 
+special_ops = Dict(
+                   :gauss => τs -> Unary(DMOpGauss(), τs...),
+                  )
+
 is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
 
 "Get a map from some argument `DMType`s to the `DMTypeOp` corresponding to the input julia function."
-getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : error("Unsupported builtin op $f.")
+getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : (haskey(special_ops, f) ? special_ops[f] : error("Unsupported builtin op $f."))
 
+
+####################################################################
 # pretty printing
 
 "We override equality of type operations to be by value instead of by reference."
@@ -199,6 +206,7 @@ Base.isequal(a::T, aa::T) where {T<:DMTypeOp} = all(map(t->isequal(t...), [(getf
 function prettyString(op :: DMTypeOps_Unary)
     @match op begin
         DMOpCeil() => "ceil"
+        DMOpGauss() => "gauss"
     end
 end
 
