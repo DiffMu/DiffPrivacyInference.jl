@@ -23,9 +23,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     tlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     loop :: (iter, tup, lam) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
-    vcreate :: (DMTerm, lam) => DMTerm
     mcreate :: (Norm, DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
-    vect :: Vector{DMTerm} => DMTerm
     index :: (DMTerm, DMTerm) => DMTerm
     len :: DMTerm => DMTerm # length of a vector
     chce :: Dict{Vector{<:DataType}, DMTerm} => DMTerm
@@ -48,8 +46,6 @@ function pretty_print(t::DMTerm) :: String
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
         flet(f, s, l, t)        => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
-#        vcreate(s, l)        => 
-        #vect(vs)             => "[" * pretty_print(vs) * "]"
         index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
         gauss(ps, b)      => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         #        len(v)               => 
@@ -83,8 +79,6 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         tlet(xs, tu, t)      => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         slet(x, v, t)        => Expr(:let, :($(evaluate(x)) = $(evaluate(v))), evaluate(t))
         flet(f, s, lam(vs,b), t)=> Expr(:block, Expr(:(=), Expr(:call, f, fsig(vs)...), evaluate(b)), evaluate(t))
-        vcreate(s, l)        => Expr(:vect, [evaluate(apply(l, [sng(i)])) for i in 1:evaluate(s)]...)
-        vect(vs)             => Expr(:vect,  map(evaluate,ts)...)
         index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
         len(v)               => :(length($(evaluate(v))))
         gauss((s,ϵ,δ),f)   => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
@@ -106,7 +100,8 @@ end
 
 "Make the input function DP by applying the gaussian mechanism."
 function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f::Function)
-    (x...) -> f(x...) + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
+    plusrand(y) = y + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
+    (x...) -> plusrand.(f(x...)) # apply noise element-wise to make it work on matrix-valued f's too
 end
 
 function fsig(vs :: Vector{<:TAsgmt}) :: Vector
@@ -146,7 +141,6 @@ function pretty_print(t::DMType)
         DMReal() => "Real"
         Constant(ty, te) => pretty_print(ty) * "[" * pretty_print(te) * "]"
         DMTup(tys) => pretty_print(tys, pretty_print)
-        DMVec(len, ty) => "Vec(" * pretty_print(ty) * ", " * pretty_print(len) * ")"
         TVar(symb) =>  "tvar." * pretty_print(symb)
         Arr(args, ret) =>
             let
@@ -156,6 +150,7 @@ function pretty_print(t::DMType)
             let
                 pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " *=*=>* " * pretty_print(ret)
             end
+            DMMatrix(norm, clip, dims, ty) => "Mat<"*(norm,clip)*">(" * pretty_print(ty) * "dims " * pretty_print(dims) * ")"
     end
 end
 

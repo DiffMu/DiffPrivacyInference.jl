@@ -10,10 +10,10 @@ function check_not_constant(τ :: DMType, tvars_nonconst::Bool) :: Bool
       #Idx(_) => true
       Constant(_, _) => false
       DMTup(Ts) => any(map(T->check_not_constant(T, tvars_nonconst), Ts))
-      DMVec(_) => true
       Arr(_, _) => true
       ArrStar(_, _) => true
       TVar(t) => tvars_nonconst
+      DMMatrix => true
    end
 end
 
@@ -53,6 +53,7 @@ function signature(STCΣ :: Full{A}, top::DMTypeOp, tvars_nonconst = false) :: U
         (sensitivities, ty, (S, T, [C ; newCs], Σ))
     end
 
+
     # check if we know for sure that τ is numeric
     function is_numeric(τ::DMType) :: Bool
         @match τ begin
@@ -63,7 +64,6 @@ function signature(STCΣ :: Full{A}, top::DMTypeOp, tvars_nonconst = false) :: U
             _ => false
         end
     end
-
 
     @match top begin
         Unary(op, τ) => let

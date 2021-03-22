@@ -91,9 +91,6 @@ Clip = Union{Norm, Unbounded}
     # 'Transparent' tuple type, intended for having better, transparent sensitivity of tuples.
     # DMTrtProduct :: Vector{Tuple{Sensitivity, DMType}} => DMType # Transparent Product
 
-    # Type of vectors. `DMVec(n,A)` means a vector with elements of type `A`, of size `n`.
-    DMVec :: (Sensitivity, DMType) => DMType # vector of fixed length
-
     # A (meta-) typevariable.
     TVar :: Symbol => DMType
 
@@ -112,7 +109,6 @@ function Base.isequal(τ1::DMType, τ2::DMType)
         (DMReal(), DMReal()) => true;
         (Constant(X, c), Constant(Y, d)) => isequal(X, Y) && isequal(c, d);
         (DMTup(Xs), DMTup(Ys)) => isequal(Xs, Ys);
-        (DMVec(s, X), DMVec(t, Y)) => isequal(s, t) && isequal(X, Y);
         (TVar(s), TVar(t)) => isequal(s, t);
         (Arr(v, s), Arr(w, t)) => isequal(v, w) && isequal(s, t);
         (ArrStar(v, s), ArrStar(w, t)) => isequal(v, w) && isequal(s, t);
@@ -194,8 +190,7 @@ special_ops = Dict(
 is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
 
 "Get a map from some argument `DMType`s to the `DMTypeOp` corresponding to the input julia function."
-getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : (haskey(special_ops, f) ? special_ops[f] : error("Unsupported builtin op $f."))
-
+getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : error("Unsupported builtin op $f.")
 
 ####################################################################
 # pretty printing
@@ -238,6 +233,7 @@ function showPretty(io::IO, op :: DMTypeOp)
         Ternary(op, a1, a2, a3) => print(io, prettyString(op), "(", a1, ", ", a2, ", ", a3, ")")
     end
 end
+
 
 
 ####################################################################
@@ -336,19 +332,22 @@ function create_DMType(τ::DataType, S::SVarCtx, T::TVarCtx, C::Constraints) :: 
             push!(τs, τp)
         end
         return DMTup(τs), S, T, C
-    elseif τ <: Vector
-        # add sens var for length
-        (S, svar) = addNewName(S, Symbol("veclen_"))
-        # get element type DMType
-        τelem, S, T, C = create_DMType(τ.parameters[1], S, T, C)
-        return DMVec(symbols(svar), τelem), S, T, C
-    elseif τ <: Matrix
-        # add sens vars for dims
-        (S, rvar) = addNewName(S, Symbol("mrows_"))
+    elseif τ <: Array
+        typ, dim = τ.parameters
+        if dim == 1
+            rvar = 1
+        elseif dim == 2
+            # add sens vars for dims
+            (S, rvar) = addNewName(S, Symbol("mrows_"))
+            rvar = symbols(rvar)
+        else
+            error("Arrays only supported up to dimension 2.")
+        end
         (S, cvar) = addNewName(S, Symbol("mcols_"))
+        cvar = symbols(cvar)
         # get element type DMType
-        τelem, S, T, C = create_DMType(τ.parameters[1], S, T, C)
-        return DMMatrix(L2, U, (symbols(rvar), symbols(cvar)), τelem), S, T, C
+        τelem, S, T, C = create_DMType(typ, S, T, C)
+        return DMMatrix(L2, U, (rvar, cvar), τelem), S, T, C
     elseif τ == Any
         # just a type var.
         (T, tvar) = addNewName(T, Symbol("any_"))
@@ -364,10 +363,10 @@ function juliatype(τ::DMType) :: DataType
       DMReal() => Real
       Constant(Y, a) => juliatype(Y)
       DMTup(Ts) => Tuple{map(juliatype, Ts)...}
-      DMVec(l,A) => Vector{juliatype(A)}
       TVar(Y) => error("unknown type")
       Arr(As,B) => Function
       ArrStar(As,B) => Function
+      DMMatrix(_,_,dims,A) => isequal(dims[1], 1) ? Vector{juliatype(A)} : Matrix{juliatype(A)}
       _ => error("not implemented")
   end
 end
@@ -549,10 +548,10 @@ function free_SVars(t :: DMType) :: Vector{Symbol}
         DMReal()       => Vector()
         Constant(τ,s)  => union(free_SVars(τ), free_SVars(s))
         DMTup(v)       => union(map(free_SVars,v)...)
-        DMVec(n,v)     => union(free_SVars(n),union(free_SVars(v)...))
         TVar(_)        => Vector()
         Arr(v, τ)   => union(map(free_SVars, v)... , free_SVars(τ))
         ArrStar(v, τ)   => union(map(free_SVars, v)... , free_SVars(τ))
+        DMMatrix(_,_,dims,v)     => union(map(free_SVars,dims)...,union(free_SVars(v)...))
     end
 end
 
@@ -566,10 +565,10 @@ function free_TVars(t :: DMType) :: Vector{Symbol}
         DMReal()       => Vector()
         Constant(τ,s)  => union(free_TVars(τ), free_TVars(s))
         DMTup(v)       => union(map(free_TVars,v)...)
-        DMVec(n,v)     => union(free_TVars(n),union(free_TVars(v)...))
         TVar(a)        => Vector([a]) # THIS LINE IS different from the SVars version above (!)
         Arr(v, τ)   => union(map(free_TVars, v)... , free_TVars(τ))
         ArrStar(v, τ)   => union(map(free_TVars, v)... , free_TVars(τ))
+        DMMatrix(_,_,_,v)     => free_TVars(v)
     end
 end
 

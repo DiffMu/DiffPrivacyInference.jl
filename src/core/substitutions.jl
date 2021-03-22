@@ -19,7 +19,6 @@ function singleTSub(τ :: DMType, (X,ξ) :: TSSub) :: DMType
       Constant(Y, a) => Constant(singleTSub(Y, (X, ξ)), a)
       DMTup(Ts) => DMTup(map(T->singleTSub(T, (X, ξ)), Ts));
       #DMTrtProduct(Ts) => DMTrtProduct(map(ηT -> (first(ηT), singleTSub(last(ηT), (X, ξ))), Ts));
-      #DMVec(l,A) => DMVec(l, singleTSub(A, (X, ξ)));
       TVar(Y) => X == Y ? ξ : TVar(Y);
       Arr(As,B) => Arr([(s, singleTSub(A, (X, ξ))) for (s,A) in As], singleTSub(B , (X, ξ)));
       ArrStar(As,B) => ArrStar([(p, singleTSub(A, (X, ξ))) for (p,A) in As], singleTSub(B , (X, ξ)));
@@ -195,7 +194,6 @@ function singleSSub(T :: DMType, σ :: SSSub) :: DMType
       ArrStar(τs, τ2) => ArrStar([(singleSSub((ϵ,δ), σ),singleSSub(τ, σ)) for ((ϵ,δ),τ) in τs], singleSSub(τ2, σ))
       DMTup(τs) => DMTup(map(τ->singleSSub(τ, σ), τs))
       #DMTrtProduct(Ts) => DMTrtProduct(map(ηT -> (singleSSub(first(ηT), σ), singleSSub(last(ηT), σ)), Ts))
-      #DMVec(l, τ) => DMVec(singleSSub(l, σ), singleSSub(τ, σ))
       DMMatrix(n,c,dims,A) => DMMatrix(n, c,singleSSub(dims,σ) , singleSSub(A, σ));
    end
 end

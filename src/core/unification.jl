@@ -132,10 +132,11 @@ function unify_DMType(τ :: DMType, ρ :: DMType) :: Tuple{DMType, Constraints, 
                 (s, co2, σ2) = unify_Sensitivity(c, d)    #WARNING: Bugs possible here, we do not apply σ1 to c and d. This should in our case not be neccessary, but seems wrong.
                 simpleReturn(Constant(T, s), [co1; co2], [σ1; σ2])
             end;
-        (DMVec(l1, X1), DMVec(l2, X2)) => let
+        (DMMatrix(nm,cl,dims1, X1), DMMatrix(nm,cl,dims2,X2)) => let
             (T, co1, σ1) = unify_DMType(X1, X2)
-            (l, co2, σ2) = unify_Sensitivity(l1, l2)    #WARNING: same again.
-            simpleReturn(DMVec(l, T), [co1; co2], [σ1; σ2])
+            (r, co2, σ2) = unify_Sensitivity(dims1[1], dims2[1])    #WARNING: same again.
+            (c, co3, σ3) = unify_Sensitivity(dims1[2], dims2[2])    #WARNING: same again.
+            simpleReturn(DMMatrix(nm,cl,(r,c), T), [co1; co2; co3], [σ1; σ2; σ3])
         end
         (DMTup(X1s), DMTup(X2s)) => let
             σ, co = [], []

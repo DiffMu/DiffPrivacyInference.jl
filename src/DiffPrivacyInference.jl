@@ -34,9 +34,9 @@ greet() = print("Hello World!")
 export NotInScope, ArithmeticsError, WrongNoOfArgs, WrongArgType, NotNumeric, NoChoiceFound, NotSubtype, NotSupremum, UnificationError, NotInScope
 
 export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
-export tup , tlet , loop , slet , vcreate , vect , index , len , chce, gauss
+export tup , tlet , loop , slet , index , len , chce, gauss, mcreate
 
-export DMType, DMInt, DMReal, Constant, DMTyp, DMVec, TVar, Arr
+export DMType, DMInt, DMReal, Constant, DMTyp, TVar, Arr, ArrStar, DMMatrix
 
 export gaussian_mechanism
 
