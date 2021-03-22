@@ -177,6 +177,7 @@ end
 
 builtin_ops = Dict(
                    :ceil => τs -> Unary(DMOpCeil(), τs...),
+                   :gaussian_mechanism => τs -> Unary(DMOpGauss(), τs...),
                    :+ => τs -> Binary(DMOpAdd(), τs...),
                    :- => τs -> Binary(DMOpSub(), τs...),
                    :* => τs -> Binary(DMOpMul(), τs...),

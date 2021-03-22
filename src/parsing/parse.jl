@@ -126,7 +126,7 @@ function exprs_to_dmterm(exs::AbstractArray, ln::LineNumberNode, scope = ([],[],
                 Expr(:(::), s, T) => let
                     if s in C
                         error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
-                    elseif !(s isa Symbol)
+                    elseif !(s isa Symbol) #TODO PRiv
                         error("type assignment not yet supported for $s in  $ex, $(ln.file) line $(ln.line)")
                     elseif is_builtin_op(s)
                         error("overwriting builtin function $s in $ex, $(ln.file) line $(ln.line) is not permitted.")
@@ -303,9 +303,13 @@ function expr_to_dmterm(ex::Expr, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
         eargs = ex.args
         callee = eargs[1]
         args = eargs[2:end]
-        if callee isa Symbol && is_builtin_op(callee)
+        if callee == :gaussian_mechanism
+            ats = map(a->expr_to_dmterm(a, ln, scope), args)
+            @assert length(ats) == 4 "wrong number of arguments for gauss: $ex in $(ln.file) line $(ln.line)"
+            return gauss((ats[1:3]...,), ats[4])
+        elseif callee isa Symbol && is_builtin_op(callee)
             if length(args) == 1
-                return op(callee, [expr_to_dmterm(args[1], ln, scope)])
+                return  op(callee, [expr_to_dmterm(args[1], ln, scope)])
             else
                 if callee == :(==) && length(args) != 2
                     error("invalid number of arguments for == in $(ln.file) line $(ln.line)")
@@ -313,8 +317,6 @@ function expr_to_dmterm(ex::Expr, ln::LineNumberNode, (F, A, C, L)) :: DMTerm
                 # reduce nests multi-arg ops like x+x+x -> op(+, op(+, x, x), x)
                 return reduce((x,y)->op(callee, [x,y]), map(a->expr_to_dmterm(a, ln, scope), args))
             end
-        elseif callee == :privacy_apply
-            return papply(expr_to_dmterm(args[1], ln, scope), map(a->expr_to_dmterm(a, ln, scope), args[2:end]))
         elseif callee in F
             error("recursive call of $callee in $(ln.file) line $(ln.line)")
         else
