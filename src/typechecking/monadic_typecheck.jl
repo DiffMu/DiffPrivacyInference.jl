@@ -53,7 +53,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
 
             @mdo TC begin
-                (τ_res, τs, vs) <- add_op(opf, length(args)) # add typeop
+                (τ_res, τs, vs) <- add_op(opf) # add typeop
                 _ <- msum(map(check_op_arg, zip(args,τs,vs))) # check operands seperately and sum result contexts
                 return τ_res
             end
@@ -274,7 +274,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                xs, ts, τ_ret = @match τ_f begin
                    Arr(xts, τ_ret) => (map(first, xts), map(last, xts), τ_ret)
                end
-               (τ_res, τs, _) <- add_op(:gaussian_mechanism, 1) # add typeop
+               (τ_res, τs, _) <- add_op(:gaussian_mechanism) # TODdd typeop
                _ <- unify(τs[1], τ_ret)
                (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
                _ <- add_Cs(Constr[isLessOrEqual(s, rv) for s in xs]) # all sensitivities of f have to be bounded by rv
