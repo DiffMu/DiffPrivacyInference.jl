@@ -172,19 +172,16 @@ end
 # julia interface
 
 builtin_ops = Dict(
-                   :ceil => τs -> Unary(DMOpCeil(), τs...),
-                   :gaussian_mechanism => τs -> Unary(DMOpGauss(), τs...),
-                   :+ => τs -> Binary(DMOpAdd(), τs...),
-                   :- => τs -> Binary(DMOpSub(), τs...),
-                   :* => τs -> Binary(DMOpMul(), τs...),
-                   :/ => τs -> Binary(DMOpDiv(), τs...),
-                   :% => τs -> Binary(DMOpMod(), τs...),
-                   :rem => τs -> Binary(DMOpMod(), τs...),
-                   :(==) => τs -> Binary(DMOpEq(), τs...)
-                  )
-
-special_ops = Dict(
-                   :gauss => τs -> Unary(DMOpGauss(), τs...),
+                   :ceil => (1, τs -> Unary(DMOpCeil(), τs...)),
+                   :gaussian_mechanism => (1, τs -> Unary(DMOpGauss(), τs...)),
+                   :normalize => (2, τs -> Binary(DMOpClip(), τs...)),
+                   :+ => (2, τs -> Binary(DMOpAdd(), τs...)),
+                   :- => (2, τs -> Binary(DMOpSub(), τs...)),
+                   :* => (2, τs -> Binary(DMOpMul(), τs...)),
+                   :/ => (2, τs -> Binary(DMOpDiv(), τs...)),
+                   :% => (2, τs -> Binary(DMOpMod(), τs...)),
+                   :rem => (2, τs -> Binary(DMOpMod(), τs...)),
+                   :(==) => (2, τs -> Binary(DMOpEq(), τs...))
                   )
 
 is_builtin_op(f::Symbol) = haskey(builtin_ops,f)

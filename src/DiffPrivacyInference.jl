@@ -6,10 +6,12 @@ using MLStyle
 using SimplePosets
 using Compat
 using Distributions
+using LinearAlgebra
 
 include("utils/logging.jl")
 include("utils/errors.jl")
 include("utils/symbolic.jl")
+include("core/builtins.jl")
 include("core/definitions.jl")
 include("core/DMIR.jl")
 include("core/operations.jl")

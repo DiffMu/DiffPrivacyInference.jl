@@ -164,15 +164,15 @@ function build_tc(t::DMTerm) :: TC
 end
 
 "Add a `DMTypeOp` constraint for the  `nargs`-ary operation accoding to `opf`."
-function add_op(opf::Symbol, nargs::Int) :: TC#{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
+function add_op(opf::Symbol) :: TC#{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
     function mconstr(S,T,C,Σ) :: MType{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
         function makeType()
             T, tv = addNewName(T, Symbol("op_arg_"))
             TVar(tv)
         end
+        nargs, dmop = getDMOp(opf)
         τs = [makeType() for _ in 1:nargs]
-        dmop = getDMOp(opf)(τs)
-        (S,T,C), τ, sv = add_TypeOp((S,T,C), dmop)
+        (S,T,C), τ, sv = add_TypeOp((S,T,C), dmop(τs))
         ((S,T,C,Σ), (τ, τs, sv))
     end
     TC(mconstr)
