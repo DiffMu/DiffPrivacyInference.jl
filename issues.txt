@@ -31,6 +31,8 @@
 - sensitivity language:
     - implement matrix foo
     - understand huge vector penalty compared to tuples
+    - typeOp for gauss creates dead svar
+    - we want a seperate context for norm/clip variables in the long run...
 
     - done:
         - make a single let
