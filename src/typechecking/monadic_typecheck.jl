@@ -59,7 +59,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
-        (mcreate(norm, n, m, xs, body), false) => let
+        (mcreate(n, m, xs, body), false) => let
 
             function setdim(v::DMTerm, s) :: TC
                 @mdo TC begin
@@ -78,14 +78,17 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 end
             end
 
+            # add the index variables to the scope. TODO this is weird, use lam isntead?
+            scope[xs[1]] = [arg(xs[1],Int)]
+            scope[xs[2]] = [arg(xs[2],Int)]
+
             @mdo TC begin
                 (nv, mv) <- mapM(x->add_svar(), (n,m))
-                scope[xs[1]] = [arg(xs[1],Int)]
-                scope[xs[2]] = [arg(xs[2],Int)]
                 tbody <- mcheck_sens(body, scope, false)
                 _ <- mscale(nv*mv)
                 _ <- msum(mreturn(tbody), setdim(n, nv), setdim(m, mv))
                 _ <- mapM(setarg, xs)
+                norm <- add_nvar()
                 return DMMatrix(norm, U, (nv, mv), tbody)
             end
         end;
@@ -198,6 +201,17 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
+        (dmclip(norm, body), false) => let
+            @mdo TC begin
+                bt <- mcheck_sens(body, scope, false)
+                l <- add_nvar()
+                c_in <- add_cvar()
+                (rows, cols) <- mapM(x->add_svar(), collect((nothing for _ in 1:2)))
+                _ <- unify(bt, DMMatrix(l, c_in, (rows, cols), DMData()))
+                return DMMatrix(l, norm, (rows, cols), DMData())
+            end
+        end
+
         ############################################## these can be privacy _or_ sensitivity terms
 
         (slet((v, dτ), t, b), _) => let
@@ -271,14 +285,16 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
            @mdo TC begin
                τ_f <- mcheck_sens(f, scope, false)
-               xs, ts, τ_ret = @match τ_f begin
-                   Arr(xts, τ_ret) => (map(first, xts), map(last, xts), τ_ret)
+               xs, ts, τ_fret = @match τ_f begin
+                   Arr(xts, τ_fret) => (map(first, xts), map(last, xts), τ_fret)
                end
-               (τ_res, τs, _) <- add_op(:gaussian_mechanism) # TODdd typeop
-               _ <- unify(τs[1], τ_ret)
+               #(τ_res, τs, _) <- add_op(:gaussian_mechanism) # we have one gauss for matrices and numbers, so we need an op
+               τ_gauss <- add_type(T -> add_new_type(T, :gauss_res_))
+
+               _ <- add_Cs(Constr[isGaussResult(τ_gauss, τ_fret)])
                (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
                _ <- add_Cs(Constr[isLessOrEqual(s, rv) for s in xs]) # all sensitivities of f have to be bounded by rv
-               return ArrStar([((ϵv,δv), t) for t in ts], τ_res) # returns a real
+               return ArrStar([((ϵv,δv), t) for t in ts], τ_gauss) # returns a real
            end
         end;
 

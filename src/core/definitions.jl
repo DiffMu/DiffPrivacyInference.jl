@@ -28,6 +28,18 @@ TVarCtx = NameCtx
 "A context of sensitivity metavariables is simply a name context."
 SVarCtx = NameCtx
 
+@data Norm begin
+    L1
+    L2
+    L∞
+end
+
+@data Unbounded begin
+    U
+end
+
+Clip = Union{Norm, Unbounded}
+
 ####################################################################
 ## DMTypes
 
@@ -45,17 +57,6 @@ DeltaNames = Tuple{Names,Names}
 
 "Alternative name for Constraints"
 ConstraintsAbstr = Vector{<:ConstrAbstr}
-
-@data Norm begin
-    L1
-    L2
-    L∞
-end
-@data Unbounded begin
-    U
-end
-
-Clip = Union{Norm, Unbounded}
 
 # The definition of the types in our type system.
 # This is mostly based on the description of the duet language in:
@@ -77,6 +78,9 @@ Clip = Union{Norm, Unbounded}
 
     # Type of a real number.
     DMReal :: () => DMType
+
+    # Type of a real number with discrete metric.
+    DMData :: () => DMType
 
     # Type of a constant value (factually of type `DMInt` or `DMReal`).
     # E.g., `Constant(DMInt(),3)`, or `Constant(TVar("a"), symbols("s"))`
@@ -100,13 +104,17 @@ Clip = Union{Norm, Unbounded}
     # Type of privacy functions.
     ArrStar :: (Vector{Tuple{Privacy, DMType}}, DMType) => DMType
 
-    DMMatrix :: (Norm, Clip, Tuple{Sensitivity, Sensitivity}, DMType) => DMType
+    # first two parameters are actually only allowed to be variable or in { L1, L2, Linf, U }.
+    # we make sure of this using constraints, but in the future we might want to use proper contexts
+    # for norm variables
+    DMMatrix :: (Union{Norm,SymbolicUtils.Sym{Norm}}, Union{Clip,SymbolicUtils.Sym{<:Clip}}, Tuple{Sensitivity, Sensitivity}, DMType) => DMType
 end
 
 function Base.isequal(τ1::DMType, τ2::DMType)
     @match (τ1, τ2) begin
         (DMInt(), DMInt()) => true;
         (DMReal(), DMReal()) => true;
+        (DMData(), DMData()) => true;
         (Constant(X, c), Constant(Y, d)) => isequal(X, Y) && isequal(c, d);
         (DMTup(Xs), DMTup(Ys)) => isequal(Xs, Ys);
         (TVar(s), TVar(t)) => isequal(s, t);
@@ -143,7 +151,6 @@ Substitutions = Vector{AnySSub}
 # The type of all possible unary type operations.
 @data DMTypeOps_Unary begin
    DMOpCeil :: () => DMTypeOps_Unary
-   DMOpGauss :: () => DMTypeOps_Unary
 end
 
 # "The type of all possible binary type operations."
@@ -173,8 +180,6 @@ end
 
 builtin_ops = Dict(
                    :ceil => (1, τs -> Unary(DMOpCeil(), τs...)),
-                   :gaussian_mechanism => (1, τs -> Unary(DMOpGauss(), τs...)),
-                   :normalize => (2, τs -> Binary(DMOpClip(), τs...)),
                    :+ => (2, τs -> Binary(DMOpAdd(), τs...)),
                    :- => (2, τs -> Binary(DMOpSub(), τs...)),
                    :* => (2, τs -> Binary(DMOpMul(), τs...)),
@@ -199,7 +204,6 @@ Base.isequal(a::T, aa::T) where {T<:DMTypeOp} = all(map(t->isequal(t...), [(getf
 function prettyString(op :: DMTypeOps_Unary)
     @match op begin
         DMOpCeil() => "ceil"
-        DMOpGauss() => "gauss"
     end
 end
 
@@ -273,6 +277,8 @@ SymbolOrType = Union{Symbol, DMType}
     # for dispatch, dict maps user-given signature to a flag variable and the inferred function type.
     # flag will be set to 0 or 1 according to which choice was picked.
     isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},DMType}}) => Constr
+
+    isGaussResult :: (DMType, DMType) => Constr
 end
 
 "The type of constraints is simply a list of individual constraints."
@@ -302,6 +308,7 @@ Base.show(io::IO, c::Constr) =
         isSupremumOf(τ1, τ2, σ) => print(io, σ, " = sup{", τ1, ", ", τ2, "}")
         isEqualType(s1,s2) => print(io, s1, " == ", s2)
         isChoice(τ,cs) => print(io, τ, " is chosen from ", cs)
+        isGaussResult(τgauss,τin) => print(io, τgauss, " results from gauss on", τin)
     end
 
 #--- insert
@@ -358,6 +365,7 @@ function juliatype(τ::DMType) :: DataType
    @match τ begin
       DMInt() => Integer
       DMReal() => Real
+      DMData() => Real
       Constant(Y, a) => juliatype(Y)
       DMTup(Ts) => Tuple{map(juliatype, Ts)...}
       TVar(Y) => error("unknown type")
@@ -543,6 +551,7 @@ function free_SVars(t :: DMType) :: Vector{Symbol}
     @match t begin
         DMInt()        => Vector()
         DMReal()       => Vector()
+        DMData()       => Vector()
         Constant(τ,s)  => union(free_SVars(τ), free_SVars(s))
         DMTup(v)       => union(map(free_SVars,v)...)
         TVar(_)        => Vector()
@@ -560,6 +569,7 @@ function free_TVars(t :: DMType) :: Vector{Symbol}
     @match t begin
         DMInt()        => Vector()
         DMReal()       => Vector()
+        DMData()       => Vector()
         Constant(τ,s)  => union(free_TVars(τ), free_TVars(s))
         DMTup(v)       => union(map(free_TVars,v)...)
         TVar(a)        => Vector([a]) # THIS LINE IS different from the SVars version above (!)

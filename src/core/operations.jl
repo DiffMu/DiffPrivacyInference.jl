@@ -7,6 +7,7 @@ function check_not_constant(τ :: DMType, tvars_nonconst::Bool) :: Bool
    @match τ begin
       DMInt() => true
       DMReal() => true
+      DMData() => true
       #Idx(_) => true
       Constant(_, _) => false
       DMTup(Ts) => any(map(T->check_not_constant(T, tvars_nonconst), Ts))
@@ -53,28 +54,12 @@ function signature(STCΣ :: Full{A}, top::DMTypeOp, tvars_nonconst = false) :: U
         (sensitivities, ty, (S, T, [C ; newCs], Σ))
     end
 
-
-    # check if we know for sure that τ is numeric
-    function is_numeric(τ::DMType) :: Bool
-        @match τ begin
-            DMInt() => true
-            DMReal() => true
-            Constant(τ2, _) => is_numeric(τ2)
-            TVar => isNumeric(τ) in STCΣ[3]
-            _ => false
-        end
-    end
-
     @match top begin
         Unary(op, τ) => let
             (v, vt, co0) = @match (op, τ) begin
                 (DMOpCeil(), Constant(X, η))                   => (0, Constant(DMInt(), ceil(η)), []);
                 (DMOpCeil(), X)            && if cINC(X) end => (1, DMInt(), []);
                 (DMOpCeil(), TVar(_))                          => return nothing;
-
-                (DMOpGauss(), DMMatrix(L2, _, dims, X)) && if is_numeric(X) end => (1, DMMatrix(L∞, U, dims, DMReal()), []);
-                (DMOpGauss(), X)            && if is_numeric(X) end => (1, DMReal(), []);
-                (DMOpGauss(), TVar(_))                          => return nothing;
 
                 _ => error("No unary operation $op available on operand of type $τ.");
             end;

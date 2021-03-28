@@ -15,6 +15,7 @@ function singleTSub(τ :: DMType, (X,ξ) :: TSSub) :: DMType
    @match τ begin
       DMInt() => DMInt()
       DMReal() => DMReal()
+      DMData() => DMData()
       #Idx(η) => Idx(η)
       Constant(Y, a) => Constant(singleTSub(Y, (X, ξ)), a)
       DMTup(Ts) => DMTup(map(T->singleTSub(T, (X, ξ)), Ts));
@@ -59,10 +60,21 @@ function singleTSub(op :: DMTypeOp, σ :: TSSub) :: DMTypeOp
    end
 end
 
+
+function singleTSub(a::A, σ::TSSub) :: A where {A<:Union{Tuple, Array}}
+    map(c -> singleTSub(c, σ), a)
+end
+
+
 """
 Apply the single type substitution `σ` to the constraint `c`.
 """
 function singleTSub(c :: Constr, σ :: TSSub) :: Constr
+    τconstructor = typeof(c) # the constructor of τ
+    τargs = map(fld->getfield(c,fld), fieldnames(τconstructor)) # the arguments of τ
+    τconstructor(map(τ->singleTSub(τ,σ), τargs)...)
+end
+#=
     @match c begin
         isNumeric(s) => isNumeric(singleTSub(s, σ))
         isTypeOpResult(sv, τ, op) => isTypeOpResult(sv, singleTSub(τ, σ), singleTSub(op, σ))
@@ -73,6 +85,7 @@ function singleTSub(c :: Constr, σ :: TSSub) :: Constr
         isSupremumOf(τ1, τ2, ρ) => isSupremumOf(singleTSub(τ1, σ), singleTSub(τ2, σ), singleTSub(ρ, σ))
         isEqualType(t1, t2) => isEqualType(singleTSub(t1, σ) , singleTSub(t2, σ))
         isChoice(t, ts) => isChoice(singleTSub(t, σ), Dict((s,(flag, singleTSub(tt, σ))) for (s,(flag, tt)) in ts))
+        isGaussResult(tgauss, tin) => isChoice(isGaussResult(t, σ), Dict((s,(flag, singleTSub(tt, σ))) for (s,(flag, tt)) in ts))
     end
 end
 
@@ -82,6 +95,7 @@ Apply the single type substitution `σ` to the list of constraints `C`.
 function singleTSub(C :: Constraints, σ :: TSSub) :: Constraints
     map(c -> singleTSub(c, σ), C)
 end
+=#
 
 """
 Apply the single type substitution `(x := ξ)` the type variable `a`. That is,
@@ -169,9 +183,9 @@ function singleSSub(s :: Sensitivity, (X, η) :: SSSub) :: Sensitivity
 #    println("### SUBSTITUTING:\n  in $s we do $X := $η\n")
    if s isa STerm
        s = substitute(s, Dict((symbols(X)=> η)))
-       η isa Number ? simplify_sensitivity(s) : s
-   elseif (s isa Real) || (s isa Int)
-      s
+       η isa Union{Number, Clip} ? simplify_sensitivity(s) : s
+#   elseif (s isa Real) || (s isa Int)
+#      s
    else
       error("INTERNAL ERROR: Encountered a sensitivity $s of type " ++ typeof(s) ++ " when trying to substitute with $σ.")
    end
@@ -187,6 +201,7 @@ function singleSSub(T :: DMType, σ :: SSSub) :: DMType
    @match T begin
       DMInt() => DMInt()
       DMReal() => DMReal()
+      DMData() => DMData()
       #Idx(η) => Idx(singleSSub(η, σ))
       Constant(X, n) => Constant(singleSSub(X, σ), singleSSub(n, σ))
       TVar(a) => TVar(a)
@@ -209,6 +224,19 @@ function singleSSub(op :: DMTypeOp, σ :: SSSub) :: DMTypeOp
    end
 end
 
+function singleSSub(a::A, σ::SSSub) :: A where {A<:Union{Tuple, Array}}
+    map(c -> singleSSub(c, σ), a)
+end
+
+"""
+Apply the single type substitution `σ` to the constraint `c`.
+"""
+function singleSSub(c :: Constr, σ :: SSSub) :: Constr
+    τconstructor = typeof(c) # the constructor of τ
+    τargs = map(fld->getfield(c,fld), fieldnames(τconstructor)) # the arguments of τ
+    τconstructor(map(τ->singleSSub(τ,σ), τargs)...)
+end
+#=
 """
 Apply the single sensitivity substitution `σ` to the constraint `c`.
 """
@@ -232,6 +260,7 @@ Apply the single sensitivity substitution `σ` to the list of constraint `C`.
 function singleSSub(C :: Constraints, σ :: SSSub) :: Constraints
     map(c->singleSSub(c,σ), C)
 end
+=#
 
 """
 Apply a single sensitivity substitution `σ` to a sensitivity context `Σ`, by substituting

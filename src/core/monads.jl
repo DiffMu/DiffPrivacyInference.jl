@@ -244,16 +244,20 @@ function add_type(make_type::Function) :: TC#{DMType}
     TC(mconstr)
 end
 
-"Add a newly created sensitivity variable to the monad's sensitivity variable context `S` and return it."
-function add_svar() :: TC#{Sensitivity}
+function add_var(sym, prefix::String) :: TC#{Sensitivity}
     function mconstr(S,T,C,Σ) :: MType{Sensitivity}
-        S, s = addNewName(S, Symbol("sens_"))
-        s = symbols(s)
+        S, s = addNewName(S, Symbol(prefix))
+        s = sym(s)
 
         (S,T,C,Σ), s
     end
     TC(mconstr)
 end
+
+"Add a newly created sensitivity variable to the monad's sensitivity variable context `S` and return it."
+add_svar() = add_var(symbols,"sens_")
+add_nvar() = add_var(SymbolicUtils.Sym{Norm},"norm_")
+add_cvar() = add_var(SymbolicUtils.Sym{Clip},"clip_")
 
 "Set annotation of `x` to `s` and type to `τ`."
 function set_var(x::Symbol, s::Annotation, τ::DMType) :: TC#{DMType}

@@ -8,6 +8,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             TVar(_) => nothing
             DMInt() => ()
             DMReal() => ()
+            DMData() => ()
             #Idx(_) => ()
             Constant(τ2, a) => check_numeric(τ2)
             _ => throw(NotNumeric("Expected $τ to be a numeric type."));
@@ -41,6 +42,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                 function mconstr(S,T,C,Σ) :: MType{Union{Nothing,Tuple{}}}
                     # remove c before substitute, we put it back later.
                     C_noc = Constr[cc for cc in C if !isequal(cc,c)]
+
                     Cs = apply_subs(C_noc,σs)
 
                     newCs = union(newCs, substitutions_to_constraints(σs))
@@ -186,7 +188,27 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                     end
                 end;
             end
-        end
+        end;
+        isGaussResult(τ_gauss, τ_in) => let
+            # we have one function for both gauss and matrix-gauss, so we need a constraint on the input type
+            @match τ_in begin
+                DMMatrix(norm, clip, dims, T) => let # matrix-gauss
+                    function mconstr(S::SVarCtx,T::TVarCtx,C::Constraints,Σ::Context) :: MType{Union{Nothing, Tuple{}}}
+                        # discard constraint
+                        newC = filter(cc -> !isequal(cc,c), C)
+                        # clip of input matrix can be anything, so we create a variable for it.
+                        S, cv = addNewName(S, :clip_)
+                        cv = SymbolicUtils.Sym{Clip}(cv)
+                        # set constraints for in- and output types as given in the rule
+                        newC = [newC; isSubtypeOf(τ_in, DMMatrix(L2, cv, dims, DMReal())); isEqualType(τ_gauss, DMMatrix(L∞, U, dims, DMReal()))]
+                        return (S,T,newC,Σ), ()
+                    end
+                    TC(mconstr)
+                end;
+                TVar => return_nothing() # input type yet unknown
+                _ => return_simple(Constr[isSubtypeOf(τ_in, DMReal()), isEqualType(τ_gauss, DMReal())]) # regular gauss (or invalid subtyping constraint later)
+            end
+        end;
     end
 end
 
@@ -250,6 +272,7 @@ function msimplify_constraints() :: TC#{Tuple{}}
 
     @mdo TC begin
         Cs <- extract_Cs()
+        _ <- mprint()
         #_ = println("simplifying constraints $Cs")
         _ <- try_simplify_constraints(Cs) # see if the constraints changed. recurse, if so.
         return ()

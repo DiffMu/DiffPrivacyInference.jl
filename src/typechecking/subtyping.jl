@@ -209,9 +209,21 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
             _, newC  = unify_nosubs(τ1, τ2)
             return (S,T,union(C,newC),Σ)
         end
-        (Constant(A,ν), Constant(A,μ)) => let
+        (Constant(A1,ν), Constant(A2,μ)) && if isequal(A1, A2) end  => let
             try
                 _, newC = unify_Sensitivity_nosubs(ν,μ)
+                return (S,T,union(C,newC),Σ)
+            catch err
+                if !(err isa UnificationError)
+                    rethrow(err)
+                else
+                    throw(NotSubtype("Expected $τ1 to be a subtype of $τ2, but it is not."))
+                end
+            end
+        end
+        (DMMatrix(norm1, clip1, dims1, T1), DMMatrix(norm2, clip2, dims2, T2)) && if isequal(T1, T2) end => let
+            try
+                _, newC = unify_nosubs(τ1, τ2)
                 return (S,T,union(C,newC),Σ)
             catch err
                 if !(err isa UnificationError)
@@ -293,7 +305,15 @@ function try_get_direct_supertypes(τ :: DMType) :: Union{Nothing,Vector{DMType}
         Constant(τ, _)         => error("A constant of type $τ is invalid.")
 
         DMInt()                => [DMReal()]
-        DMReal()               => []
+        DMReal()               => [DMData()]
+        DMData()               => []
+
+        DMMatrix(_, clip, dims, DMData()) && if clip isa Norm end => [DMMatrix(clip, U, dims, DMReal())] # this is the conv tule
+
+        DMMatrix(norm, clip, dims, X) => let
+            supers = try_get_direct_supertypes(X)
+            isnothing(supers) ? nothing : [DMMatrix(norm, clip, dims, Y) for Y in supers]
+        end;
 
         Arr(_, _)           => error("Unreachable location reached. Tried to get direct super types of an arrow type.")
         ArrStar(_, _)           => error("Unreachable location reached. Tried to get direct super types of an arrow type.")

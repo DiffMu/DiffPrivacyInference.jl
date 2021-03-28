@@ -121,3 +121,10 @@ end;
     τ = Arr([(∞, TVar(:op_arg_8)), (6, DMInt()), (∞, TVar(:op_arg_5))], DMInt())
     @test isequal(infer_sensitivity(t), τ)
 end;
+
+@testset "privacy" begin
+    t = lam_star(Tuple{Symbol,DataType}[(:z, Any)], apply(gauss((sng(1), sng(2), sng(3)), lam(Tuple{Symbol,DataType}[(:x, Any)], var(:x, Any))), DMTerm[dmclip(L2, mcreate(sng(1), sng(3), (:x, :y), phi(op(:(==), DMTerm[var(:x, Any), sng(1)]), sng(1), phi(op(:(==), DMTerm[var(:x, Any), sng(1.3)]), var(:z, Any), sng(3)))))]))
+
+    τ = ArrStar([((2, 3), TVar(:any_11))], DMMatrix(L∞, U, (1, 3), DMReal()))
+    @test isequal(infer_sensitivity(t), τ)
+end

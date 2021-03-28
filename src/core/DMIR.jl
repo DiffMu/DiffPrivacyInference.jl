@@ -23,11 +23,12 @@ TAsgmt = Tuple{Symbol, <:DataType}
     tlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     loop :: (iter, tup, lam) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
-    mcreate :: (Norm, DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
+    mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     index :: (DMTerm, DMTerm) => DMTerm
     len :: DMTerm => DMTerm # length of a vector
     chce :: Dict{Vector{<:DataType}, DMTerm} => DMTerm
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
+    dmclip :: (Norm, DMTerm) => DMTerm
 end
 
 function pretty_print(t::DMTerm) :: String
@@ -45,9 +46,10 @@ function pretty_print(t::DMTerm) :: String
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
-        flet(f, s, l, t)        => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
+        flet(f, s, l, t)     => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
         index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
-        gauss(ps, b)      => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
+        gauss(ps, b)         => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
+        dmclip(n,b)              => "clip <"* string(n) *"> [ " * pretty_print(b) * " ]"
         #        len(v)               => 
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
@@ -81,7 +83,8 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         flet(f, s, lam(vs,b), t)=> Expr(:block, Expr(:(=), Expr(:call, f, fsig(vs)...), evaluate(b)), evaluate(t))
         index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
         len(v)               => :(length($(evaluate(v))))
-        gauss((s,ϵ,δ),f)   => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
+        gauss((s,ϵ,δ),f)     => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
+        dmclip(l,f)            => :(clip(l, $(evaluate(f))))
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
 end
@@ -135,6 +138,7 @@ function pretty_print(t::DMType)
     @match t begin
         DMInt() => "Int"
         DMReal() => "Real"
+        DMReal() => "Real_D"
         Constant(ty, te) => pretty_print(ty) * "[" * pretty_print(te) * "]"
         DMTup(tys) => pretty_print(tys, pretty_print)
         TVar(symb) =>  "tvar." * pretty_print(symb)
