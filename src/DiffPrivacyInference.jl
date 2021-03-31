@@ -4,7 +4,6 @@ using SymbolicUtils
 using CodeTracking
 using MLStyle
 using SimplePosets
-using Compat
 using Distributions
 
 include("utils/logging.jl")

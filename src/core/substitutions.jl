@@ -65,6 +65,7 @@ function singleTSub(a::A, σ::TSSub) :: A where {A<:Union{Tuple, Array}}
     map(c -> singleTSub(c, σ), a)
 end
 
+singleTSub(d::Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},DMType}}, σ) = Dict((s,(flag, singleTSub(tt, σ))) for (s,(flag, tt)) in d)
 
 """
 Apply the single type substitution `σ` to the constraint `c`.
@@ -227,6 +228,8 @@ end
 function singleSSub(a::A, σ::SSSub) :: A where {A<:Union{Tuple, Array}}
     map(c -> singleSSub(c, σ), a)
 end
+
+singleSSub(d::Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},DMType}}, σ) =  Dict((s,(singleSSub(flag, σ), singleSSub(tt, σ))) for (s,(flag,tt)) in d)
 
 """
 Apply the single type substitution `σ` to the constraint `c`.

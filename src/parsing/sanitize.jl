@@ -1,5 +1,3 @@
-# TODO with julia 1.6 we can remove Compat and use parseall in order not to use the file info in LNN
-
 # make Expr matchable
 @as_record Expr
 @as_record LineNumberNode
@@ -19,7 +17,7 @@ It returns two `Dict`s mapping variables to line numbers of:
  - the variables this block assigns to.
 """
 function sanitize_file(file::AbstractString)
-    ast = Compat.parseall(read(file, String), filename = file)
+    ast = Meta.parseall(read(file, String), filename = file)
     println("read file $file")
     sanitize(ast.args, ast.args[1])
 end
@@ -188,7 +186,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                     end
 
                     # parse and sanitize the whole included file, too
-                    inast = Compat.parseall(read(args[1], String), filename = args[1])
+                    inast = Meta.parseall(read(args[1], String), filename = args[1])
                     iinn, icur = sanitize(inast.args, inast.args[1], current)
                     inner = merge(inner, iinn)
                     current = merge(current, icur)
