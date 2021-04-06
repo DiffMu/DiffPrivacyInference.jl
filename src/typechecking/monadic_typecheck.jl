@@ -14,7 +14,6 @@ check_term(t::DMTerm) = mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}(), false)
 # expect_priv flags whether we expect the term to be a privacy/"red" term.
 function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_priv::Bool) :: TC#{DMType}
 
-    println("checking $t with $expect_priv")
     result = @match (t, expect_priv) begin
 
         ############################################## these terms can only be sensitivity terms.
@@ -123,7 +122,6 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
             # check body in privacy mode.
             @mdo TC begin
-                _ = println("checking lamstar body $body")
                 τr <- mcheck_sens(body, scope, true) # check body to obtain lambda return type.
                 xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
                 _ <- mtruncate(∞)
@@ -140,7 +138,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 function check_choice((sign,choice)::Tuple{Vector{<:DataType}, DMTerm}) :: TC#{Pair{Sensitivity,DMType}}
                     @mdo TC begin
                         τ_choice <- mcheck_sens(choice, scope, false)
-                        flag <- add_svar() # add a flag variable to set to 0 or 1 depending on if this choice was picked
+                        flag <- add_svar("chce_flag_") # add a flag variable to set to 0 or 1 depending on if this choice was picked
                         _ <- mscale(flag)
                         return sign => (flag, τ_choice)
                     end
@@ -181,13 +179,99 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
+        (tlet(xs, tu, body), false) => let
+            if !allunique(map(first, xs))
+                error("tuple assignment to the same variable mutliple times is forbidden in $t")
+            end
+
+            newscope = deepcopy(scope)
+
+            # generate unique variable names for the tuple entry to put into the arg term
+            # we use arg because we need to infer their sensitivity in the body to make the right scale
+            xnames = []
+            for (x, xτ) in xs
+                @assert xτ == Any "Type annotations on variables not yet supported."
+                xname = gensym("tup_arg_")
+                push!(xnames, xname)
+                newscope[x] = [arg(xname,Any)]
+            end
+
+            # check t, scale with s
+            function check_tup(t::DMTerm, s::Sensitivity) :: TC
+                @mdo TC begin
+                    τ <- mcheck_sens(t, scope, false)
+                    _ <- mscale(s)
+                    return τ
+                end
+            end
+
+            @mdo TC begin
+                # check body with the scope that contains the tuple entries
+                τb <- mcheck_sens(body, newscope, false)
+
+                # lookup the inferred types and sensitivities of tuple entries and delete them from Σ
+                sτs <- mapM(remove_var, xnames)
+                τs = map(last, sτs)
+                s = maximum(map(first, sτs)) # we allow more than two entries that can have different sensitivity, hence max
+
+                # sum tuple context scaled with s and body context
+                (_, τtu) <- msum(mreturn(τb), check_tup(tu, s))
+
+                # set tuple type
+                _ <- unify(τtu, DMTup(τs))
+
+                return τb
+            end
+        end
+
+        (tup(ts), false) => let
+            @mdo TC begin
+                # just check each entry and sum
+                τs <- msum(mapM(a -> mcheck_sens(a, scope, false), ts))
+                return DMTup(τs...)
+            end
+        end
+
+        (loop(it, cs, b), false) => let
+
+            # compute number of iteration steps
+            niter = @match it begin
+                iter(f, s, l) => op(:ceil, [op(:/, [op(:-, [l, op(:-, [f, sng(1)])]), s])])
+                _ => error("first argument of loop must be an iter term")
+            end;
+
+            # check ta, scale with s.
+            function check_arg((ta, s)::Tuple{DMTerm, <:Sensitivity}) :: TC
+                @mdo TC begin
+                    τ <- mcheck_sens(ta, scope, false)
+                    _ <- mscale(s)
+                    return τ
+                end
+            end
+
+            @mdo TC begin
+                # add the correct typeop. we need one as we can only later decide whether its static or unbounded iteration
+                (τ_res, τs, sv) <- add_op(:loop)
+
+                # check number of iterations, captures, and body term.
+                (τ_iter, τ_caps, τ_b) <- msum(map(check_arg, zip([niter, cs, b], sv)))
+
+                # match with typeop results.
+                _ <- unify(τ_iter, τs[1])
+                _ <- subtype_of(τ_caps, τs[2])
+                _ <- unify(τ_b, τs[3])
+
+                return τ_res
+            end
+        end;
+
+
         (apply(f, args), false) => let
             # check a single argument, append the resulting (Sensitivity, DMType) tuple to sτs
             function check_sarg(arg::DMTerm) :: TC
                 @mdo TC begin
                     τ_res <- mcheck_sens(arg, scope, false) # check the argument term
-                    _  = println("checking arg $arg , got $τ_res.")
-                    s <- add_svar() # add a new svar for this argument's sensitivity
+                    s <- add_svar("farg_s_") # add a new svar for this argument's sensitivity
                     _ <- mscale(s) # scale the context with it
                     return (s, τ_res)
                 end
@@ -277,25 +361,25 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             function set_type_sng(tt::DMTerm) :: TC
                 @mdo TC begin
                     τ <- mcheck_sens(tt, scope, false)
-                    v <- add_svar()
+                    v <- add_svar("gauss_param_")
                     τ <- subtype_of(τ, Constant(DMReal(), v))
                     return v
                 end
             end
 
-           @mdo TC begin
-               τ_f <- mcheck_sens(f, scope, false)
-               xs, ts, τ_fret = @match τ_f begin
-                   Arr(xts, τ_fret) => (map(first, xts), map(last, xts), τ_fret)
-               end
-               #(τ_res, τs, _) <- add_op(:gaussian_mechanism) # we have one gauss for matrices and numbers, so we need an op
-               τ_gauss <- add_type(T -> add_new_type(T, :gauss_res_))
+            @mdo TC begin
+                τ_f <- mcheck_sens(f, scope, false)
+                xs, ts, τ_fret = @match τ_f begin
+                    Arr(xts, τ_fret) => (map(first, xts), map(last, xts), τ_fret)
+                end
+                #(τ_res, τs, _) <- add_op(:gaussian_mechanism) # we have one gauss for matrices and numbers, so we need an op
+                τ_gauss <- add_type(T -> add_new_type(T, :gauss_res_))
 
-               _ <- add_Cs(Constr[isGaussResult(τ_gauss, τ_fret)])
-               (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
-               _ <- add_Cs(Constr[isLessOrEqual(s, rv) for s in xs]) # all sensitivities of f have to be bounded by rv
-               return ArrStar([((ϵv,δv), t) for t in ts], τ_gauss) # returns a real
-           end
+                _ <- add_Cs(Constr[isGaussResult(τ_gauss, τ_fret)])
+                (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
+                _ <- add_Cs(Constr[isLessOrEqual(s, rv) for s in xs]) # all sensitivities of f have to be bounded by rv
+                return ArrStar([((ϵv,δv), t) for t in ts], τ_gauss) # returns a real
+            end
         end;
 
         (apply(f, args), true) => let
@@ -320,8 +404,8 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             function check_parg(arg::DMTerm) :: TC
                 @mdo TC begin
                     τ_res <- mcheck_sens(arg, scope, false) # check the argument term
-                    ϵ <- add_svar() # add a new svars for this argument's privacy
-                    δ <- add_svar()
+                    ϵ <- add_svar("papply_eps_") # add a new svars for this argument's privacy
+                    δ <- add_svar("papply_del_")
                     _ <- mtruncate((ϵ,δ)) # truncate the context with it
                     return ((ϵ, δ), τ_res)
                 end

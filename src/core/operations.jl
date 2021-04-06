@@ -1,4 +1,3 @@
-
 ############################################################################################
 ### Constancy Check
 
@@ -128,11 +127,11 @@ function signature(STCΣ :: Full{A}, top::DMTypeOp, tvars_nonconst = false) :: U
             (v1, v2, v3, vt, co0) = @match (op, τ1, τ2, τ3) begin
                 (DMOpLoop(), Constant(DMInt(), η), X, Arr(xs, Y)) => let
                     s = xs[2][1]
-                    (0, s^η, η, X, [])
+                    return return_with_new_constraints([0, s^η, η], X, [])
                  end
                  (DMOpLoop(), DMInt(), X, Arr(xs, Y))             => let
                      s = xs[2][1]
-                     (1, 1, ∞, X, [isLessOrEqual(s, 1)])
+                     return return_with_new_constraints([1, 1, ∞], X, Constr[isLessOrEqual(s, 1)])
                 end
                 (DMOpLoop(), TVar(_), X, TVar(_))                 => return nothing;
                 (DMOpLoop(), TVar(_), X, Arr(_, _))               => return nothing;

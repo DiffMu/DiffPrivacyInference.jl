@@ -40,6 +40,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             ([],[]) => return_discharge() # they were equal to begin with, we can toss the constraint
             _ => let
                 function mconstr(S,T,C,Σ) :: MType{Union{Nothing,Tuple{}}}
+                    println("substituting $σs\ngot new Cs $newCs\n")
                     # remove c before substitute, we put it back later.
                     C_noc = Constr[cc for cc in C if !isequal(cc,c)]
 
@@ -262,8 +263,9 @@ function msimplify_constraints() :: TC#{Tuple{}}
             mreturn(TC, ())
         else
             @mdo TC begin
+                _ = println("simplifying $(Ci[1])\n")
                 simpl <- mtry_simplify_Constr(Ci[1])
-                #_ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]).\n"))
+                _ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]). got context:\n"))
                 ret <- (isnothing(simpl) ? try_simplify_constraints(Ci[2:end]) : msimplify_constraints())
                 return ret
             end

@@ -186,7 +186,8 @@ builtin_ops = Dict(
                    :/ => (2, τs -> Binary(DMOpDiv(), τs...)),
                    :% => (2, τs -> Binary(DMOpMod(), τs...)),
                    :rem => (2, τs -> Binary(DMOpMod(), τs...)),
-                   :(==) => (2, τs -> Binary(DMOpEq(), τs...))
+                   :(==) => (2, τs -> Binary(DMOpEq(), τs...)),
+                   :loop => (3, τs -> Ternary(DMOpLoop(), τs...))
                   )
 
 is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
@@ -268,7 +269,7 @@ SymbolOrType = Union{Symbol, DMType}
     # `isEqual(τ₁, τ₂)` means that the types `τ₁` and `τ₂` should be equal.
     isEqualType :: (DMType, DMType) => Constr
 
-    # `isSubTypeOf(τ₁, τ₂)` means that τ₁ ⊑ τ₂ should hold.
+    # `isSubtypeOf(τ₁, τ₂)` means that τ₁ ⊑ τ₂ should hold.
     isSubtypeOf :: (DMType, DMType) => Constr
 
     # `isSupremumOf(τ₁, τ₂, σ)` means that `sup{τ₁, τ₂} = σ` should hold.
@@ -279,6 +280,7 @@ SymbolOrType = Union{Symbol, DMType}
     isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},DMType}}) => Constr
 
     isGaussResult :: (DMType, DMType) => Constr
+
 end
 
 "The type of constraints is simply a list of individual constraints."

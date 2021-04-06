@@ -163,15 +163,25 @@ function build_tc(t::DMTerm) :: TC
     end
 end
 
+function check_nosim(t::DMTerm)
+    m = @mdo TC begin
+        checkr <- check_term(t) # typecheck the term
+        _ = println("type after check: $checkr")
+        _ <- mprint()
+        return nothing
+    end
+    run(m)
+end
+
 "Add a `DMTypeOp` constraint for the  `nargs`-ary operation accoding to `opf`."
 function add_op(opf::Symbol) :: TC#{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
     function mconstr(S,T,C,Σ) :: MType{Tuple{DMType, Vector{DMType}, Vector{Sensitivity}}}
-        function makeType()
-            T, tv = addNewName(T, Symbol("op_arg_"))
+        function makeType(i::Int)
+            T, tv = addNewName(T, Symbol("op$(opf)$(i)_arg_"))
             TVar(tv)
         end
         nargs, dmop = getDMOp(opf)
-        τs = [makeType() for _ in 1:nargs]
+        τs = [makeType(i) for i in 1:nargs]
         (S,T,C), τ, sv = add_TypeOp((S,T,C), dmop(τs))
         ((S,T,C,Σ), (τ, τs, sv))
     end
@@ -255,7 +265,7 @@ function add_var(sym, prefix::String) :: TC#{Sensitivity}
 end
 
 "Add a newly created sensitivity variable to the monad's sensitivity variable context `S` and return it."
-add_svar() = add_var(symbols,"sens_")
+add_svar(name = "sens_") = add_var(symbols,name)
 add_nvar() = add_var(SymbolicUtils.Sym{Norm},"norm_")
 add_cvar() = add_var(SymbolicUtils.Sym{Clip},"clip_")
 
@@ -288,8 +298,19 @@ end
 
 
 
-"Delete `x` from the current context."
-remove_var(x::Symbol) :: TC = TC((S,T,C,Σ) -> ((S,T,C,delete!(deepcopy(Σ), x)),()))
+"Delete `x` from the current context and return it's former sensitivity and type."
+function remove_var(x::Symbol) :: TC
+    function mconstr(S,T,C,Σ) :: MType{Tuple{Sensitivity, DMType}}
+        if haskey(Σ,x)
+            r = Σ[x]
+        else
+            T, τ = add_new_type(T,:unused_)
+            r = (0, τ)
+        end
+        (S,T,C,delete!(deepcopy(Σ), x)), r
+    end
+    TC(mconstr)
+end
 
 "Return variable `x`'s current sensitivity."
 lookup_var_sens(x::Symbol) = TC((S,T,C,Σ) -> ((S,T,C,Σ), haskey(Σ,x) ? Σ[x][1] : nothing))

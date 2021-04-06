@@ -233,6 +233,13 @@ function try_eval_isSubtypeOf((S,T,C,Σ) :: Full{A}, τ1 :: DMType, τ2 :: DMTyp
                 end
             end
         end
+        (DMTup(t1s), DMTup(t2s)) => let
+            newCs = Constraints()
+            for (t1,t2) in zip(t1s, t2s)
+                newCs = [newCs; isSubtypeOf(t1,t2)]
+            end
+            return (S,T,union(C,newCs),Σ)
+        end
         _ => let
             # traverse the subtype relation graph upwards from τ1, to see if we come across τ2.
             supers = try_get_direct_supertypes(τ1)

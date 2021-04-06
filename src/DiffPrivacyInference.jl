@@ -36,7 +36,7 @@ export NotInScope, ArithmeticsError, WrongNoOfArgs, WrongArgType, NotNumeric, No
 export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
 export tup , tlet , loop , slet , index , len , chce, gauss, mcreate, dmclip
 
-export DMType, DMInt, DMReal, Constant, DMTyp, TVar, Arr, ArrStar, DMMatrix
+export DMType, DMInt, DMReal, Constant, DMTyp, TVar, Arr, ArrStar, DMMatrix, DMTup
 
 export L1, L2, L∞, U
 

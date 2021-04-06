@@ -61,6 +61,8 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
         ::Number => sng(exs)
         ::Symbol => var(exs, Any)
 
+
+        # an array of Exprs and LineNumberNodes, like encountered as the body of a block.
         ::AbstractArray => let
             @assert !isempty(exs) "empty expression list?"
 
@@ -212,7 +214,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     end
 
                     # extract the iterator
-                    if it isa Exp && it.head == :(=)
+                    if it isa Expr && it.head == :(=)
                         i, r = it.args
                         @assert i isa Symbol "expected symbol $i"
                         if r isa Expr && r.head == :call
@@ -251,7 +253,8 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     # body lambda maps captures  to body
                     cname = gensym("caps")
                     captasgmts = [(c, Any) for c in caps]
-                    llam = lam([(i, DMDInt()), (cname, Any)], tlet(captasgmts, var(cname, Any), lbody))
+                    println("trying to construct with $captasgmts,  $(var(cname, Any)), $lbody\n")
+                    llam = lam([(i, Int), (cname, Any)], tlet(captasgmts, var(cname, Any), lbody))
 
                     lloop = loop(lit, tup(map(v->var(v...), captasgmts)), llam)
 

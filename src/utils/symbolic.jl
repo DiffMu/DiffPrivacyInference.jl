@@ -26,8 +26,9 @@ Computes the free variables of the sensitivity term `ex`.
 """
 free_symbols(ex::STerm) = @match ex begin
     ::SymbolicUtils.Sym => [ex.name]
-    ::SymbolicUtils.Symbolic => vcat(map(free_symbols, [keys(ex.dict)...])...)
     ::SymbolicUtils.Term => vcat(map(free_symbols, ex.arguments)...)
+    ::SymbolicUtils.Pow => vcat(free_symbols(ex.base), free_symbols(ex.exp))
+    ::SymbolicUtils.Symbolic => vcat(map(free_symbols, [keys(ex.dict)...])...)
     ::Number => []
 end;
 

@@ -20,7 +20,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
 #    trttup :: Vector{DMTerm} => DMTerm                     # Transparent version of tuple
 #    trtlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     tup :: Vector{DMTerm} => DMTerm                     # Paper version of tuple
-    tlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
+    tlet :: (Vector{<:TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     loop :: (iter, tup, lam) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
@@ -142,15 +142,13 @@ function pretty_print(t::DMType)
         Constant(ty, te) => pretty_print(ty) * "[" * pretty_print(te) * "]"
         DMTup(tys) => pretty_print(tys, pretty_print)
         TVar(symb) =>  "tvar." * pretty_print(symb)
-        Arr(args, ret) =>
-            let
+        Arr(args, ret) => let
                 pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " ==> " * pretty_print(ret)
             end
-            ArrStar(args, ret) =>
-            let
-                pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " *=*=>* " * pretty_print(ret)
-            end
-            DMMatrix(norm, clip, dims, ty) => "Mat<"*(norm,clip)*">(" * pretty_print(ty) * "dims " * pretty_print(dims) * ")"
+        ArrStar(args, ret) => let
+            pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " *=*=>* " * pretty_print(ret)
+        end
+        DMMatrix(norm, clip, dims, ty) => "Mat<"*(norm,clip)*">(" * pretty_print(ty) * "dims " * pretty_print(dims) * ")"
     end
 end
 
