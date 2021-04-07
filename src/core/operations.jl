@@ -96,8 +96,10 @@ function signature(STCΣ :: Full{A}, top::DMTypeOp, tvars_nonconst = false) :: U
                 # TODO figure out how to handle negative numbers.
                 (DMOpSub(), Constant(X, η1), Constant(Y, η2))  => (0, 0, Constant(comT(X,Y), η1 - η2), []); # [isLessOrEqual(η2, η1)]);
                 (DMOpSub(), X, Y)                              && if cINC(X,Y) end => (1, 1, comT(X,Y), []);
-                (DMOpSub(), Constant(_, _), Y)                 => return nothing;
-                (DMOpSub(), X, Constant(_, _))                 => return nothing;
+                (DMOpSub(), Constant(X, η1), Y)                && if cINC(Y) end => (0, 1, comT(X,Y), []);
+                (DMOpSub(), X, Constant(Y, η2))                && if cINC(X) end => (1, 0, comT(X,Y), []);
+                (DMOpSub(), Constant(TVar(_), _), Y)           => return nothing;
+                (DMOpSub(), X, Constant(TVar(_), _))           => return nothing;
                 (DMOpSub(), TVar(_), Y)                        => return nothing;
                 (DMOpSub(), X, TVar(_))                        => return nothing;
 
