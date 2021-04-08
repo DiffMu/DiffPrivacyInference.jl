@@ -236,24 +236,44 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         error("unsupported iteration over $it in $(ln.file) line $(ln.line)")
                     end
 
-                    # don't mind functions, inside loops it's forbidden to assign them anyways
-                    caps = filter(s->s isa Symbol && s != i, A)
-
+                    # a placeholder for the capture tuple, as we don't know yet what is going to be inside it
+                    capst = gensym()
                     # make the body explicitly return the captures
                     if body.head == :block
-                        push!(body.args, Expr(:dtuple, caps...))
+                        push!(body.args, Expr(:dtuple, capst))
                     else
-                        body = Expr(:block, body, Expr(:dtuple, caps...))
+                        body = Expr(:block, body, Expr(:dtuple, capst))
                     end
 
                     # parse loop body
                     # capture iteration variable as it cannot be modified #TODO protect vector elements?
                     lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
 
+                    # TODO this is pretty expensive. maybe make the parser return the assignees of the current block?
+                    function collect_assignments(t::DMTerm)
+                        @match t begin
+                            slet(x,a,b) => union([first(x)], collect_assignments(a), collect_assignments(b))
+                            tlet(xs,a,b) => union(map(first, xs), collect_assignments(a), collect_assignments(b))
+                            _ => let
+                                targs = map(fld->getfield(t,fld), fieldnames(typeof(t)))
+                                union(map(collect_assignments, targs))
+                            end
+                        end
+                    end
+                    collect_assignments(t) = []
+
+                    # collect all variables that are arguments or internal variables of the innermost
+                    # function *and* assigned to in the loop body. these are explicitly captured.
+                    # don't mind functions, inside loops it's forbidden to assign them anyways
+                    caps = filter(s->s isa Symbol && s != i, intersect(A, collect_assignments(lbody)))
+
+                    newcaptup = tup(map(e -> exprs_to_dmterm(e, ln, scope), caps)) # make a tup from the captures
+                    # replace the capture term in the loop body dmterm by the new tup TODO this is messy
+                    lbody = typeof(lbody)(map(fld->getfield(lbody,fld), fieldnames(typeof(lbody))[1:end-1])...,newcaptup)
+
                     # body lambda maps captures  to body
                     cname = gensym("caps")
                     captasgmts = [(c, Any) for c in caps]
-                    println("trying to construct with $captasgmts,  $(var(cname, Any)), $lbody\n")
                     llam = lam([(i, Int), (cname, Any)], tlet(captasgmts, var(cname, Any), lbody))
 
                     lloop = loop(lit, tup(map(v->var(v...), captasgmts)), llam)
@@ -261,10 +281,6 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
 
                     #=
-                    # TODO
-                    # remove captures that are not assigned to in the body
-                    # caps = caps ∩ assd
-
                     if iter isa Expr && iter.head == :vect
                         #TODO this comes at high cost! vector refs are expensive :(
                         vsym = gensym()
