@@ -21,7 +21,8 @@ TAsgmt = Tuple{Symbol, <:DataType}
 #    trtlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     tup :: Vector{DMTerm} => DMTerm                     # Paper version of tuple
     tlet :: (Vector{<:TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
-    loop :: (iter, tup, lam) => DMTerm
+    loop :: (iter, tup, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
+    ploop :: (iter, tup, Tuple{Symbol, Symbol}, Vector{Symbol}, lam) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     index :: (DMTerm, DMTerm) => DMTerm
@@ -42,7 +43,8 @@ function pretty_print(t::DMTerm) :: String
         lam_star(vs, b)      => "λ* (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         apply(l, as)         => pretty_print(l) *"(" * pretty_print(as) * ")"
         iter(f, s, l)        => "range(" * pretty_print([f,s,l]) * ")"
-        loop(it, cs, b)      => "loop { " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
+        loop(it, cs, xs, b)      => "loop { " * pretty_print(xs) * " => " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
+        ploop(it, cs, xs, ys, b)=> "priv_loop <"*pretty_print(ys)*"> { " * pretty_print([xs]) * " => " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
@@ -74,7 +76,8 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         lam_star(vs, b)      => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         apply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
         iter(f, s, l)        => Expr(:call, :(:), map(evaluate, [f, s, l])...)
-        loop(it, cs, b)      => Expr(:call, :forloop, evaluate(b), evaluate(it), evaluate(cs))
+        loop(it, cs, xs, b)  => Expr(:call, :forloop, evaluate(lam(collect(zip(xs,[Int,Any])),b)), evaluate(it), evaluate(cs))
+        ploop(it, cs, xs, _, b)  => Expr(:call, :forloop, evaluate(lam(collect(zip(xs,[Int,Any])),b)), evaluate(it), evaluate(cs))
 #        trttup(ts)           => Expr(:tuple, map(evaluate,ts)...)
 #        trtlet(xs, tu, t)    => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         tup(ts)              => Expr(:tuple, map(evaluate,ts)...)

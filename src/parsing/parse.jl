@@ -267,16 +267,16 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     # don't mind functions, inside loops it's forbidden to assign them anyways
                     caps = filter(s->s isa Symbol && s != i, intersect(A, collect_assignments(lbody)))
 
-                    newcaptup = tup(map(e -> exprs_to_dmterm(e, ln, scope), caps)) # make a tup from the captures
-                    # replace the capture term in the loop body dmterm by the new tup TODO this is messy
-                    lbody = typeof(lbody)(map(fld->getfield(lbody,fld), fieldnames(typeof(lbody))[1:end-1])...,newcaptup)
+                    # TODO we're actually parsing this twice that's not acceptable really
+                    body = Expr(:block, body.args[1:end-1]..., Expr(:dtuple, caps...))
+                    lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
 
                     # body lambda maps captures  to body
                     cname = gensym("caps")
                     captasgmts = [(c, Any) for c in caps]
-                    llam = lam([(i, Int), (cname, Any)], tlet(captasgmts, var(cname, Any), lbody))
+                    llam = tlet(captasgmts, var(cname, Any), lbody)
 
-                    lloop = loop(lit, tup(map(v->var(v...), captasgmts)), llam)
+                    lloop = loop(lit, tup(map(v->var(v...), captasgmts)), (i, cname), llam)
 
                     return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
 

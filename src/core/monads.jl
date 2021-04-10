@@ -115,9 +115,9 @@ end
 # then sum the resulting contexts and return execution results as a vector
 function msum(args::Vector{TC}) :: TC#{Vector}
     function mconstr(S,T,C,Σ) :: MType{Vector}
-        Σ1 = typeof(Σ)()
-        τs = []
-        for arg in args
+        (S,T,C,Σ1), τ = args[1].func(S,T,C,deepcopy(Σ))
+        τs = Any[τ]
+        for arg in args[2:end]
              # TODO func should not be modifying Σ, but deepcopy just in case...
             (S,T,C,Σ2), τ = arg.func(S,T,C,deepcopy(Σ))
             τs = push!(τs, τ)

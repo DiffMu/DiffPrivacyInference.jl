@@ -210,6 +210,23 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                 _ => return_simple(Constr[isSubtypeOf(τ_in, DMReal()), isEqualType(τ_gauss, DMReal())]) # regular gauss (or invalid subtyping constraint later)
             end
         end;
+        isLoopResult((s1, s2, s3), s, τ_iter) => let
+            @match τ_iter begin
+                Constant(DMInt(), n) => let # statically known number of iterations
+                    return_simple(Constr[isEqualSens(s1, 0),
+                                         isEqualSens(s2, s^n),
+                                         isEqualSens(s3, n)])
+                end;
+                DMInt() => let # variable number of iterations
+                    return_simple(Constr[isLessOrEqual(s, 1), # this is only allowed for 1-sensitive bodys!
+                                         isEqualSens(s1, ∞),
+                                         isEqualSens(s2, 1),
+                                         isEqualSens(s3, ∞)])
+                end;
+                TVar(_) => return_nothing(); # we don't know the number of iterations yet
+                _ => error("invalid loop iteration type $τ_iter");
+            end
+        end;
     end
 end
 

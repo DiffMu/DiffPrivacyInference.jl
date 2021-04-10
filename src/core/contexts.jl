@@ -58,28 +58,6 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
 
             (S, T, C), TVar(tvar), [symbols(svar1), symbols(svar2)]
         end;
-        Ternary(_, τ_n, τ_c, τ_b) => let
-
-            (S, s_it) = addNewName(S, name_prefix(τ_n))
-            s_it = symbols(s_it)
-            (S, s_cap) = addNewName(S, name_prefix(τ_c))
-            s_cap = symbols(s_cap)
-
-            C = union(C, [isSubtypeOf(τ_b, Arr([(s_it, τ_n), (s_cap, τ_c)], τ_c))])
-
-            # create variables for context coefficients
-            (S, s_n) = addNewName(S, name_prefix(τ_n))
-            (S, s_c) = addNewName(S, name_prefix(τ_c))
-            (S, s_b) = addNewName(S, :loop_ret_)
-
-            # add a constraint so we can later decide whether it's a loop or an sloop
-            C = [C;
-                 isTypeOpResult([symbols(s_n), symbols(s_c), symbols(s_b)], τ_c, Ternary(DMOpLoop(), τ_n, τ_c, τ_b));
-                 isNumeric(τ_n)]
-
-            # TODO return type actually could be a subtype of τ_c as returned by the body.
-            (S, T, C), τ_c, [symbols(s_n), symbols(s_c), symbols(s_b)]
-        end;
     end
 end
 

@@ -1,3 +1,17 @@
+####################################################################
+## Substitutions
+
+"A single type substitution, e.g. `(x, τ)` means `x := τ`"
+TSSub = Tuple{Symbol, DMType}
+
+"A single sensitivity substitution, e.g. `(x, η)` means `x := η`"
+SSSub = Tuple{Symbol, STerm}
+
+"A substitution which might be either a type- or a sensitivity substitution."
+AnySSub = Union{SSSub, TSSub}
+
+"A list of multiple substitutions (of any kind)."
+Substitutions = Vector{AnySSub}
 
 ##### substitutions
 # In this file, we define functions for substituting metavariables by types or sensitivity terms.
@@ -56,7 +70,6 @@ function singleTSub(op :: DMTypeOp, σ :: TSSub) :: DMTypeOp
    @match op begin
       Unary(uop, τ) => Unary(uop, singleTSub(τ, σ))
       Binary(bop, τ1, τ2) => Binary(bop, singleTSub(τ1, σ), singleTSub(τ2, σ))
-      Ternary(top, τ1, τ2, τ3) => Ternary(top, map(x->singleTSub(x, σ), (τ1, τ2, τ3))...)
    end
 end
 
@@ -221,7 +234,6 @@ function singleSSub(op :: DMTypeOp, σ :: SSSub) :: DMTypeOp
    @match op begin
       Unary(uop, τ) => Unary(uop, singleSSub(τ, σ))
       Binary(bop, τ1, τ2) => Binary(bop, singleSSub(τ1, σ), singleSSub(τ2, σ))
-      Ternary(top, τ_n, τ_c, τ_b) => Ternary(top, singleSSub(τ_n, σ), singleSSub(τ_c, σ), singleSSub(τ_b, σ))
    end
 end
 

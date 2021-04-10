@@ -133,13 +133,14 @@ end;
         end
     =#
 
-    t = flet(:sloop, [Integer], lam([(:x, Integer)], tlet([(:x, Any)], loop(iter(sng(1), sng(1), sng(10)), tup(DMTerm[var(:x, Any)]), lam([(:i, Int64), (Symbol("##caps#257"), Any)], tlet([(:x, Any)], var(Symbol("##caps#257"), Any), slet((:x, Any), op(:+, DMTerm[var(:x, Any), var(:x, Any)]), tup([var(:x, Any)]))))), var(:x, Any))), var(:sloop, Any))
+    t = flet(:sloop, DataType[Integer], lam(Tuple{Symbol, DataType}[(:x, Integer)], tlet(Tuple{Symbol, DataType}[(:x, Any)], loop(iter(sng(1), sng(1), sng(10)), tup(DMTerm[var(:x, Any)]), (:i, Symbol("##caps#258")), tlet(Tuple{Symbol, DataType}[(:x, Any)], var(Symbol("##caps#258"), Any), slet((:x, Any), op(:+, DMTerm[var(:x, Any), var(:x, Any)]), tup(DMTerm[var(:x, Any)])))), var(:x, Any))), var(:sloop, Any))
 
     τ = Arr([(1024.0, DMInt())], DMInt())
     @test isequal(infer_sensitivity(t), τ)
 end;
 
 @testset "loop" begin
+    ∞ = DiffPrivacyInference.∞
     #=
     julia function
         function uloop(x::Integer, k::Integer)
@@ -149,10 +150,10 @@ end;
             x
         end
     =#
- t = flet(:uloop, [Integer, Integer], lam([(:x, Integer), (:k, Integer)], tlet([(:x, Any), (:k, Any)], loop(iter(sng(1), sng(1), var(:k, Any)), tup([var(:x, Any), var(:k, Any)]), lam([(:i, Int64), (Symbol("##caps#1923"), Any)], tlet([(:x, Any), (:k, Any)], var(Symbol("##caps#1923"), Any), slet((:x, Any), op(:+, [var(:x, Any), sng(1)]), tup([var(:x, Any), var(:k, Any)]))))), var(:x, Any))), var(:uloop, Any))
+    t = flet(:uloop, DataType[Integer, Integer], lam(Tuple{Symbol, DataType}[(:x, Integer), (:k, Integer)], tlet(Tuple{Symbol, DataType}[(:x, Any)], loop(iter(sng(1), sng(1), var(:k, Any)), tup(DMTerm[var(:x, Any)]), (:i, Symbol("##caps#260")), tlet(Tuple{Symbol, DataType}[(:x, Any)], var(Symbol("##caps#260"), Any), slet((:x, Any), op(:+, DMTerm[var(:x, Any), sng(1)]), tup(DMTerm[var(:x, Any)])))), var(:x, Any))), var(:uloop, Any))
 
- τ = Arr([(1, DMInt()), (2, DMInt())], DMInt())
- @test isequal(infer_sensitivity(t), τ)
+    τ = Arr([(1, DMInt()), (∞, DMInt())], DMInt())
+    @test isequal(infer_sensitivity(t), τ)
 end;
 
 

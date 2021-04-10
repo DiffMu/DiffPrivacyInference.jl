@@ -14,6 +14,7 @@ check_term(t::DMTerm) = mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}(), false)
 # expect_priv flags whether we expect the term to be a privacy/"red" term.
 function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_priv::Bool) :: TC#{DMType}
 
+    println("chekcing $t\n")
     result = @match (t, expect_priv) begin
 
         ############################################## these terms can only be sensitivity terms.
@@ -212,7 +213,8 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 # lookup the inferred types and sensitivities of tuple entries and delete them from Σ
                 sτs <- mapM(remove_var, xnames)
                 τs = map(last, sτs)
-                s = maximum(map(first, sτs)) # we allow more than two entries that can have different sensitivity, hence max
+                s = isempty(τs) ? 0 : maximum(map(first, sτs)) # we allow more than two entries that can have different sensitivity, hence max
+                _ = println("checked body $body\ngot $sτs on $xnames\n so s is $s\n")
 
                 # sum tuple context scaled with s and body context
                 (_, τtu) <- msum(mreturn(τb), check_tup(tu, s))
@@ -227,12 +229,12 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
         (tup(ts), false) => let
             @mdo TC begin
                 # just check each entry and sum
-                τs <- msum(mapM(a -> mcheck_sens(a, scope, false), ts))
-                return DMTup(τs...)
+                τs <- msum(map(a -> mcheck_sens(a, scope, false), ts))
+                return DMTup(τs)
             end
         end
 
-        (loop(it, cs, b), false) => let
+        (loop(it, cs, xs, b), false) => let
 
             # compute number of iteration steps
             niter = @match it begin
@@ -240,28 +242,47 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 _ => error("first argument of loop must be an iter term")
             end;
 
-            # check ta, scale with s.
-            function check_arg((ta, s)::Tuple{DMTerm, <:Sensitivity}) :: TC
-                @mdo TC begin
-                    τ <- mcheck_sens(ta, scope, false)
-                    _ <- mscale(s)
-                    return τ
-                end
+            miter = @mdo TC begin
+                τ <- mcheck_sens(niter, scope, false)
+                s <- add_svar("n_iter_")
+                _ <- mscale(s)
+                return (τ, s)
+            end
+
+            mcaps = @mdo TC begin
+                τ <- mcheck_sens(cs, scope, false)
+                s <- add_svar("caps_")
+                _ <- mscale(s)
+                _ = println("checked caps:\n")
+                _ <- mprint()
+                return (τ, s)
+            end
+
+            newscope = deepcopy(scope)
+            # we use arg because we need to infer their sensitivity in the body to make the right scale
+            for x in xs
+                newscope[x] = [arg(x,Any)]
+            end
+
+            mbody = @mdo TC begin
+                τ <- mcheck_sens(b, newscope, false)
+                s <- add_svar("lbody_")
+                vs <- mapM(remove_var, xs)
+                _ <- mscale(s)
+                return (τ, s, vs)
             end
 
             @mdo TC begin
-                # add the correct typeop. we need one as we can only later decide whether its static or unbounded iteration
-                (τ_res, τs, sv) <- add_op(:loop)
-
                 # check number of iterations, captures, and body term.
-                (τ_iter, τ_caps, τ_b) <- msum(map(check_arg, zip([niter, cs, b], sv)))
+                ((τ_iter, s_iter), (τ_caps, s_caps), (τ_b, s_b, vs)) <- msum(miter, mcaps, mbody)
+                ((_,τ_biter), (s, τ_bcaps)) = vs # sensitivities and types of body iput iteration index and captures
 
-                # match with typeop results.
-                _ <- unify(τ_iter, τs[1])
-                _ <- subtype_of(τ_caps, τs[2])
-                _ <- unify(τ_b, τs[3])
+                _ <- add_Cs([isSubtypeOf(τ_iter, τ_biter), # number of iterations must match typer equested by body
+                             isSubtypeOf(τ_caps, τ_bcaps), # capture type must match type requested by body
+                             isSubtypeOf(τ_b, τ_bcaps), # body output type must match body capture input type
+                             isLoopResult((s_iter, s_caps, s_b), s, τ_iter)]) # compute the right scalars once we know if τ_iter is const or not.
 
-                return τ_res
+                return τ_b
             end
         end;
 
@@ -355,6 +376,10 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
         (gauss(ps, f), false) => let
 
+            # this is different from the paper. we assume gauss takes a sensitivity function with required sensitivity
+            # and returns a privacy function with requested privacy. the privacy is in all arguments of the input function,
+            # which gives a way to choose wht x1...xn from the paper.
+
             (r, ϵ, δ) = ps
 
             # check tt and set it to be a subtype of some Const Real.
@@ -372,15 +397,78 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 xs, ts, τ_fret = @match τ_f begin
                     Arr(xts, τ_fret) => (map(first, xts), map(last, xts), τ_fret)
                 end
-                #(τ_res, τs, _) <- add_op(:gaussian_mechanism) # we have one gauss for matrices and numbers, so we need an op
                 τ_gauss <- add_type(T -> add_new_type(T, :gauss_res_))
 
-                _ <- add_Cs(Constr[isGaussResult(τ_gauss, τ_fret)])
+                _ <- add_Cs(Constr[isGaussResult(τ_gauss, τ_fret)]) # we decide later if it's gauss or matrix gauss
                 (rv, ϵv, δv) <- mapM(set_type_sng, (r,ϵ,δ)) # all parameters have to be const real
                 _ <- add_Cs(Constr[isLessOrEqual(s, rv) for s in xs]) # all sensitivities of f have to be bounded by rv
-                return ArrStar([((ϵv,δv), t) for t in ts], τ_gauss) # returns a real
+                return ArrStar([((ϵv,δv), t) for t in ts], τ_gauss)
             end
         end;
+
+        (ploop(it, cs, vs, xs, b), true) => let
+
+            # compute number of iteration steps
+            niter = @match it begin
+                iter(f, s, l) => op(:ceil, [op(:/, [op(:-, [l, op(:-, [f, sng(1)])]), s])])
+                _ => error("first argument of loop must be an iter term")
+            end;
+
+            miter = @mdo TC begin
+                τ <- mcheck_sens(niter, scope, false)
+                _ <- mtruncate((0,0))
+                return τ
+            end
+
+            mcap = @mdo TC begin
+                τ <- mcheck_sens(cs, scope, false)
+                _ <- mtruncate((∞,∞))
+                return τ
+            end
+
+            newscope = deepcopy(scope)
+            # we use arg because we need to infer their sensitivity in the body to make the right scale
+            for x in vs
+                newscope[x] = [arg(x,Any)]
+            end
+
+            mbody = @mdo TC begin
+                # check the body, lookup the privacies of the xs and truncate to ∞
+                τ_b <- mcheck_sens(b, newscope, true)
+                _ <- mapM(remove_var, vs) #TODO do something?
+                ps <- mapM(lookup_var_sens, xs)
+                _ <- mtruncate((∞,∞))
+
+                # compute maximal privacy value in the xs of interest
+                ϵ = maximum([first(p) for p in ps if !isnothing(p)])
+                δ = maximum([last(p) for p in ps if !isnothing(p)])
+
+                n <- add_svar("n_iter_") # a variable for the number of iterations
+                δn <- add_svar("comp_del_") # we can choose this!
+
+                # compute the new privacy for the xs according to the advanced composition theorem
+                newp = (2*ϵ*sqrt(2*n*log(1/δn)), δn+n*δ)
+
+                # set the xs' privacy accordingly
+                τs <- mapM(lookup_var_type, xs)
+                _ <- mapM(((x,τ),) -> set_var(x,newp,τ), collect(zip(xs,τs)))
+
+                return (τ_b, n) # return body return type an n as we we'll need it later
+            end
+
+            @mdo TC begin
+
+                # check number of iterations, captures and body term, then sum.
+                (τ_iter,τ_caps,(τ_b,n)) <- msum(miter, mcap, mbody)
+
+                _ <- unify(τ_iter, Constant(DMInt(), n)) # number of iterations must be constant n
+
+                _ <- add_Cs(Constr[isSubtypeOf(τ_b, τ_caps)]) # set correct body type
+
+                return τ_caps
+            end
+        end;
+
 
         (apply(f, args), true) => let
 

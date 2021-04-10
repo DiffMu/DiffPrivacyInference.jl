@@ -46,6 +46,7 @@ INF_RULES = [
  @acrule ∞ * ∞ => ∞
  @acrule ~x::(x -> x isa Number && iszero(x)) * ∞ => 0
  @acrule ~x::(x -> x isa Number && !iszero(x)) * ∞ => ∞
+ @acrule max(∞, ~x) => ∞
 ]
 
 rw = SymbolicUtils.Chain([SymbolicUtils.default_simplifier(), SymbolicUtils.Postwalk(SymbolicUtils.Chain(INF_RULES))])
