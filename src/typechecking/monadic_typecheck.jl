@@ -14,7 +14,7 @@ check_term(t::DMTerm) = mcheck_sens(t, Dict{Symbol, Vector{DMTerm}}(), false)
 # expect_priv flags whether we expect the term to be a privacy/"red" term.
 function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_priv::Bool) :: TC#{DMType}
 
-    println("chekcing $t\n")
+    println("chekcing $t, expecting p $expect_priv\n")
     result = @match (t, expect_priv) begin
 
         ############################################## these terms can only be sensitivity terms.
@@ -32,10 +32,10 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             add_type(make_type)
         end;
 
-        (arg(x, dτ), false) => let # a special term for function argument variables. those get sensitivity 1, all other variables are var terms
+        (arg(x, dτ, i), false) => let # a special term for function argument variables. those get sensitivity 1, all other variables are var terms
             @mdo TC begin
                 τ <- mcreate_DMType(dτ)
-                τ <- set_var(x, 1, τ) # set sensitivity = 1 and type = τ for x
+                τ <- set_var(x, 1, τ, i) # set sensitivity = 1, type = τ for x and interestingness to i.
                 return τ
             end
         end;
@@ -115,16 +115,16 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
             scope = deepcopy(scope)
 
-            for (x,τ) in xτs
+            for ((x,τ),i) in xτs
                 # put a special term to mark x as a function argument. those get special tratment
                 # because we're interested in their sensitivity
-                scope[x] = [arg(x,τ)]
+                scope[x] = [arg(x,τ,i)]
             end
 
             # check body in privacy mode.
             @mdo TC begin
                 τr <- mcheck_sens(body, scope, true) # check body to obtain lambda return type.
-                xrτs <- get_arglist(xτs) # argument variable types and sensitivities inferred from body
+                xrτs <- get_arglist(map(first,xτs)) # argument variable types and sensitivities inferred from body
                 _ <- mtruncate(∞)
                 return ArrStar(xrτs, τr)
             end
@@ -212,7 +212,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
 
                 # lookup the inferred types and sensitivities of tuple entries and delete them from Σ
                 sτs <- mapM(remove_var, xnames)
-                τs = map(last, sτs)
+                τs = map(x->x[2], sτs)
                 s = isempty(τs) ? 0 : maximum(map(first, sτs)) # we allow more than two entries that can have different sensitivity, hence max
                 _ = println("checked body $body\ngot $sτs on $xnames\n so s is $s\n")
 
@@ -317,9 +317,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end
 
-        ############################################## these can be privacy _or_ sensitivity terms
-
-        (slet((v, dτ), t, b), _) => let
+        (slet((v, dτ), t, b), false) => let
 
             # TODO this requires saving the annotation in the dict.
             @assert dτ == Any "Type annotations on variables not yet supported."
@@ -330,6 +328,30 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             present ? push!(scope[v], t) : scope[v] = [t]
 
             return mcheck_sens(b, scope, expect_priv) # check body, this will put the seinsitivity it has in the arguments in the monad context.
+        end;
+
+        ############################################## these can be privacy _or_ sensitivity terms
+
+
+        (slet((v, dτ), t, b), true) => let # this is the bind rule, actually.
+
+            # TODO this requires saving the annotation in the dict.
+            @assert dτ == Any "Type annotations on variables not yet supported."
+
+            # add an arg term for v, we don't really care for it's sensitivity bu it can be used as a sensitivity term. 
+            newscope = deepcopy(scope)
+            newscope[v] = [arg(v,Any)]
+
+            mbody = @mdo TC begin
+                τ_b <- mcheck_sens(b, newscope, true)
+                _ <- remove_var(v)
+                return τ_b
+            end
+
+            @mdo TC begin
+                (τ_b, _) <- msum(mbody, mcheck_sens(t, scope, true))
+                return τ_b
+            end
         end;
 
         (flet(f, s, l, b), _) => let
@@ -406,7 +428,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
             end
         end;
 
-        (ploop(it, cs, vs, xs, b), true) => let
+        (loop(it, cs, vs, b), true) => let
 
             # compute number of iteration steps
             niter = @match it begin
@@ -414,45 +436,54 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 _ => error("first argument of loop must be an iter term")
             end;
 
+            # check #iterations term
             miter = @mdo TC begin
                 τ <- mcheck_sens(niter, scope, false)
                 _ <- mtruncate((0,0))
                 return τ
             end
 
+            # check capture variable term
             mcap = @mdo TC begin
                 τ <- mcheck_sens(cs, scope, false)
                 _ <- mtruncate((∞,∞))
                 return τ
             end
 
+            # add the iteration and capture variables to the scope
+            # their inferred privacy does not really matter, they just have to be there. 
             newscope = deepcopy(scope)
-            # we use arg because we need to infer their sensitivity in the body to make the right scale
             for x in vs
                 newscope[x] = [arg(x,Any)]
+            end
+
+            # given a list of interesting variables and their annotations, as well as the number of iterations,
+            # compute the composite privacy and set it in the context.
+            function set_interesting((xs,ps,τs)::Tuple{Vector{Symbol}, Vector, Vector{DMType}}, n::Sensitivity) :: TC
+                @mdo TC begin
+                    # compute maximal privacy value in the xs of interest
+                    ϵ = maximum([first(p) for p in ps])
+                    δ = maximum([last(p) for p in ps])
+
+                    δn <- add_svar("comp_del_") # we can choose this!
+
+                    # compute the new privacy for the xs according to the advanced composition theorem
+                    newp = (2*ϵ*sqrt(2*n*log(1/δn)), δn+n*δ)
+
+                    # set the xs' privacy accordingly
+                    _ <- mapM(((x,τ),) -> set_var(x,newp,τ), collect(zip(xs,τs)))
+                    return ()
+                end
             end
 
             mbody = @mdo TC begin
                 # check the body, lookup the privacies of the xs and truncate to ∞
                 τ_b <- mcheck_sens(b, newscope, true)
                 _ <- mapM(remove_var, vs) #TODO do something?
-                ps <- mapM(lookup_var_sens, xs)
+                (xs, ps, τs) <- get_interesting() # get all variables & their annotations that have an "interesting" tag
                 _ <- mtruncate((∞,∞))
-
-                # compute maximal privacy value in the xs of interest
-                ϵ = maximum([first(p) for p in ps if !isnothing(p)])
-                δ = maximum([last(p) for p in ps if !isnothing(p)])
-
                 n <- add_svar("n_iter_") # a variable for the number of iterations
-                δn <- add_svar("comp_del_") # we can choose this!
-
-                # compute the new privacy for the xs according to the advanced composition theorem
-                newp = (2*ϵ*sqrt(2*n*log(1/δn)), δn+n*δ)
-
-                # set the xs' privacy accordingly
-                τs <- mapM(lookup_var_type, xs)
-                _ <- mapM(((x,τ),) -> set_var(x,newp,τ), collect(zip(xs,τs)))
-
+                _ <- (isempty(xs) ? mreturn(nothing) : set_interesting((xs, ps, τs), n))
                 return (τ_b, n) # return body return type an n as we we'll need it later
             end
 

@@ -104,12 +104,19 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     end
                     vs = Symbol[]
                     ts = DataType[]
+                    is = Bool[]
                     for a in head.args[2:end]
                         if a isa Symbol
                             push!(vs, a)
                             push!(ts, Any)
                         elseif a isa Expr && a.head == :(::)
                             s, T = a.args
+                            if T isa Expr && T.head == :call && T.args[1] == :NoData
+                                interesting = false
+                            else
+                                interesting = true
+                            end
+                            is = [is; interesting]
                             Tt = eval(T)
                             if !type_allowed(Tt)
                                 error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of function $head, $(ln.file) line $(ln.line)")
@@ -123,7 +130,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     end
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
-                    return flet(name, ts, constr(collect(zip(vs, ts)), exprs_to_dmterm(body, ln, newscope)), tailex)
+                    argvec = constr==lam_star ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
+                    println("argvec $argvec, constr = $lam_star")
+                    return flet(name, ts, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
 
                 elseif ex_head == :(=)
                     ase, asd = ex.args
@@ -267,19 +276,34 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     # don't mind functions, inside loops it's forbidden to assign them anyways
                     caps = filter(s->s isa Symbol && s != i, intersect(A, collect_assignments(lbody)))
 
-                    # TODO we're actually parsing this twice that's not acceptable really
-                    body = Expr(:block, body.args[1:end-1]..., Expr(:dtuple, caps...))
-                    lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
+                    if length(caps) == 1
+                        cap = caps[1]
+                        # TODO we're actually parsing this twice that's not acceptable really
+                        body = Expr(:block, body.args[1:end-1]..., cap)
+                        lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
 
-                    # body lambda maps captures  to body
-                    cname = gensym("caps")
-                    captasgmts = [(c, Any) for c in caps]
-                    llam = tlet(captasgmts, var(cname, Any), lbody)
+                        # body lambda maps captures  to body
+                        cname = gensym("caps")
+                        llam = slet((cap, Any), var(cname, Any), lbody)
 
-                    lloop = loop(lit, tup(map(v->var(v...), captasgmts)), (i, cname), llam)
+                        lloop = loop(lit, var(cap, Any), (i, cname), llam)
 
-                    return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
+                        return slet((cap, Any), lloop, exprs_to_dmterm(tail, ln, scope))
+                    else
 
+                        # TODO we're actually parsing this twice that's not acceptable really
+                        body = Expr(:block, body.args[1:end-1]..., Expr(:dtuple, caps...))
+                        lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
+
+                        # body lambda maps captures  to body
+                        cname = gensym("caps")
+                        captasgmts = [(c, Any) for c in caps]
+                        llam = tlet(captasgmts, var(cname, Any), lbody)
+
+                        lloop = loop(lit, tup(map(v->var(v...), captasgmts)), (i, cname), llam)
+
+                        return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
+                    end
                     #=
                     if iter isa Expr && iter.head == :vect
                         #TODO this comes at high cost! vector refs are expensive :(

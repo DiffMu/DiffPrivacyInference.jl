@@ -270,11 +270,11 @@ add_nvar() = add_var(SymbolicUtils.Sym{Norm},"norm_")
 add_cvar() = add_var(SymbolicUtils.Sym{Clip},"clip_")
 
 "Set annotation of `x` to `s` and type to `τ`."
-function set_var(x::Symbol, s::Annotation, τ::DMType) :: TC#{DMType}
+function set_var(x::Symbol, s::Annotation, τ::DMType, i=true) :: TC#{DMType}
     function mconstr(S,T,C,Σ) :: MType{DMType}
         Σ = deepcopy(Σ)
         # x gets annotation s type τ
-        Σ[x] = (s,τ)
+        Σ[x] = (s,τ,i)
         (S,T,C,Σ), τ
     end
     TC(mconstr)
@@ -286,11 +286,11 @@ function set_annotation(x::Symbol, s::Annotation) :: TC#{DMType}
         Σ = deepcopy(Σ)
         # x gets annotation s type τ
         if haskey(Σ, x)
-            (_, τ) = Σ[x]
+            (_, τ, i) = Σ[x]
         else
             T,τ = make_type(T)
         end
-        Σ[x] = (s,τ)
+        Σ[x] = (s,τ,i)
         (S,T,C,Σ), τ
     end
     TC(mconstr)
@@ -298,14 +298,14 @@ end
 
 
 
-"Delete `x` from the current context and return it's former sensitivity and type."
+"Delete `x` from the current context and return it's former annotation and type."
 function remove_var(x::Symbol) :: TC
-    function mconstr(S,T,C,Σ) :: MType{Tuple{Sensitivity, DMType}}
+    function mconstr(S,T,C,Σ) :: MType{Tuple{Annotation, DMType, Bool}}
         if haskey(Σ,x)
             r = Σ[x]
         else
             T, τ = add_new_type(T,:unused_)
-            r = (0, τ)
+            r = (0, τ, true)
         end
         (S,T,C,delete!(deepcopy(Σ), x)), r
     end
@@ -318,6 +318,20 @@ lookup_var_sens(x::Symbol) = TC((S,T,C,Σ) -> ((S,T,C,Σ), haskey(Σ,x) ? Σ[x][
 "Return variable `x`'s current type."
 lookup_var_type(x::Symbol) = TC((S,T,C,Σ) -> ((S,T,C,Σ), haskey(Σ,x) ? Σ[x][2] : nothing))
 
+function get_interesting() :: TC
+    function mconstr(S,T,C,Σ) :: MType{Tuple{Vector{Symbol},Vector{Annotation}, Vector{DMType}}}
+        names, annotations, types = ([], [], [])
+        for (x, (a, τ, i)) in Σ
+            if i
+                names = [names; x]
+                annotations = [annotations; a]
+                types = [types; τ]
+            end
+        end
+        return (S,T,C,Σ), (names, annotations, types)
+    end
+    TC(mconstr)
+end
 
 """
     get_arglist(xτs::Vector{<:TAsgmt}) :: TC
@@ -333,11 +347,11 @@ function get_arglist(xτs::Vector{<:TAsgmt}) :: TC#{Vect{Sens x DMType}}
         function make_type(dτ::DataType)
             # if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
             τx, S, T, C = create_DMType(dτ, S, T, C)
-            (zero(Σ), τx) # set variable sensitivity/privacy to zero
+            (zero(Σ), τx) # set variable sensitivity/privacy to zero and interestingness to false
         end
 
         Σ = deepcopy(Σ)
-        nxτs = [haskey(Σ, x) ? Σ[x] : make_type(τx) for (x,τx) in xτs]
+        nxτs = [haskey(Σ, x) ? Σ[x][1:2] : make_type(τx) for (x,τx) in xτs]
         for (x,_) in xτs
             if haskey(Σ,x)
                 delete!(Σ, x)

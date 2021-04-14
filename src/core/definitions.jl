@@ -361,22 +361,16 @@ end
 # we have different kinds of contexts, used in different situations.
 
 "A simple context, assigning to a variable a type."
-TypeContext = Dict{Symbol, DMType}
+TCtx = Dict{Symbol, DMType}
 
 "A privacy context assigns not only a type, but also a privacy term to every variable."
-PrivacyContext = Dict{Symbol, Tuple{Privacy, DMType}}
+PCtx = Dict{Symbol, Tuple{Privacy, DMType, Bool}}
 
 "A sensitivity context assigns not only a type, but also a sensitivity term to every variable."
-SensitivityContext = Dict{Symbol, Tuple{Sensitivity, DMType}}
+SCtx = Dict{Symbol, Tuple{Sensitivity, DMType, Bool}}
 
 "Usually, a context is either a privacy-, or a sensitivity context."
-Context = Union{PrivacyContext, SensitivityContext}
-
-# Abbreviations for contexts.
-PCtx = PrivacyContext
-SCtx = SensitivityContext
-TCtx = TypeContext
-
+Context = Union{PCtx, SCtx}
 
 zero(::SCtx) = 0
 zero(::PCtx) = (0,0)
@@ -393,7 +387,7 @@ An element of type `Full`, i.e., a 'full context' is a combination of all of the
 
 Note: we accept different kinds of contexts here, the one intended is stated in curly braces after `Full`.
 
-See also: [`TypeContext`](@ref), [`PrivacyContext`](@ref), [`SensitivityContext`](@ref)
+See also: [`TypeContext`](@ref), [`PCtx`](@ref), [`SCtx`](@ref)
 """
 const Full = Tuple{SVarCtx,TVarCtx,Constraints,A} where {A}
 
