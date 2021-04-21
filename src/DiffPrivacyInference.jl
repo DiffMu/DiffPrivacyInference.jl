@@ -26,6 +26,7 @@ include("typechecking/monadic_simplify.jl")
 include("typechecking/monadic_typecheck.jl")
 include("typechecking/lose_generality.jl")
 
+include("ffi/haskell_interface.jl")
 
 include("public/public.jl")
 
@@ -45,5 +46,7 @@ export gaussian_mechanism, clip
 export string_to_dmterm, file_to_dmterm, evaluate
 export infer_sensitivity, infer_sensitivity_from_string, infer_sensitivity_from_file, Priv
 export pretty_print
+
+export typecheck_hs
 
 end # module
