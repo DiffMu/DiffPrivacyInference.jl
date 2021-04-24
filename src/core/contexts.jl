@@ -58,26 +58,6 @@ function add_TypeOp((S,T,C) :: Tuple{SVarCtx,TVarCtx,Constraints}, op :: DMTypeO
 
             (S, T, C), TVar(tvar), [symbols(svar1), symbols(svar2)]
         end;
-        Ternary(_, τ_n, τ_c, τ_b) => let
-            # extract return type
-            #TODO unify with capture type(s)?
-            τ_ret = @match τ_b begin
-                Arr(_, τ) => τ
-                _ => error("loop body type $τ_b must be an arrow")
-            end
-
-            # create variables for context coefficients
-            (S, s_n) = addNewName(S, name_prefix(τ_n))
-            (S, s_c) = addNewName(S, name_prefix(τ_c))
-            (S, s_b) = addNewName(S, :loop_ret_)
-
-            # add a constraint so we can later decide whether it's a loop or an sloop
-            C = [C;
-                 isTypeOpResult([symbols(s_n), symbols(s_c), symbols(s_b)], TVar(τ_ret), Ternary(DMOpLoop(), τ_n, τ_c, τ_b));
-                 isNumeric(τ_n)]
-
-            (S, T, C), τ_ret, [symbols(s_n), symbols(s_c), symbols(s_b)]
-        end;
     end
 end
 
@@ -93,17 +73,19 @@ of the variables present in both contexts.
 """
 function merge_contexts(combine::Function, S::SVarCtx, T::TVarCtx, C::Constraints, Σ1::A, Σ2::A) :: Full{A} where {A<:Context}
     Σ = deepcopy(Σ1)
-    for (v, (s, τ)) in Σ2
+    for (v, (s, τ, int)) in Σ2
         if haskey(Σ1, v)
-            sa = simplify_sensitivity(combine(s, Σ1[v][1]))
+            @assert Σ1[v][3] == int "Trying to unify variables with different interestingness?"
+            println("combining $s and $(Σ1[v][1])")
+            sa = s isa Sensitivity ? simplify_sensitivity(combine(s, Σ1[v][1])) : simplify_sensitivity.(combine(s, Σ1[v][1]))
             # if the contexts disagree on the type of v, unify.
             if haskey(Σ, v)
                 τ, Cu = unify_nosubs(Σ1[v][2], τ)
                 C = [C; Cu]
             end
-            Σ[v] = (sa, τ)
+            Σ[v] = (sa, τ, int)
         else
-            Σ[v] = (s, τ)
+            Σ[v] = (s, τ, int)
         end
     end
     (S, T, C, Σ)
@@ -121,13 +103,13 @@ function merge_contexts(combine::Function, S::SVarCtx, T::TVarCtx, C::Constraint
 end
 
 "Add all `Σs`, unifying types of variables where the contexts disagree of the type."
-add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:SensitivityContext} = merge_contexts(+, S, T, C, [Σs...])
-add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:PrivacyContext} = merge_contexts((p,q)->p.+q, S, T, C, [Σs...])
+add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:SCtx} = merge_contexts(+, S, T, C, [Σs...])
+add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs::A...) where {A<:PCtx} = merge_contexts((p,q)->p.+q, S, T, C, [Σs...])
 
 add(S::SVarCtx, T::TVarCtx, C::Constraints, Σs...) = error("trying to add contexts of different types!")
 
 "Scale all sensitivities in `Σ` by `r`."
-scale(r::STerm, Σ::SensitivityContext) = SensitivityContext(v => (r*s, t) for (v,(s,t)) in Σ)
+scale(r::STerm, Σ::SCtx) = SCtx(v => (r*s, t, i) for (v,(s,t,i)) in Σ)
 
 maxannotation(a1::Privacy, a2::Privacy) = (max(a1[1],a2[1]), max(a1[2],a2[2]))
 maxannotation(a1::Sensitivity, a2::Sensitivity) = max(a1, a2)
@@ -140,9 +122,9 @@ zeroa(T::Type) = T <: Sensitivity ? 0 : (0,0)
 truncate(s1::A1, s2::A2) where {A1<:Annotation,A2<:Annotation} = isequal(s1, zeroa(A1)) ? zeroa(A2) : s2
 
 # this is denoted ⌉c⌈^s in the paper
-# if applied eg to SensitivityContext and a Privacy, this changes colour of the context!
-truncate(c::Context, p::Privacy) = PrivacyContext(v => (truncate(p1, p), t) for (v,(p1,t)) in c)
-truncate(c::Context, s::Sensitivity) = SensitivityContext(v => (truncate(s1, s), t) for (v,(s1,t)) in c)
+# if applied eg to SCtx and a Privacy, this changes colour of the context!
+truncate(c::Context, p::Privacy) = PCtx(v => (truncate(p1, p), t, i) for (v,(p1,t,i)) in c)
+truncate(c::Context, s::Sensitivity) = SCtx(v => (truncate(s1, s), t, i) for (v,(s1,t,i)) in c)
 
 # this is denoted ⌊c⌋_{vars} in the paper
 restrict(c::C, vars::Vector{Symbol}) where {C<:Context} = C(v => c[v] for v in vars)

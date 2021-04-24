@@ -24,7 +24,7 @@
     @test isequal(infer_sensitivity(treal), τreal)
 
     tnum =  lam(Tuple{Symbol,DataType}[(:i, Number)], flet(:f, DataType[Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Integer), (:c, Any)], op(:*, DMTerm[sng(1), var(:x, Any)])), flet(:f, DataType[Number, Any], lam(Tuple{Symbol,DataType}[(:x, Number), (:c, Any)], op(:*, DMTerm[sng(2), var(:x, Any)])), flet(:f, DataType[Real, Any], lam(Tuple{Symbol,DataType}[(:x, Real), (:c, Any)], op(:*, DMTerm[sng(3), var(:x, Any)])), apply(var(:f, Any), DMTerm[var(:i, Any), sng(1)])))))
-    τnum = Arr([(DiffPrivacyInference.symbols(:sens_0), TVar(:num_0))], TVar(:ret20))
+    τnum = Arr([(DiffPrivacyInference.symbols(:farg_s_0), TVar(:num_0))], TVar(:ret20))
     @test isequal(infer_sensitivity(tnum), τnum)
 
 end;
@@ -37,7 +37,7 @@ end;
     # julia: arith(w,x,y,z) = 3*(x+y) - z*ceil(x) + ceil(y) % 4 - 3/x + w/3
     t = flet(:arith, DataType[Any, Any, Any, Any], lam(Tuple{Symbol,DataType}[(:w, Any), (:x, Any), (:y, Any), (:z, Any)], op(:+, DMTerm[op(:-, DMTerm[op(:+, DMTerm[op(:-, DMTerm[op(:*, DMTerm[sng(3), op(:+, DMTerm[var(:x, Any), var(:y, Any)])]), op(:*, DMTerm[var(:z, Any), op(:ceil, DMTerm[var(:x, Any)])])]), op(:rem, DMTerm[op(:ceil, DMTerm[var(:y, Any)]), sng(4)])]), op(:/, DMTerm[sng(3), var(:x, Any)])]), op(:/, DMTerm[var(:w, Any), sng(3)])])), var(:arith, Any))
 
-    τ = Arr([(0.3333333333333333, TVar(:op_arg_43)), (∞, TVar(:op_arg_39)), (7, TVar(:op_arg_34)), (∞, TVar(:op_arg_22))], DMReal())
+    τ = Arr([(0.3333333333333333, TVar(Symbol("op/1_arg_43"))), (∞, TVar(Symbol("op/2_arg_39"))), (7, TVar(Symbol("opceil1_arg_34"))), (∞, TVar(Symbol("op*1_arg_22")))], DMReal())
     @test isequal(infer_sensitivity(t), τ)
 end;
 
@@ -58,7 +58,7 @@ end;
 
     t = flet(:scope, DataType[Any], lam(Tuple{Symbol,DataType}[(:y, Any)], slet((:v, Any), sng(100), slet((:x, Any), op(:*, DMTerm[sng(10), var(:v, Any)]), slet((:v, Any), op(:*, DMTerm[sng(100), var(:y, Any)]), slet((:v, Any), op(:+, DMTerm[var(:v, Any), var(:v, Any)]), var(:v, Any)))))), var(:scope, Any))
 
-    τ = Arr([(200, TVar(:op_arg_10))], TVar(:sup_17))
+    τ = Arr([(200, TVar(Symbol("op*2_arg_10")))], TVar(:sup_18))
     @test isequal(infer_sensitivity(t), τ)
 end;
 
@@ -95,7 +95,7 @@ end;
 
     t = flet(:higherorder, DataType[Any], lam(Tuple{Symbol,DataType}[(:x, Any)], flet(:f, DataType[Any], lam(Tuple{Symbol,DataType}[(:k, Any)], op(:*, DMTerm[var(:k, Any), var(:x, Any)])), flet(:g, DataType[Any], lam(Tuple{Symbol,DataType}[(:f1, Any)], op(:*, DMTerm[sng(2), apply(var(:f1, Any), DMTerm[sng(100)])])), flet(:h, DataType[Any], lam(Tuple{Symbol,DataType}[(:g1, Any)], op(:*, DMTerm[sng(2), apply(var(:g1, Any), DMTerm[var(:f, Any)])])), apply(var(:h, Any), DMTerm[var(:g, Any)]))))), var(:higherorder, Any))
 
-    τ = Arr([(400,TVar(:op_arg_11))], TVar(:ret22))
+    τ = Arr([(400,TVar(Symbol("op*2_arg_11")))], TVar(:ret22))
     @test isequal(infer_sensitivity(t), τ)
 end;
 
@@ -118,9 +118,44 @@ end;
 
     t = flet(:ifelse, DataType[Any, Integer, Any], lam(Tuple{Symbol,DataType}[(:x, Any), (:y, Integer), (:z, Any)], slet((:xx, Any), op(:*, DMTerm[sng(3), var(:y, Any)]), flet(:f, DataType[Any], lam(Tuple{Symbol,DataType}[(:k, Any)], op(:+, DMTerm[op(:*, DMTerm[sng(2), var(:x, Any)]), var(:z, Any)])), phi(op(:(==), DMTerm[apply(var(:f, Any), DMTerm[var(:y, Any)]), sng(1)]), var(:xx, Any), phi(op(:(==), DMTerm[var(:z, Any), sng(5)]), sng(3), var(:xx, Any)))))), var(:ifelse, Any))
 
-    τ = Arr([(∞, TVar(:op_arg_8)), (6, DMInt()), (∞, TVar(:op_arg_5))], DMInt())
+    τ = Arr([(∞, TVar(Symbol("op*2_arg_8"))), (6, DMInt()), (∞, TVar(Symbol("op+2_arg_5")))], DMInt())
     @test isequal(infer_sensitivity(t), τ)
 end;
+
+@testset "sloop" begin
+    #=
+    julia function:
+        function sloop(x::Integer)
+            for i in 1:10
+                x += x
+            end
+            x
+        end
+    =#
+
+    t = flet(:sloop, DataType[Integer], lam(Tuple{Symbol, DataType}[(:x, Integer)], tlet(Tuple{Symbol, DataType}[(:x, Any)], loop(iter(sng(1), sng(1), sng(10)), tup(DMTerm[var(:x, Any)]), (:i, Symbol("##caps#258")), tlet(Tuple{Symbol, DataType}[(:x, Any)], var(Symbol("##caps#258"), Any), slet((:x, Any), op(:+, DMTerm[var(:x, Any), var(:x, Any)]), tup(DMTerm[var(:x, Any)])))), var(:x, Any))), var(:sloop, Any))
+
+    τ = Arr([(1024.0, DMInt())], DMInt())
+    @test isequal(infer_sensitivity(t), τ)
+end;
+
+@testset "loop" begin
+    ∞ = DiffPrivacyInference.∞
+    #=
+    julia function
+        function uloop(x::Integer, k::Integer)
+            for i in 1:k
+                x += 1
+            end
+            x
+        end
+    =#
+    t = flet(:uloop, DataType[Integer, Integer], lam(Tuple{Symbol, DataType}[(:x, Integer), (:k, Integer)], tlet(Tuple{Symbol, DataType}[(:x, Any)], loop(iter(sng(1), sng(1), var(:k, Any)), tup(DMTerm[var(:x, Any)]), (:i, Symbol("##caps#260")), tlet(Tuple{Symbol, DataType}[(:x, Any)], var(Symbol("##caps#260"), Any), slet((:x, Any), op(:+, DMTerm[var(:x, Any), sng(1)]), tup(DMTerm[var(:x, Any)])))), var(:x, Any))), var(:uloop, Any))
+
+    τ = Arr([(1, DMInt()), (∞, DMInt())], DMInt())
+    @test isequal(infer_sensitivity(t), τ)
+end;
+
 
 @testset "privacy" begin
     t = lam_star(Tuple{Symbol,DataType}[(:z, Any)], apply(gauss((sng(1), sng(2), sng(3)), lam(Tuple{Symbol,DataType}[(:x, Any)], var(:x, Any))), DMTerm[dmclip(L2, mcreate(sng(1), sng(3), (:x, :y), phi(op(:(==), DMTerm[var(:x, Any), sng(1)]), sng(1), phi(op(:(==), DMTerm[var(:x, Any), sng(1.3)]), var(:z, Any), sng(3)))))]))

@@ -139,35 +139,36 @@ function unify_DMType(τ :: DMType, ρ :: DMType) :: Tuple{DMType, Constraints, 
             simpleReturn(DMMatrix(nm,cl,(r,c), T), [co1; co2; co3], [σ1; σ2; σ3])
         end
         (DMTup(X1s), DMTup(X2s)) => let
-            σ, co = [], []
-            τs = []
-            Xs = collect(zip(X1s, X2s))
-            for i in 1:length(X1s)
-                (X1, X2) = Xs[i]
-
+            σ, co = Substitutions(), Constraints()
+            τs = DMType[]
+            for (X1,X2) in zip(X1s, X2s)
                 # unify element types
                 (T, cot, σt) = unify_DMType(X1, X2)
-                push!(τs, T)
-                Xs, τs, co = distribute_substitute((Xs,τs,co), σt)
+                τs = [τs; T]
+                X1s, X2s, τs, co = distribute_substitute((X1s, X2s, τs, co), σt)
                 σ = vcat(σ, σt)
                 co = vcat(co, cot)
             end
             simpleReturn(DMTup(τs), co, σ)
         end
         #=
-        (DMTrtProduct(X1s), DMTrtProduct(X2s)) => let
-        σ, co = [], []
-        for ((η1, X1), (η2, X2)) in zip(X1s, X2s)
-        # unify element types
-        _, _, cot1, σt1 = unify_Sensitivity(η1, η2)
-        X1, X2, X1s, X2s, co = distribute_substitute((X1, X2, X1s, X2s, co), σt1)
+        (DMTup(X1s), DMTup(X2s)) => let
+            σ, co = [], []
+            Xs = DMType[]
+            S = Sensitivity[]
+            for ((η1, X1), (η2, X2)) in zip(X1s, X2s)
+                # unify element types
+                s, cot1, σt1 = unify_Sensitivity(η1, η2)
+                X1, X2, X1s, X2s, co = distribute_substitute((X1, X2, X1s, X2s, co), σt1)
+                push!(S, s)
 
-        (X1, X2, cot2, σt2) = unify_DMType(X1, X2)
-        X1s, X2s, co = distribute_substitute((X1s,X2s,co), σt2)
-        σ = [σ; σt1; σt2]
-        co = [co; cot1; cot2]
-        end
-        (DMTrtProduct(X1s), DMTrtProduct(X2s), co, σ)
+                (X, cot2, σt2) = unify_DMType(X1, X2)
+                push!(Xs, X)
+                X1s, X2s, co = distribute_substitute((X1s,X2s,co), σt2)
+                σ = [σ; σt1; σt2]
+                co = [co; cot1; cot2]
+            end
+            simpleReturn(DMTup(collect(zip(S,Xs))), co, σ)
         end
         =#
         (Arr(X1s,Y1), Arr(X2s,Y2)) =>

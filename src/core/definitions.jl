@@ -124,20 +124,7 @@ function Base.isequal(τ1::DMType, τ2::DMType)
         (_, _) => false;
     end
 end
-####################################################################
-## Substitutions
 
-"A single type substitution, e.g. `(x, τ)` means `x := τ`"
-TSSub = Tuple{Symbol, DMType}
-
-"A single sensitivity substitution, e.g. `(x, η)` means `x := η`"
-SSSub = Tuple{Symbol, STerm}
-
-"A substitution which might be either a type- or a sensitivity substitution."
-AnySSub = Union{SSSub, TSSub}
-
-"A list of multiple substitutions (of any kind)."
-Substitutions = Vector{AnySSub}
 
 ####################################################################
 ## Type Operations
@@ -163,16 +150,10 @@ end
    DMOpEq :: () => DMTypeOps_Binary
 end
 
-# The type of all possible ternary type operations.
-@data DMTypeOps_Ternary begin
-   DMOpLoop :: () => DMTypeOps_Ternary
-end
-
 # An application of a type operation to an appropriate number of type arguments
 @data DMTypeOp begin
    Unary :: (DMTypeOps_Unary, DMType) => DMTypeOp
    Binary :: (DMTypeOps_Binary, DMType, DMType) => DMTypeOp
-   Ternary :: (DMTypeOps_Ternary, DMType, DMType, DMType) => DMTypeOp
 end
 
 ####################################################################
@@ -186,7 +167,7 @@ builtin_ops = Dict(
                    :/ => (2, τs -> Binary(DMOpDiv(), τs...)),
                    :% => (2, τs -> Binary(DMOpMod(), τs...)),
                    :rem => (2, τs -> Binary(DMOpMod(), τs...)),
-                   :(==) => (2, τs -> Binary(DMOpEq(), τs...))
+                   :(==) => (2, τs -> Binary(DMOpEq(), τs...)),
                   )
 
 is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
@@ -219,19 +200,11 @@ function prettyString(op :: DMTypeOps_Binary)
     end
 end
 
-"Pretty printing ternary type operations."
-function prettyString(op :: DMTypeOps_Ternary)
-    @match op begin
-        DMOpLoop() => "loop"
-    end
-end
-
 "Pretty printing applied type operations"
 function showPretty(io::IO, op :: DMTypeOp)
     @match op begin
         Unary(op, arg) => print(io, prettyString(op), "(", arg, ")")
         Binary(op, a1, a2) => print(io, a1, " ", prettyString(op), " ", a2)
-        Ternary(op, a1, a2, a3) => print(io, prettyString(op), "(", a1, ", ", a2, ", ", a3, ")")
     end
 end
 
@@ -268,7 +241,7 @@ SymbolOrType = Union{Symbol, DMType}
     # `isEqual(τ₁, τ₂)` means that the types `τ₁` and `τ₂` should be equal.
     isEqualType :: (DMType, DMType) => Constr
 
-    # `isSubTypeOf(τ₁, τ₂)` means that τ₁ ⊑ τ₂ should hold.
+    # `isSubtypeOf(τ₁, τ₂)` means that τ₁ ⊑ τ₂ should hold.
     isSubtypeOf :: (DMType, DMType) => Constr
 
     # `isSupremumOf(τ₁, τ₂, σ)` means that `sup{τ₁, τ₂} = σ` should hold.
@@ -279,6 +252,9 @@ SymbolOrType = Union{Symbol, DMType}
     isChoice :: (DMType, Dict{<:Vector{<:DataType}, <:Tuple{SymbolicUtils.Sym{Number},DMType}}) => Constr
 
     isGaussResult :: (DMType, DMType) => Constr
+
+    isLoopResult :: (Tuple{Sensitivity, Sensitivity, Sensitivity}, Sensitivity, DMType) => Constr
+
 end
 
 "The type of constraints is simply a list of individual constraints."
@@ -309,6 +285,7 @@ Base.show(io::IO, c::Constr) =
         isEqualType(s1,s2) => print(io, s1, " == ", s2)
         isChoice(τ,cs) => print(io, τ, " is chosen from ", cs)
         isGaussResult(τgauss,τin) => print(io, τgauss, " results from gauss on", τin)
+        isLoopResult((s1,s2,s3),s,τit) => print(io, τit, " loop iterations with sens ", s, " giving scalars ", (s1,s2,s3))
     end
 
 #--- insert
@@ -384,22 +361,16 @@ end
 # we have different kinds of contexts, used in different situations.
 
 "A simple context, assigning to a variable a type."
-TypeContext = Dict{Symbol, DMType}
+TCtx = Dict{Symbol, DMType}
 
 "A privacy context assigns not only a type, but also a privacy term to every variable."
-PrivacyContext = Dict{Symbol, Tuple{Privacy, DMType}}
+PCtx = Dict{Symbol, Tuple{Privacy, DMType, Bool}}
 
 "A sensitivity context assigns not only a type, but also a sensitivity term to every variable."
-SensitivityContext = Dict{Symbol, Tuple{Sensitivity, DMType}}
+SCtx = Dict{Symbol, Tuple{Sensitivity, DMType, Bool}}
 
 "Usually, a context is either a privacy-, or a sensitivity context."
-Context = Union{PrivacyContext, SensitivityContext}
-
-# Abbreviations for contexts.
-PCtx = PrivacyContext
-SCtx = SensitivityContext
-TCtx = TypeContext
-
+Context = Union{PCtx, SCtx}
 
 zero(::SCtx) = 0
 zero(::PCtx) = (0,0)
@@ -416,7 +387,7 @@ An element of type `Full`, i.e., a 'full context' is a combination of all of the
 
 Note: we accept different kinds of contexts here, the one intended is stated in curly braces after `Full`.
 
-See also: [`TypeContext`](@ref), [`PrivacyContext`](@ref), [`SensitivityContext`](@ref)
+See also: [`TypeContext`](@ref), [`PCtx`](@ref), [`SCtx`](@ref)
 """
 const Full = Tuple{SVarCtx,TVarCtx,Constraints,A} where {A}
 

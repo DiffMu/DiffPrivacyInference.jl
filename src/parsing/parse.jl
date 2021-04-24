@@ -61,6 +61,8 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
         ::Number => sng(exs)
         ::Symbol => var(exs, Any)
 
+
+        # an array of Exprs and LineNumberNodes, like encountered as the body of a block.
         ::AbstractArray => let
             @assert !isempty(exs) "empty expression list?"
 
@@ -102,12 +104,19 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     end
                     vs = Symbol[]
                     ts = DataType[]
+                    is = Bool[]
                     for a in head.args[2:end]
                         if a isa Symbol
                             push!(vs, a)
                             push!(ts, Any)
                         elseif a isa Expr && a.head == :(::)
                             s, T = a.args
+                            if T isa Expr && T.head == :call && T.args[1] == :NoData
+                                interesting = false
+                            else
+                                interesting = true
+                            end
+                            is = [is; interesting]
                             Tt = eval(T)
                             if !type_allowed(Tt)
                                 error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of function $head, $(ln.file) line $(ln.line)")
@@ -121,7 +130,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     end
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
-                    return flet(name, ts, constr(collect(zip(vs, ts)), exprs_to_dmterm(body, ln, newscope)), tailex)
+                    argvec = constr==lam_star ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
+                    println("argvec $argvec, constr = $lam_star")
+                    return flet(name, ts, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
 
                 elseif ex_head == :(=)
                     ase, asd = ex.args
@@ -212,7 +223,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     end
 
                     # extract the iterator
-                    if it isa Exp && it.head == :(=)
+                    if it isa Expr && it.head == :(=)
                         i, r = it.args
                         @assert i isa Symbol "expected symbol $i"
                         if r isa Expr && r.head == :call
@@ -234,34 +245,66 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         error("unsupported iteration over $it in $(ln.file) line $(ln.line)")
                     end
 
-                    # don't mind functions, inside loops it's forbidden to assign them anyways
-                    caps = filter(s->s isa Symbol && s != i, A)
-
+                    # a placeholder for the capture tuple, as we don't know yet what is going to be inside it
+                    capst = gensym()
                     # make the body explicitly return the captures
                     if body.head == :block
-                        push!(body.args, Expr(:dtuple, caps...))
+                        push!(body.args, Expr(:dtuple, capst))
                     else
-                        body = Expr(:block, body, Expr(:dtuple, caps...))
+                        body = Expr(:block, body, Expr(:dtuple, capst))
                     end
 
                     # parse loop body
                     # capture iteration variable as it cannot be modified #TODO protect vector elements?
                     lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
 
-                    # body lambda maps captures  to body
-                    cname = gensym("caps")
-                    captasgmts = [(c, Any) for c in caps]
-                    llam = lam([(i, DMDInt()), (cname, Any)], tlet(captasgmts, var(cname, Any), lbody))
+                    # TODO this is pretty expensive. maybe make the parser return the assignees of the current block?
+                    function collect_assignments(t::DMTerm)
+                        @match t begin
+                            slet(x,a,b) => union([first(x)], collect_assignments(a), collect_assignments(b))
+                            tlet(xs,a,b) => union(map(first, xs), collect_assignments(a), collect_assignments(b))
+                            _ => let
+                                targs = map(fld->getfield(t,fld), fieldnames(typeof(t)))
+                                union(map(collect_assignments, targs))
+                            end
+                        end
+                    end
+                    collect_assignments(t) = []
 
-                    lloop = loop(lit, tup(map(v->var(v...), captasgmts)), llam)
+                    # collect all variables that are arguments or internal variables of the innermost
+                    # function *and* assigned to in the loop body. these are explicitly captured.
+                    # don't mind functions, inside loops it's forbidden to assign them anyways
+                    caps = filter(s->s isa Symbol && s != i, intersect(A, collect_assignments(lbody)))
 
-                    return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
+                    if length(caps) == 1
+                        cap = caps[1]
+                        # TODO we're actually parsing this twice that's not acceptable really
+                        body = Expr(:block, body.args[1:end-1]..., cap)
+                        lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
 
+                        # body lambda maps captures  to body
+                        cname = gensym("caps")
+                        llam = slet((cap, Any), var(cname, Any), lbody)
+
+                        lloop = loop(lit, var(cap, Any), (i, cname), llam)
+
+                        return slet((cap, Any), lloop, exprs_to_dmterm(tail, ln, scope))
+                    else
+
+                        # TODO we're actually parsing this twice that's not acceptable really
+                        body = Expr(:block, body.args[1:end-1]..., Expr(:dtuple, caps...))
+                        lbody = exprs_to_dmterm(body, ln, (F, A, C ∪ [i], true))
+
+                        # body lambda maps captures  to body
+                        cname = gensym("caps")
+                        captasgmts = [(c, Any) for c in caps]
+                        llam = tlet(captasgmts, var(cname, Any), lbody)
+
+                        lloop = loop(lit, tup(map(v->var(v...), captasgmts)), (i, cname), llam)
+
+                        return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
+                    end
                     #=
-                    # TODO
-                    # remove captures that are not assigned to in the body
-                    # caps = caps ∩ assd
-
                     if iter isa Expr && iter.head == :vect
                         #TODO this comes at high cost! vector refs are expensive :(
                         vsym = gensym()

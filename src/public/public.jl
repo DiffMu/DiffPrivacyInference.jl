@@ -56,3 +56,6 @@ end
 
 Priv() = Any
 Priv(T::DataType) = T
+
+NoData() = Any
+NoData(T::DataType) = T

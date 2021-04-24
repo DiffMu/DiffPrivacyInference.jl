@@ -40,6 +40,7 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
             ([],[]) => return_discharge() # they were equal to begin with, we can toss the constraint
             _ => let
                 function mconstr(S,T,C,Σ) :: MType{Union{Nothing,Tuple{}}}
+                    println("substituting $σs\ngot new Cs $newCs\n")
                     # remove c before substitute, we put it back later.
                     C_noc = Constr[cc for cc in C if !isequal(cc,c)]
 
@@ -209,6 +210,23 @@ function mtry_simplify_Constr(c::Constr) :: TC#{Maybe Tuple{}}
                 _ => return_simple(Constr[isSubtypeOf(τ_in, DMReal()), isEqualType(τ_gauss, DMReal())]) # regular gauss (or invalid subtyping constraint later)
             end
         end;
+        isLoopResult((s1, s2, s3), s, τ_iter) => let
+            @match τ_iter begin
+                Constant(DMInt(), n) => let # statically known number of iterations
+                    return_simple(Constr[isEqualSens(s1, 0),
+                                         isEqualSens(s2, s^n),
+                                         isEqualSens(s3, n)])
+                end;
+                DMInt() => let # variable number of iterations
+                    return_simple(Constr[isLessOrEqual(s, 1), # this is only allowed for 1-sensitive bodys!
+                                         isEqualSens(s1, ∞),
+                                         isEqualSens(s2, 1),
+                                         isEqualSens(s3, ∞)])
+                end;
+                TVar(_) => return_nothing(); # we don't know the number of iterations yet
+                _ => error("invalid loop iteration type $τ_iter");
+            end
+        end;
     end
 end
 
@@ -262,8 +280,9 @@ function msimplify_constraints() :: TC#{Tuple{}}
             mreturn(TC, ())
         else
             @mdo TC begin
+                _ = println("simplifying $(Ci[1])\n")
                 simpl <- mtry_simplify_Constr(Ci[1])
-                #_ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]).\n"))
+                _ = (isnothing(simpl) ? nothing : println("simplified $(Ci[1]). got context:\n"))
                 ret <- (isnothing(simpl) ? try_simplify_constraints(Ci[2:end]) : msimplify_constraints())
                 return ret
             end

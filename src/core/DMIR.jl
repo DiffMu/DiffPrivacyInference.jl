@@ -6,11 +6,11 @@ TAsgmt = Tuple{Symbol, <:DataType}
     ret :: DMTerm => DMTerm # just for testing privacy language.
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
-    arg :: (Symbol, DataType) => DMTerm
+    arg :: (Symbol, DataType, Bool) => DMTerm # instrumental term for argument variables, only used by the typechecker. bool flag is true if the variable is "uninteresting", ie its privacy is set to ∞ if that allows to infer better bounds (see ploop rule)
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
     lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
-    lam_star :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
+    lam_star :: (Vector{<:Tuple{<:TAsgmt, Bool}}, DMTerm) => DMTerm # bool flag indicates "interestingness" of the variable.
     dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
@@ -20,8 +20,8 @@ TAsgmt = Tuple{Symbol, <:DataType}
 #    trttup :: Vector{DMTerm} => DMTerm                     # Transparent version of tuple
 #    trtlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     tup :: Vector{DMTerm} => DMTerm                     # Paper version of tuple
-    tlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
-    loop :: (iter, tup, lam) => DMTerm
+    tlet :: (Vector{<:TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
+    loop :: (iter, tup, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     index :: (DMTerm, DMTerm) => DMTerm
@@ -30,6 +30,8 @@ TAsgmt = Tuple{Symbol, <:DataType}
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
     dmclip :: (Norm, DMTerm) => DMTerm
 end
+
+arg(s::Symbol, τ::DataType) = arg(s,τ,true) # an extra constructor for arg to save me some typing. "interestingness" flag defaults to true
 
 function pretty_print(t::DMTerm) :: String
     @match t begin
@@ -42,7 +44,7 @@ function pretty_print(t::DMTerm) :: String
         lam_star(vs, b)      => "λ* (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         apply(l, as)         => pretty_print(l) *"(" * pretty_print(as) * ")"
         iter(f, s, l)        => "range(" * pretty_print([f,s,l]) * ")"
-        loop(it, cs, b)      => "loop { " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
+        loop(it, cs, xs, b)      => "loop { " * pretty_print(xs) * " => " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
@@ -74,7 +76,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         lam_star(vs, b)      => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         apply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
         iter(f, s, l)        => Expr(:call, :(:), map(evaluate, [f, s, l])...)
-        loop(it, cs, b)      => Expr(:call, :forloop, evaluate(b), evaluate(it), evaluate(cs))
+        loop(it, cs, xs, b)  => Expr(:call, :forloop, evaluate(lam(collect(zip(xs,[Int,Any])),b)), evaluate(it), evaluate(cs))
 #        trttup(ts)           => Expr(:tuple, map(evaluate,ts)...)
 #        trtlet(xs, tu, t)    => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         tup(ts)              => Expr(:tuple, map(evaluate,ts)...)
@@ -142,15 +144,13 @@ function pretty_print(t::DMType)
         Constant(ty, te) => pretty_print(ty) * "[" * pretty_print(te) * "]"
         DMTup(tys) => pretty_print(tys, pretty_print)
         TVar(symb) =>  "tvar." * pretty_print(symb)
-        Arr(args, ret) =>
-            let
+        Arr(args, ret) => let
                 pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " ==> " * pretty_print(ret)
             end
-            ArrStar(args, ret) =>
-            let
-                pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " *=*=>* " * pretty_print(ret)
-            end
-            DMMatrix(norm, clip, dims, ty) => "Mat<"*(norm,clip)*">(" * pretty_print(ty) * "dims " * pretty_print(dims) * ")"
+        ArrStar(args, ret) => let
+            pretty_print(args, ((sens,ty),)-> pretty_print(ty) * " @(" * pretty_print(sens) * ")") * " *=*=>* " * pretty_print(ret)
+        end
+        DMMatrix(norm, clip, dims, ty) => "Mat<"*(norm,clip)*">(" * pretty_print(ty) * "dims " * pretty_print(dims) * ")"
     end
 end
 
