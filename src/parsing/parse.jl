@@ -109,6 +109,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         if a isa Symbol
                             push!(vs, a)
                             push!(ts, Any)
+                            push!(is, true)
                         elseif a isa Expr && a.head == :(::)
                             s, T = a.args
                             if T isa Expr && T.head == :call && T.args[1] == :NoData
@@ -131,7 +132,6 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
                     argvec = constr==lam_star ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
-                    println("argvec $argvec, constr = $lam_star")
                     return flet(name, ts, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
 
                 elseif ex_head == :(=)
