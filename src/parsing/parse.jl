@@ -132,7 +132,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
                     argvec = constr==lam_star ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
-                    return flet(name, ts, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
+                    return flet(name, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
 
                 elseif ex_head == :(=)
                     ase, asd = ex.args

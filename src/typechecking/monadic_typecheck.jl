@@ -353,7 +353,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 return τ_b
             end
         end;
-
+#=
         (flet(f, s, l, b), _) => let
 
             scope = deepcopy(scope)
@@ -376,7 +376,7 @@ function mcheck_sens(t::DMTerm, scope :: Dict{Symbol, Vector{DMTerm}}, expect_pr
                 return result
             end
         end;
-
+=#
         (phi(c,tr,fs), _) => let
             @mdo TC begin
                 τ_c <- mcheck_sens(c, scope, false) # check condition. must be a sensitivity term

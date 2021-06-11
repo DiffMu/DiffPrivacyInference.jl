@@ -14,7 +14,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
-    flet :: (Symbol, Vector{<:DataType}, lam, DMTerm) => DMTerm
+    flet :: (Symbol, lam, DMTerm) => DMTerm
     abstr :: DMTerm => DMTerm
     # abstr :: (DMTerm) => DMTerm #TODO: Implement this => abstract over all new s/t variables inside
 #    trttup :: Vector{DMTerm} => DMTerm                     # Transparent version of tuple
@@ -48,7 +48,7 @@ function pretty_print(t::DMTerm) :: String
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
-        flet(f, s, l, t)     => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
+        flet(f, l, t)     => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
         index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
         gauss(ps, b)         => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         dmclip(n,b)              => "clip <"* string(n) *"> [ " * pretty_print(b) * " ]"
@@ -82,7 +82,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         tup(ts)              => Expr(:tuple, map(evaluate,ts)...)
         tlet(xs, tu, t)      => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         slet(x, v, t)        => Expr(:let, :($(evaluate(x)) = $(evaluate(v))), evaluate(t))
-        flet(f, s, lam(vs,b), t)=> Expr(:block, Expr(:(=), Expr(:call, f, fsig(vs)...), evaluate(b)), evaluate(t))
+        flet(f, lam(vs,b), t)=> Expr(:block, Expr(:(=), Expr(:call, f, fsig(vs)...), evaluate(b)), evaluate(t))
         index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
         len(v)               => :(length($(evaluate(v))))
         gauss((s,ϵ,δ),f)     => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))

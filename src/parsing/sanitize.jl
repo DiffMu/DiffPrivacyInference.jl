@@ -130,7 +130,18 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                     ::Symbol => let
                         if !haskey(current, ase) current[ase] = ln end
                     end
-                    Expr(:(::), s, T) => if !haskey(current, s) current[s] = ln end
+                    Expr(:(::), s, T) => let
+                        if (s isa Symbol && !haskey(current, s))
+                           current[s] = ln
+                        elseif s isa Expr && s.head == :call
+                           fin, fcur = sanitize(Expr(:function, ase, asd), ln, current)
+                           inner = merge(fin, inner)
+                           current = merge(fcur, current)
+                           continue;
+                        else
+                           error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
+                        end
+                    end
                     _ => error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
                 end;
 
