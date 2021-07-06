@@ -142,6 +142,22 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                            error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
                         end
                     end
+                    Expr(:tuple, tnames...) => let
+                        function handle_elem(eex::Expr)
+                           if eex.head == :(::)
+                              handle_elem(eex.args[1])
+                           else
+                              println("expression was $e")
+                              error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
+                           end
+                        end
+                        function handle_elem(s::Symbol)
+                           if !haskey(current, s)
+                              current[s] = ln
+                           end
+                        end
+                        map(handle_elem, tnames)
+                    end
                     _ => error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
                 end;
 

@@ -162,6 +162,29 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         v = (s, eval(T))
                         newscope = (F, [[s]; A], C, L)
                         return slet(v, exprs_to_dmterm(asd, ln, newscope), isempty(tail) ? var(v...) : exprs_to_dmterm(tail ,ln, newscope))
+                    elseif ase isa Expr && ase.head == :tuple
+                        function handle_elem(exm::Expr)
+                           println("got expr $exm")
+                           if exm.head == :(::)
+                              s, T = exm.args
+                           println("calling with $s, $T")
+                              handle_elem(s,T)
+                           else
+                              error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
+                           end
+                        end
+                        function handle_elem(elem::Symbol, T=(:Any))
+                           if elem in C
+                               error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
+                           elseif is_builtin_op(elem)
+                               error("overwriting builtin function $ase in $ex, $(ln.file) line $(ln.line) is not permitted.")
+                           end
+                           return (elem, eval(T))
+                        end
+                        println("args: $(ase.args)")
+                        names = map(handle_elem, ase.args)
+                        newscope = (F, [map(first, names); A], C, L)
+                        return tlet(names, exprs_to_dmterm(asd, ln, newscope), isempty(tail) ? var(v...) : exprs_to_dmterm(tail ,ln, newscope))
                     else
                         error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
                     end
@@ -372,6 +395,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 else
                     return exprs_to_dmterm(args, ln, scope)
                 end
+
+            elseif ex.head == :tuple
+                tup(map(e -> exprs_to_dmterm(e, ln, scope), ex.args))
 
             elseif ex.head == :call
                 eargs = ex.args
