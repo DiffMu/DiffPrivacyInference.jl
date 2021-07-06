@@ -29,12 +29,10 @@ function typecheck_hs_from_dmterm(term::DMTerm)
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
     exit = Libdl.dlsym(dm, :wrapperExit)
-    #test = Libdl.dlsym(dm, :test)
     typecheckFromDMTerm = Libdl.dlsym(dm, :typecheckFromCString_DMTerm)
 
     # call the library
     ccall(init, Cvoid, ())
-    # ccall(test, Cvoid, ())
 
     c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
 
@@ -46,6 +44,28 @@ function typecheck_hs_from_dmterm(term::DMTerm)
 end
 
 
+function test_hs()
+
+    # load the shared library
+    # Note, the library has to be available on a path in $LD_LIBRARY_PATH
+    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+
+    # get function pointers for the relevant functions
+    init = Libdl.dlsym(dm, :wrapperInit)
+    exit = Libdl.dlsym(dm, :wrapperExit)
+    runHaskellTests = Libdl.dlsym(dm, :runHaskellTests)
+
+    # call the library
+    ccall(init, Cvoid, ())
+
+    c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
+
+    ccall(runHaskellTests, Cvoid, (Ptr{Cvoid},), c_callback_issubtype)
+    ccall(exit, Cvoid, ())
+
+    # unload the library
+    Libdl.dlclose(dm)
+end
 
 
 
