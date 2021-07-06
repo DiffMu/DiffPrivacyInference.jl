@@ -89,7 +89,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         if head.head == :(::)
                             annotation = head.args[2]
                             # check for privacy lambda annotation
-                            if annotation.head == :call && annotation.args[1] == :Priv
+                            if annotation isa Expr && annotation.head == :call && annotation.args[1] == :Priv
                                 constr = lam_star
                                 head = head.args[1]
                                 name = head.args[1]
@@ -136,7 +136,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
 
                 elseif ex_head == :(=)
                     ase, asd = ex.args
-                    if ase isa Expr && ase.head == :call
+                    # first case is one-line function assignments like "f(x) = 10", second is that with annotation
+                    # like "f(x) :: Function = 10"
+                    if ase isa Expr && (ase.head == :call || (ase.head == :(::) && ase.args[1].head == :call))
                         f = ase.args
                         return exprs_to_dmterm([[Expr(:function, ase, asd)]; tail], ln, scope)
                     elseif ase isa Symbol

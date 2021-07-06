@@ -29,7 +29,7 @@ function typecheck_hs_from_dmterm(term::DMTerm)
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
     exit = Libdl.dlsym(dm, :wrapperExit)
-    test = Libdl.dlsym(dm, :test)
+    #test = Libdl.dlsym(dm, :test)
     typecheckFromDMTerm = Libdl.dlsym(dm, :typecheckFromCString_DMTerm)
 
     # call the library
