@@ -24,7 +24,7 @@ function typecheck_hs_from_dmterm(term::DMTerm)
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
-    dm = Libdl.dlopen("/home/ovi/.local/lib/libdiffmu-wrapper")
+    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
 
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
