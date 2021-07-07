@@ -54,8 +54,3 @@ function infer_sensitivity(t::DMTerm)
     return τ
 end
 
-Priv() = Any
-Priv(T::DataType) = T
-
-NoData() = Any
-NoData(T::DataType) = T

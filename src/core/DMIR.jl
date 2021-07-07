@@ -1,6 +1,19 @@
 
 TAsgmt = Tuple{Symbol, <:DataType}
 
+@data Norm begin
+    L1
+    L2
+    L∞
+end
+
+@data Unbounded begin
+    U
+end
+
+Clip = Union{Norm, Unbounded}
+
+
 # the terms that come out of the parser.
 @data DMTerm begin
     ret :: DMTerm => DMTerm # just for testing privacy language.
@@ -136,6 +149,7 @@ end
 
 pretty_print(x) = string(x)
 
+#=
 function pretty_print(t::DMType)
     @match t begin
         DMInt() => "Int"
@@ -153,4 +167,4 @@ function pretty_print(t::DMType)
         DMMatrix(norm, clip, dims, ty) => "Mat<"*(norm,clip)*">(" * pretty_print(ty) * "dims " * pretty_print(dims) * ")"
     end
 end
-
+=#
