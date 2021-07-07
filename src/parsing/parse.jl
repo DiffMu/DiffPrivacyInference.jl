@@ -262,14 +262,13 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         if r isa Expr && r.head == :call
                             @assert r.args[1] == :(:) "expected colon in iterator $it"
                             if length(r.args) == 3
-                                b, e = r.args[2:3]
-                                lit = iter(exprs_to_dmterm(b, ln, scope), sng(1), exprs_to_dmterm(e, ln, scope))
+                                be, ee = map(e -> exprs_to_dmterm(e, ln, scope), r.args[2:3])
+                                lnit = op(:ceil, [op(:-, [ee, op(:-, [be, sng(1)])])])
+                                lit = iter(be, sng(1), ee)
                             elseif length(r.args) == 4
-                                b, s, e = r.args[2:4]
-                                lit = iter(exprs_to_dmterm(b, ln, scope), exprs_to_dmterm(s, ln, scope), exprs_to_dmterm(e, ln, scope))
-
-                            elseif r isa Symbol
-                                lit = var(r, Any)
+                                be, se, ee = map(e -> exprs_to_dmterm(e, ln, scope), r.args[2:4])
+                                lnit = op(:ceil, [op(:/, [op(:-, [ee, op(:-, [be, sng(1)])]), se])])
+                                lit = iter(be, se, ee)
                             else
                                 error("unsupported iterator $r in $(ln.file) line $(ln.line)")
                             end
@@ -319,7 +318,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         cname = gensym("caps")
                         llam = slet((cap, Any), var(cname, Any), lbody)
 
-                        lloop = loop(lit, var(cap, Any), (i, cname), llam)
+                        lloop = loop(lit, lnit, var(cap, Any), (i, cname), llam)
 
                         return slet((cap, Any), lloop, exprs_to_dmterm(tail, ln, scope))
                     else
@@ -333,7 +332,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         captasgmts = [(c, Any) for c in caps]
                         llam = tlet(captasgmts, var(cname, Any), lbody)
 
-                        lloop = loop(lit, tup(map(v->var(v...), captasgmts)), (i, cname), llam)
+                        lloop = loop(lit, lnit, tup(map(v->var(v...), captasgmts)), (i, cname), llam)
 
                         return tlet(captasgmts, lloop, exprs_to_dmterm(tail, ln, scope))
                     end

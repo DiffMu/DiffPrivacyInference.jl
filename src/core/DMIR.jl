@@ -19,26 +19,26 @@ Clip = Union{Norm, Unbounded}
     ret :: DMTerm => DMTerm # just for testing privacy language.
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
-    arg :: (Symbol, DataType, Bool) => DMTerm # instrumental term for argument variables, only used by the typechecker. bool flag is true if the variable is "uninteresting", ie its privacy is set to ∞ if that allows to infer better bounds (see ploop rule)
+#    arg :: (Symbol, DataType, Bool) => DMTerm # instrumental term for argument variables, only used by the typechecker. bool flag is true if the variable is "uninteresting", ie its privacy is set to ∞ if that allows to infer better bounds (see ploop rule)
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
     lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
     lam_star :: (Vector{<:Tuple{<:TAsgmt, Bool}}, DMTerm) => DMTerm # bool flag indicates "interestingness" of the variable.
-    dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
+#    dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
     flet :: (Symbol, lam, DMTerm) => DMTerm
-    abstr :: DMTerm => DMTerm
+#    abstr :: DMTerm => DMTerm
     # abstr :: (DMTerm) => DMTerm #TODO: Implement this => abstract over all new s/t variables inside
 #    trttup :: Vector{DMTerm} => DMTerm                     # Transparent version of tuple
 #    trtlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     tup :: Vector{DMTerm} => DMTerm                     # Paper version of tuple
     tlet :: (Vector{<:TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
-    loop :: (iter, tup, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
+    loop :: (iter, DMTerm, tup, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
-    index :: (DMTerm, DMTerm) => DMTerm
-    len :: DMTerm => DMTerm # length of a vector
+#    index :: (DMTerm, DMTerm) => DMTerm
+#    len :: DMTerm => DMTerm # length of a vector
     chce :: Tuple{Vector{<:DataType}, DMTerm} => DMTerm
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
     dmclip :: (Norm, DMTerm) => DMTerm
@@ -57,12 +57,12 @@ function pretty_print(t::DMTerm) :: String
         lam_star(vs, b)      => "λ* (" * pretty_print(vs) * ").{ " * pretty_print(b) * " }"
         apply(l, as)         => pretty_print(l) *"(" * pretty_print(as) * ")"
         iter(f, s, l)        => "range(" * pretty_print([f,s,l]) * ")"
-        loop(it, cs, xs, b)      => "loop { " * pretty_print(xs) * " => " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
+        loop(it, _, cs, xs, b)      => "loop { " * pretty_print(xs) * " => " * pretty_print(b) * " } for " * pretty_print(it) * " on " * pretty_print(cs)
         tup(ts)              => "tup(" * pretty_print(ts) * ")"
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
         flet(f, l, t)     => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
-        index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
+#        index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
         gauss(ps, b)         => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         dmclip(n,b)              => "clip <"* string(n) *"> [ " * pretty_print(b) * " ]"
         #        len(v)               => 
@@ -89,15 +89,15 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         lam_star(vs, b)      => :($(Expr(:tuple, map(evaluate,vs)...)) -> $(evaluate(b)))
         apply(l, as)         => Expr(:call, evaluate(l), map(evaluate, as)...)
         iter(f, s, l)        => Expr(:call, :(:), map(evaluate, [f, s, l])...)
-        loop(it, cs, xs, b)  => Expr(:call, :forloop, evaluate(lam(collect(zip(xs,[Int,Any])),b)), evaluate(it), evaluate(cs))
+        loop(it, _, cs, xs, b)  => Expr(:call, :forloop, evaluate(lam(collect(zip(xs,[Int,Any])),b)), evaluate(it), evaluate(cs))
 #        trttup(ts)           => Expr(:tuple, map(evaluate,ts)...)
 #        trtlet(xs, tu, t)    => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         tup(ts)              => Expr(:tuple, map(evaluate,ts)...)
         tlet(xs, tu, t)      => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         slet(x, v, t)        => Expr(:let, :($(evaluate(x)) = $(evaluate(v))), evaluate(t))
         flet(f, lam(vs,b), t)=> Expr(:block, Expr(:(=), Expr(:call, f, fsig(vs)...), evaluate(b)), evaluate(t))
-        index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
-        len(v)               => :(length($(evaluate(v))))
+#        index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
+#        len(v)               => :(length($(evaluate(v))))
         gauss((s,ϵ,δ),f)     => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
         dmclip(l,f)            => :(clip(l, $(evaluate(f))))
         t                    => error("no match evaluating $t :: $(typeof(t))")
