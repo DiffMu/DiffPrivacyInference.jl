@@ -40,6 +40,38 @@ function type_allowed(t::DataType)
     end
 end
 
+# extract the variable names, type signature and interestingness annotation from
+# the expression head.
+function build_signature(args, ln :: LineNumberNode, name = :anonymous)
+   vs = Symbol[]
+   ts = DataType[]
+   is = Bool[]
+   for a in args
+      if a isa Symbol
+         push!(vs, a)
+         push!(ts, Any)
+         push!(is, true)
+      elseif a isa Expr && a.head == :(::)
+         s, T = a.args
+         if T isa Expr && T.head == :call && T.args[1] == :NoData
+            interesting = false
+         else
+            interesting = true
+         end
+         is = [is; interesting]
+         Tt = eval(T)
+         if !type_allowed(Tt)
+            error("dispatch on number types finer than Real and Integer is not allowed!
+                  Argument $s has type $Tt in definition of function $name($args), $(ln.file) line $(ln.line)")
+         end
+         push!(vs, s)
+         push!(ts, Tt)
+      else
+         error("keyword/vararg/optional arguments not yet supported in function definition $name($args), $(ln.file) line $(ln.line)")
+      end
+   end
+   return (vs, ts, is)
+end
 
 """
 exprs_to_dmterm(exs, ln::LineNumberNode, scope = ([],[],[], false))
@@ -102,33 +134,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     elseif is_builtin_op(name)
                         error("overwriting builtin function $name in $ex, $(ln.file) line $(ln.line) is not permitted.")
                     end
-                    vs = Symbol[]
-                    ts = DataType[]
-                    is = Bool[]
-                    for a in head.args[2:end]
-                        if a isa Symbol
-                            push!(vs, a)
-                            push!(ts, Any)
-                            push!(is, true)
-                        elseif a isa Expr && a.head == :(::)
-                            s, T = a.args
-                            if T isa Expr && T.head == :call && T.args[1] == :NoData
-                                interesting = false
-                            else
-                                interesting = true
-                            end
-                            is = [is; interesting]
-                            Tt = eval(T)
-                            if !type_allowed(Tt)
-                                error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of function $head, $(ln.file) line $(ln.line)")
-                            end
-                            push!(vs, s)
-                            push!(ts, Tt)
-                        else
-                            ln = body.args[1]
-                            error("keyword/vararg/optional arguments not yet supported in function definition $head, $(ln.file) line $(ln.line)")
-                        end
-                    end
+
+                    (vs, ts, is) = build_signature(head.args[2:end], body.args[1], name)
+
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
                     argvec = constr==lam_star ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
@@ -426,28 +434,10 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
             elseif ex.head == :(->)
                 argt, body = ex.args
                 as = argt isa Expr && argt.head == :tuple ? argt.args : [argt]
-                vs = Symbol[]
-                ts = DataType[]
-                for a in as
-                    if a isa Symbol
-                        push!(vs, a)
-                        push!(ts, Any)
-                    elseif a isa Expr && a.head == :(::)
-                        s, T = a.args
-                        Tt = eval(T)
-                        if !type_allowed(Tt)
-                            error("dispatch on number types finer than Real and Integer is not allowed! Argument $s has type $Tt in definition of anonymous function at $(ln.file) line $(ln.line)")
-                        end
-                        push!(vs, s)
-                        push!(ts, Tt)
-                    else
-                        ln = body.args[1]
-                        error("keyword/vararg/optional arguments not yet supported in lambda definition $head, $(ln.file) line $(ln.line)")
-                    end
-                end
+                (vs, ts, _) = build_signature(as, body.args[1])
                 newscope = (F, vs, union(C, setdiff(A, vs)), L)
                 @assert body.head == :block
-                return lam(collect(zip(vs, ts)), exprs_to_dmterm(body.args[2:end], body.args[1], newscope))
+                return chce((ts, lam(collect(zip(vs, ts)), exprs_to_dmterm(body.args[2:end], body.args[1], newscope))))
             else
                 error("something unsupported: $ex with head $(ex.head), $(ln.file) line $(ln.line)")
             end

@@ -26,7 +26,7 @@ TAsgmt = Tuple{Symbol, <:DataType}
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     index :: (DMTerm, DMTerm) => DMTerm
     len :: DMTerm => DMTerm # length of a vector
-    chce :: Dict{Vector{<:DataType}, DMTerm} => DMTerm
+    chce :: Tuple{Vector{<:DataType}, DMTerm} => DMTerm
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
     dmclip :: (Norm, DMTerm) => DMTerm
 end
