@@ -16,6 +16,16 @@ function callback_issubtype(ca::Cstring, cb::Cstring) :: UInt8
     res
 end
 
+global_parsetermresult = ""
+
+function callback_parseterm(ci::Cstring) :: Cstring
+    input = unsafe_string(ci)
+    t = string_to_dmterm(input)
+    output = string(t)
+    global_parsetermresult = output
+    pointer(global_parsetermresult)
+end
+
 # const c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
 
 
@@ -59,8 +69,9 @@ function test_hs()
     ccall(init, Cvoid, ())
 
     c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
+    c_callback_parseterm = @cfunction(callback_parseterm, Cstring, (Cstring,))
 
-    ccall(runHaskellTests, Cvoid, (Ptr{Cvoid},), c_callback_issubtype)
+    ccall(runHaskellTests, Cvoid, (Ptr{Cvoid},Ptr{Cvoid},), c_callback_issubtype, c_callback_parseterm)
     ccall(exit, Cvoid, ())
 
     # unload the library
