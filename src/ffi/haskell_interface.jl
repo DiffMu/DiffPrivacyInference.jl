@@ -85,7 +85,8 @@ end
 
 
 function test_expr_parser(term)
-    str = string(term)
+    ast = Meta.parse("begin $term end")
+    str = string(ast)
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
