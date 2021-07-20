@@ -51,6 +51,8 @@ function typecheck_hs_from_dmterm(term::DMTerm)
 
     # unload the library
     Libdl.dlclose(dm)
+
+    return ()
 end
 
 
@@ -76,8 +78,33 @@ function test_hs()
 
     # unload the library
     Libdl.dlclose(dm)
+
+    return ()
 end
 
 
 
+function test_expr_parser(term)
+    str = string(term)
+
+    # load the shared library
+    # Note, the library has to be available on a path in $LD_LIBRARY_PATH
+    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+
+    # get function pointers for the relevant functions
+    init = Libdl.dlsym(dm, :wrapperInit)
+    exit = Libdl.dlsym(dm, :wrapperExit)
+    runExprParser = Libdl.dlsym(dm, :runExprParser)
+
+    # call the library
+    ccall(init, Cvoid, ())
+
+    ccall(runExprParser, Cvoid, (Cstring,), str)
+    ccall(exit, Cvoid, ())
+
+    # unload the library
+    Libdl.dlclose(dm)
+
+    return ()
+end
 
