@@ -18,11 +18,11 @@ end
 
 "Parse a string into a DMTerm."
 function string_to_dmterm(code::String, ln=LineNumberNode(1, "none")) :: DMTerm
-    println("starting parsing.")
+    # println("starting parsing.")
     ast = Meta.parse("begin $code end")
     # error upon modification of nonlocal variables
     sanitize([ast], ln)
-    println("sanitizing complete.")
+    # println("sanitizing complete.")
     exprs_to_dmterm([ast], ln)
 end
 
