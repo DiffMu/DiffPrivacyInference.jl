@@ -86,7 +86,15 @@ end
 
 function test_expr_parser(term)
     ast = Meta.parse("begin $term end")
-    str = string(ast)
+
+    # Code from https://stackoverflow.com/questions/45451245/how-to-unparse-a-julia-expression
+    B     = IOBuffer();              # will use to 'capture' the s_expr in
+    Expr1 = ast                      # the expr we want to generate an s_expr for
+    Meta.show_sexpr(B, Expr1);       # push s_expr into buffer B
+    seek(B, 0);                      # 'rewind' buffer
+    str      = read(B, String);      # get buffer contents as string
+    close(B);                        # please to be closink after finished, da?
+
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
