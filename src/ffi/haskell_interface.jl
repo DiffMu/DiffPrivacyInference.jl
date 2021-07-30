@@ -5,14 +5,11 @@ using Base.Libc.Libdl
 
 
 function callback_issubtype(ca::Cstring, cb::Cstring) :: UInt8
-    println("inside callback!")
     a = unsafe_string(ca)
     b = unsafe_string(cb)
-    println("I got $a and $b")
     τa = Meta.parse(a)
     τb = Meta.parse(b)
     res = (eval(τa) <: eval(τb)) ? 1 : 0
-    println("My res is: $res")
     res
 end
 
