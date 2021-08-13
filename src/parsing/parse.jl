@@ -414,6 +414,21 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     ats = map(a->exprs_to_dmterm(a, ln, scope), args)
                     @assert length(ats) == 4 "wrong number of arguments for gauss: $ex in $(ln.file) line $(ln.line)"
                     return gauss((ats[1:3]...,), ats[4])
+                elseif callee == :zeros
+                    ats = map(a->exprs_to_dmterm(a, ln, scope), args)
+                    @assert length(ats) == 2 "wrong number of arguments for zeros: $ex in $(ln.file) line $(ln.line)"
+                    return mcreate(ats..., (gensym(), gensym()), sng(0))
+                elseif callee == :randn
+                    ats = map(a->exprs_to_dmterm(a, ln, scope), args)
+                    @assert length(ats) == 2 "wrong number of arguments for zeros: $ex in $(ln.file) line $(ln.line)"
+                    return mcreate(ats..., (gensym(), gensym()), sng(0))
+                elseif callee == :ones
+                    ats = map(a->exprs_to_dmterm(a, ln, scope), args)
+                    @assert length(ats) == 2 "wrong number of arguments for ones: $ex in $(ln.file) line $(ln.line)"
+                    return mcreate(ats..., (gensym(), gensym()), sng(1))
+                elseif callee == :transpose
+                    @assert length(args) == 1 "wrong number of arguments for transpose: $ex in $(ln.file) line $(ln.line)"
+                    return dmtranspose(exprs_to_dmterm(args[1], ln, scope))
                 elseif callee isa Symbol && is_builtin_op(callee)
                     if length(args) == 1
                         return  op(callee, [exprs_to_dmterm(args[1], ln, scope)])

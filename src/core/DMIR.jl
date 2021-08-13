@@ -19,6 +19,7 @@ Clip = Union{Norm, Unbounded}
     ret :: DMTerm => DMTerm # just for testing privacy language.
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
+    rnd :: DataType => DMTerm
 #    arg :: (Symbol, DataType, Bool) => DMTerm # instrumental term for argument variables, only used by the typechecker. bool flag is true if the variable is "uninteresting", ie its privacy is set to ∞ if that allows to infer better bounds (see ploop rule)
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
@@ -42,6 +43,7 @@ Clip = Union{Norm, Unbounded}
     chce :: Tuple{Vector{<:DataType}, DMTerm} => DMTerm
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
     dmclip :: (Norm, DMTerm) => DMTerm
+    dmtranspose :: DMTerm => DMTerm
 end
 
 arg(s::Symbol, τ::DataType) = arg(s,τ,true) # an extra constructor for arg to save me some typing. "interestingness" flag defaults to true
@@ -50,6 +52,7 @@ function pretty_print(t::DMTerm) :: String
     @match t begin
         sng(v)               => string(v)
         var(v, _)            => string(v)
+        rnd(v)               => string(v)
         op(f, vs)            => join(map(pretty_print, vs), " $(string(f)) ")
         phi(c, tr, f)        => "if { " * pretty_print(c) * " } then { " * pretty_print(tr) * " } else { " * pretty_print(f) * " }"
         ret(l)               => "return " * pretty_print(l)
@@ -65,6 +68,7 @@ function pretty_print(t::DMTerm) :: String
 #        index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
         gauss(ps, b)         => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         dmclip(n,b)              => "clip <"* string(n) *"> [ " * pretty_print(b) * " ]"
+        dmtranspose(m)              => "transpose ("* pretty_print(m) *")"
         #        len(v)               => 
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
@@ -82,6 +86,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
     @match t begin
         sng(v)               => v
         var(v, _)            => v
+        rnd(τ)               => :(rand)
         op(f, vs)            => :($(f)($(map(evaluate, vs)...)))
         phi(c, tr, f)        => :($(evaluate(c)) ? $(evaluate(tr)) : $(evaluate(f)))
         ret(l)               => eval(evaluate(l))
@@ -100,6 +105,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
 #        len(v)               => :(length($(evaluate(v))))
         gauss((s,ϵ,δ),f)     => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
         dmclip(l,f)            => :(clip(l, $(evaluate(f))))
+        dmtranspose(m)            => :(transpose($(evaluate(m))))
         t                    => error("no match evaluating $t :: $(typeof(t))")
     end
 end
