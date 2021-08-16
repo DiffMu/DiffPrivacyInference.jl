@@ -418,14 +418,23 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     ats = map(a->exprs_to_dmterm(a, ln, scope), args)
                     @assert length(ats) == 2 "wrong number of arguments for zeros: $ex in $(ln.file) line $(ln.line)"
                     return mcreate(ats..., (gensym(), gensym()), sng(0))
-                elseif callee == :randn
-                    ats = map(a->exprs_to_dmterm(a, ln, scope), args)
-                    @assert length(ats) == 2 "wrong number of arguments for zeros: $ex in $(ln.file) line $(ln.line)"
-                    return mcreate(ats..., (gensym(), gensym()), sng(0))
                 elseif callee == :ones
                     ats = map(a->exprs_to_dmterm(a, ln, scope), args)
                     @assert length(ats) == 2 "wrong number of arguments for ones: $ex in $(ln.file) line $(ln.line)"
                     return mcreate(ats..., (gensym(), gensym()), sng(1))
+                elseif callee == :randn
+                    ats = map(a->exprs_to_dmterm(a, ln, scope), args)
+                    if length(ats) == 0
+                       return rnd(Float64)
+                    elseif length(ats) == 1
+                       rname = gensym()
+                       return slet((rname, Any), rnd(Real), mcreate(sng(1), ats[1], (gensym(), gensym()), var(rname, Any)))
+                    elseif length(ats) == 2
+                       rname = gensym()
+                       return slet((rname, Any), rnd(Real), mcreate(ats..., (gensym(), gensym()), var(rname, Any)))
+                    else
+                        error("wrong number of arguments for randn: $ex in $(ln.file) line $(ln.line)")
+                    end
                 elseif callee == :transpose
                     @assert length(args) == 1 "wrong number of arguments for transpose: $ex in $(ln.file) line $(ln.line)"
                     return dmtranspose(exprs_to_dmterm(args[1], ln, scope))

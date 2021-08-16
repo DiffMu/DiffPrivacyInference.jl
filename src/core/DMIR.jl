@@ -19,7 +19,7 @@ Clip = Union{Norm, Unbounded}
     ret :: DMTerm => DMTerm # just for testing privacy language.
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
-    rnd :: DataType => DMTerm
+    rnd :: (DataType) => DMTerm
 #    arg :: (Symbol, DataType, Bool) => DMTerm # instrumental term for argument variables, only used by the typechecker. bool flag is true if the variable is "uninteresting", ie its privacy is set to ∞ if that allows to infer better bounds (see ploop rule)
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
@@ -52,7 +52,7 @@ function pretty_print(t::DMTerm) :: String
     @match t begin
         sng(v)               => string(v)
         var(v, _)            => string(v)
-        rnd(v)               => string(v)
+        rnd(v)               => "random($v)"
         op(f, vs)            => join(map(pretty_print, vs), " $(string(f)) ")
         phi(c, tr, f)        => "if { " * pretty_print(c) * " } then { " * pretty_print(tr) * " } else { " * pretty_print(f) * " }"
         ret(l)               => "return " * pretty_print(l)
@@ -86,7 +86,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
     @match t begin
         sng(v)               => v
         var(v, _)            => v
-        rnd(τ)               => :(rand)
+        rnd(τ)               => :(randn())
         op(f, vs)            => :($(f)($(map(evaluate, vs)...)))
         phi(c, tr, f)        => :($(evaluate(c)) ? $(evaluate(tr)) : $(evaluate(f)))
         ret(l)               => eval(evaluate(l))
