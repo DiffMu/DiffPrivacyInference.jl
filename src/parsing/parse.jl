@@ -105,7 +105,11 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
 
 
             if ex isa LineNumberNode
-                return exprs_to_dmterm(tail, ex, scope)
+                if length(tail) == 1
+                   return exprs_to_dmterm(tail[1], ex, scope)
+                else
+                   return exprs_to_dmterm(tail, ex, scope)
+                end
 
             elseif ex isa Expr
                 ex_head = ex.head
@@ -461,6 +465,19 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 newscope = (F, vs, union(C, setdiff(A, vs)), L)
                 @assert body.head == :block
                 return chce((ts, lam(collect(zip(vs, ts)), exprs_to_dmterm(body.args[2:end], body.args[1], newscope))))
+
+            elseif ex.head == :ref
+                    if length(ex.args) == 3
+                        (m, i, j) = ex.args
+                           if i isa Symbol || i isa Number
+                              return index(exprs_to_dmterm(m, ln, scope), exprs_to_dmterm(i, ln, scope), exprs_to_dmterm(j, ln, scope))
+                           else
+                              error("unsupported reference $ex in $(ln.file) line $(ln.line)")
+                           end
+                    else
+                        error("unsupported reference $ex in $(ln.file) line $(ln.line)")
+                    end
+
             else
                 error("something unsupported: $ex with head $(ex.head), $(ln.file) line $(ln.line)")
             end

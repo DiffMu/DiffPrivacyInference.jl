@@ -38,7 +38,7 @@ Clip = Union{Norm, Unbounded}
     loop :: (iter, DMTerm, tup, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
-#    index :: (DMTerm, DMTerm) => DMTerm
+    index :: (DMTerm, DMTerm, DMTerm) => DMTerm
 #    len :: DMTerm => DMTerm # length of a vector
     chce :: Tuple{Vector{<:DataType}, DMTerm} => DMTerm
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
@@ -65,7 +65,7 @@ function pretty_print(t::DMTerm) :: String
         tlet(xs, tu, t)      => "tlet " * pretty_print(xs) * " = " * pretty_print(tu) * " in { " * pretty_print(t) *" }"
         slet(x, v, t)        => "let " * pretty_print(x) * " = " * pretty_print(v) * " in { " * pretty_print(t) *" }"
         flet(f, l, t)     => "flet " * pretty_print(f) * " = " * pretty_print(l) * " in { " * pretty_print(t) *" }"
-#        index(v, i)          => pretty_print(v) * "[" * pretty_print(i) * "]"
+        index(m, i, j)          => pretty_print(m) * "[" * pretty_print(i) * ", " * pretty_print(j) * "]"
         gauss(ps, b)         => "gauss [ " * pretty_print(ps) * " ] { " *pretty_print(b) *  " }"
         dmclip(n,b)              => "clip <"* string(n) *"> [ " * pretty_print(b) * " ]"
         dmtranspose(m)              => "transpose ("* pretty_print(m) *")"
@@ -101,7 +101,7 @@ function evaluate(t::DMTerm) :: Union{Number, Symbol, Expr}
         tlet(xs, tu, t)      => Expr(:let, :($(Expr(:tuple, map(evaluate,xs)...)) = $(evaluate(tu))), evaluate(t))
         slet(x, v, t)        => Expr(:let, :($(evaluate(x)) = $(evaluate(v))), evaluate(t))
         flet(f, lam(vs,b), t)=> Expr(:block, Expr(:(=), Expr(:call, f, fsig(vs)...), evaluate(b)), evaluate(t))
-#        index(v, i)          => :($(evaluate(v))[$(evaluate(i))])
+        index(v, i, j)          => :($(evaluate(v))[$(evaluate(i)), $(evaluate(j))])
 #        len(v)               => :(length($(evaluate(v))))
         gauss((s,ϵ,δ),f)     => :(gaussian_mechanism($(evaluate(f)), $(evaluate(δ)), $(evaluate(s)), $(evaluate(ϵ))))
         dmclip(l,f)            => :(clip(l, $(evaluate(f))))
