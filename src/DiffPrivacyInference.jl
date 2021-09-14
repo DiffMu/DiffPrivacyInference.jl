@@ -3,6 +3,9 @@ module DiffPrivacyInference
 using CodeTracking
 using MLStyle
 using Distributions
+using LinearAlgebra
+using Flux
+using Zygote
 
 include("core/DMIR.jl")
 include("core/builtins.jl")
@@ -16,7 +19,7 @@ greet() = print("Hello World!")
 
 #export NotInScope, ArithmeticsError, WrongNoOfArgs, WrongArgType, NotNumeric, NoChoiceFound, NotSubtype, NotSupremum, UnificationError, NotInScope
 
-export DMTerm, sng , var , arg , op , phi , ret , lam , lam_star , dphi , apply , iter , flet , abstr
+export DMTerm, sng , var , arg , op , phi , ret , lam , mut_lam , lam_star , mut_lam_star , dphi , apply , iter , flet , abstr
 export tup , tlet , loop , slet , index , len , chce, gauss, mcreate, dmclip, dmtranspose, rnd, index
 
 #export DMType, DMInt, DMReal, Constant, DMTyp, TVar, Arr, ArrStar, DMMatrix, DMTup
@@ -30,5 +33,7 @@ export string_to_dmterm, file_to_dmterm, evaluate, Priv, NoData
 export pretty_print
 
 export typecheck_hs_from_dmterm, test_hs, test_expr_parser
+
+export DMParams
 
 end # module

@@ -117,8 +117,8 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 #TODO again, using @match here makes the compiler go on forever.
                 if ex_head == :function
                     head, body = ex.args
-                    constr = lam
                     name = head.args[1]
+                    constr = (string(name)[end] == '!') ? mut_lam : lam
                     if L && head in C
                         error("overwriting an existing function in a loop is not allowed in $ex, $(ln.file) line $(ln.line)")
                     elseif !(name isa Symbol)
@@ -126,16 +126,16 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                             annotation = head.args[2]
                             # check for privacy lambda annotation
                             if annotation isa Expr && annotation.head == :call && annotation.args[1] == :Priv
-                                constr = lam_star
                                 head = head.args[1]
                                 name = head.args[1]
+                                constr = (string(name)[end] == '!') ? mut_lam_star : lam_star
                             else
                                 error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
                             end
                         else
                             error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
                         end
-                    elseif is_builtin_op(name)
+                    elseif is_builtin(name)
                         error("overwriting builtin function $name in $ex, $(ln.file) line $(ln.line) is not permitted.")
                     end
 
@@ -143,7 +143,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
 
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
-                    argvec = constr==lam_star ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
+                    argvec = constr in [lam_star, mut_lam_star] ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
                     return flet(name, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
 
                 elseif ex_head == :(=)
@@ -156,7 +156,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     elseif ase isa Symbol
                         if ase in C
                             error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
-                        elseif is_builtin_op(ase)
+                        elseif is_builtin(ase)
                             error("overwriting builtin function $ase in $ex, $(ln.file) line $(ln.line) is not permitted.")
                         end
                         v = (ase, Any)
@@ -168,7 +168,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                             error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
                         elseif !(s isa Symbol) #TODO PRiv
                             error("type assignment not yet supported for $s in  $ex, $(ln.file) line $(ln.line)")
-                        elseif is_builtin_op(s)
+                        elseif is_builtin(s)
                             error("overwriting builtin function $s in $ex, $(ln.file) line $(ln.line) is not permitted.")
                         end
                         v = (s, eval(T))
@@ -188,7 +188,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         function handle_elem(elem::Symbol, T=(:Any))
                            if elem in C
                                error("illegal modification of variable $ase from an outer scope in $ex, $(ln.file) line $(ln.line)")
-                           elseif is_builtin_op(elem)
+                           elseif is_builtin(elem)
                                error("overwriting builtin function $ase in $ex, $(ln.file) line $(ln.line) is not permitted.")
                            end
                            return (elem, eval(T))
@@ -365,9 +365,11 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         if f in F
                             error("recursive call of $f in in $(ln.file) line $(ln.line)")
                         end
-                        exprs_to_dmterm(ex, ln, scope)
+                        return exprs_to_dmterm(ex, ln, scope)
+                    elseif string(f)[end] == '!'
+                        return mut_slet(var(f, Any), exprs_to_dmterm(tail, ln, scope))
                     else
-                        error("calls without assignments are forbidden. are you trying to mutate something? $ex in $(ln.file) line $(ln.line)")
+                        error("non-mutating calls without assignments are forbidden. are you trying to mutate something? $ex in $(ln.file) line $(ln.line)")
                     end
 
                 elseif ex_head == :block
@@ -432,7 +434,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                        return rnd(Float64)
                     elseif length(ats) == 1
                        rname = gensym()
-                       return slet((rname, Any), rnd(Real), mcreate(sng(1), ats[1], (gensym(), gensym()), var(rname, Any)))
+                       return return slet((rname, Any), rnd(Real), mcreate(sng(1), ats[1], (gensym(), gensym()), var(rname, Any)))
                     elseif length(ats) == 2
                        rname = gensym()
                        return slet((rname, Any), rnd(Real), mcreate(ats..., (gensym(), gensym()), var(rname, Any)))
@@ -442,6 +444,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 elseif callee == :transpose
                     @assert length(args) == 1 "wrong number of arguments for transpose: $ex in $(ln.file) line $(ln.line)"
                     return dmtranspose(exprs_to_dmterm(args[1], ln, scope))
+                elseif callee == :subtract_gradient!
+                    @assert length(args) == 2 "wrong number of arguments for subtract_gradient!: $ex in $(ln.file) line $(ln.line)"
+                    return dmsubgrad(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope))
                 elseif callee isa Symbol && is_builtin_op(callee)
                     if length(args) == 1
                         return  op(callee, [exprs_to_dmterm(args[1], ln, scope)])
@@ -455,7 +460,12 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 elseif callee in F
                     error("recursive call of $callee in $(ln.file) line $(ln.line)")
                 else
-                    return apply(exprs_to_dmterm(callee, ln, scope), map(a->exprs_to_dmterm(a, ln, scope), args)) #TODO DMDFunc type?
+                    callee_term = exprs_to_dmterm(callee, ln, scope)
+                    if callee_term isa var && string(callee_term._1)[end]=='!'
+                       return mut_apply(callee_term, map(a->exprs_to_dmterm(a, ln, scope), args))
+                    else
+                       return apply(callee_term, map(a->exprs_to_dmterm(a, ln, scope), args)) #TODO DMDFunc type?
+                    end
                 end
 
             elseif ex.head == :(->)

@@ -20,23 +20,23 @@ Clip = Union{Norm, Unbounded}
     sng :: Number => DMTerm # singletons
     var :: (Symbol, DataType) => DMTerm
     rnd :: (DataType) => DMTerm
-#    arg :: (Symbol, DataType, Bool) => DMTerm # instrumental term for argument variables, only used by the typechecker. bool flag is true if the variable is "uninteresting", ie its privacy is set to ∞ if that allows to infer better bounds (see ploop rule)
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
     lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
+    mut_lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
     lam_star :: (Vector{<:Tuple{<:TAsgmt, Bool}}, DMTerm) => DMTerm # bool flag indicates "interestingness" of the variable.
-#    dphi :: Vector{lam} => DMTerm # multiple dispatch: the lam whose signature matches gets used.
+    mut_lam_star :: (Vector{<:Tuple{<:TAsgmt, Bool}}, DMTerm) => DMTerm # bool flag indicates "interestingness" of the variable.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
+    mut_apply :: (DMTerm, Vector{DMTerm}) => DMTerm
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
-    flet :: (Symbol, lam, DMTerm) => DMTerm
-#    abstr :: DMTerm => DMTerm
-    # abstr :: (DMTerm) => DMTerm #TODO: Implement this => abstract over all new s/t variables inside
+    flet :: (Symbol, DMTerm, DMTerm) => DMTerm
 #    trttup :: Vector{DMTerm} => DMTerm                     # Transparent version of tuple
 #    trtlet :: (Vector{TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     tup :: Vector{DMTerm} => DMTerm                     # Paper version of tuple
     tlet :: (Vector{<:TAsgmt}, DMTerm, DMTerm) => DMTerm   #                     and let
     loop :: (iter, DMTerm, tup, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     slet :: (TAsgmt, DMTerm, DMTerm) => DMTerm # let v = e1 in e2
+    mut_slet :: (DMTerm, DMTerm) => DMTerm # let v = e1 in e2
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     index :: (DMTerm, DMTerm, DMTerm) => DMTerm
 #    len :: DMTerm => DMTerm # length of a vector
@@ -44,6 +44,7 @@ Clip = Union{Norm, Unbounded}
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
     dmclip :: (Norm, DMTerm) => DMTerm
     dmtranspose :: DMTerm => DMTerm
+    dmsubgrad :: (DMTerm, DMTerm) => DMTerm
 end
 
 arg(s::Symbol, τ::DataType) = arg(s,τ,true) # an extra constructor for arg to save me some typing. "interestingness" flag defaults to true
