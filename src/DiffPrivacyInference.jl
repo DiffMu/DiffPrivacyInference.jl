@@ -20,7 +20,7 @@ greet() = print("Hello World!")
 #export NotInScope, ArithmeticsError, WrongNoOfArgs, WrongArgType, NotNumeric, NoChoiceFound, NotSubtype, NotSupremum, UnificationError, NotInScope
 
 export DMTerm, sng , var , arg , op , phi , ret , lam , mut_lam , lam_star , mut_lam_star , dphi , apply , iter , flet , abstr
-export tup , tlet , loop , slet , index , len , chce, gauss, mcreate, dmclip, dmtranspose, rnd, index
+export tup , tlet , loop , slet , mut_slet , index , len , chce, gauss, mcreate, dmclip, dmtranspose, rnd, index, dmsubgrad
 
 #export DMType, DMInt, DMReal, Constant, DMTyp, TVar, Arr, ArrStar, DMMatrix, DMTup
 
