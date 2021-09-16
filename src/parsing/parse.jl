@@ -32,11 +32,13 @@ function type_allowed(t::Type)
     if t in [Integer, Real, Number, Any]
         return true
     elseif t == Matrix
-       return true
+        return true
     elseif t <: Matrix
         return type_allowed(t.parameters[1])
     elseif t <: Tuple
         return all(map(type_allowed, t.parameters))
+    elseif t == DMParams
+        return true
     else
         return false
     end
