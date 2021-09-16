@@ -28,10 +28,12 @@ end
 
 # we forbid number types finer than Integer and Real as function signatures, so we can
 # decide on dispatch without having to carry the exact julia type.
-function type_allowed(t::DataType)
+function type_allowed(t::Type)
     if t in [Integer, Real, Number, Any]
         return true
-    elseif t <: Array
+    elseif t == Matrix
+       return true
+    elseif t <: Matrix
         return type_allowed(t.parameters[1])
     elseif t <: Tuple
         return all(map(type_allowed, t.parameters))
@@ -44,7 +46,7 @@ end
 # the expression head.
 function build_signature(args, ln :: LineNumberNode, name = :anonymous)
    vs = Symbol[]
-   ts = DataType[]
+   ts = Type[]
    is = Bool[]
    for a in args
       if a isa Symbol
@@ -118,7 +120,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 if ex_head == :function
                     head, body = ex.args
                     name = head.args[1]
-                    constr = (string(name)[end] == '!') ? mut_lam : lam
+                    constr = lam
                     if L && head in C
                         error("overwriting an existing function in a loop is not allowed in $ex, $(ln.file) line $(ln.line)")
                     elseif !(name isa Symbol)
@@ -128,7 +130,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                             if annotation isa Expr && annotation.head == :call && annotation.args[1] == :Priv
                                 head = head.args[1]
                                 name = head.args[1]
-                                constr = (string(name)[end] == '!') ? mut_lam_star : lam_star
+                                constr = lam_star
                             else
                                 error("function return type annotation not supported yet in $ex, $(ln.file) line $(ln.line).")
                             end
@@ -143,7 +145,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
 
                     tailex = isempty(tail) ? var(name, Any) : exprs_to_dmterm(tail, ln, scope)
                     newscope = ([[name]; F], vs, union(C, setdiff(A, vs), [head]), L)
-                    argvec = constr in [lam_star, mut_lam_star] ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
+                    argvec = (constr == lam_star) ? collect(zip(zip(vs, ts), is)) : collect(zip(vs, ts))
                     return flet(name, constr(argvec, exprs_to_dmterm(body, ln, newscope)), tailex)
 
                 elseif ex_head == :(=)
@@ -461,11 +463,7 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                     error("recursive call of $callee in $(ln.file) line $(ln.line)")
                 else
                     callee_term = exprs_to_dmterm(callee, ln, scope)
-                    if callee_term isa var && string(callee_term._1)[end]=='!'
-                       return mut_apply(callee_term, map(a->exprs_to_dmterm(a, ln, scope), args))
-                    else
-                       return apply(callee_term, map(a->exprs_to_dmterm(a, ln, scope), args)) #TODO DMDFunc type?
-                    end
+                    return apply(callee_term, map(a->exprs_to_dmterm(a, ln, scope), args)) #TODO DMDFunc type?
                 end
 
             elseif ex.head == :(->)

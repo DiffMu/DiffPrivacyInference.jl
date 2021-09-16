@@ -1,5 +1,5 @@
 
-TAsgmt = Tuple{Symbol, <:DataType}
+TAsgmt = Tuple{Symbol, <:Type}
 
 @data Norm begin
     L1
@@ -18,16 +18,13 @@ Clip = Union{Norm, Unbounded}
 @data DMTerm begin
     ret :: DMTerm => DMTerm # just for testing privacy language.
     sng :: Number => DMTerm # singletons
-    var :: (Symbol, DataType) => DMTerm
-    rnd :: (DataType) => DMTerm
+    var :: (Symbol, Type) => DMTerm
+    rnd :: (Type) => DMTerm
     op :: (Symbol, Vector{DMTerm}) => DMTerm # builtin operators, like + or *
     phi :: (DMTerm, DMTerm, DMTerm) => DMTerm # condition, true-path, false-path
-    lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
-    mut_lam :: (Vector{<:TAsgmt}, DMTerm) => DMTerm
+    lam :: (Vector, DMTerm) => DMTerm
     lam_star :: (Vector{<:Tuple{<:TAsgmt, Bool}}, DMTerm) => DMTerm # bool flag indicates "interestingness" of the variable.
-    mut_lam_star :: (Vector{<:Tuple{<:TAsgmt, Bool}}, DMTerm) => DMTerm # bool flag indicates "interestingness" of the variable.
     apply :: (DMTerm, Vector{DMTerm}) => DMTerm
-    mut_apply :: (DMTerm, Vector{DMTerm}) => DMTerm
     iter :: (DMTerm, DMTerm, DMTerm) => DMTerm # terms are iteration start, step size and end.
     flet :: (Symbol, DMTerm, DMTerm) => DMTerm
 #    trttup :: Vector{DMTerm} => DMTerm                     # Transparent version of tuple
@@ -40,14 +37,14 @@ Clip = Union{Norm, Unbounded}
     mcreate :: (DMTerm, DMTerm, Tuple{Symbol, Symbol}, DMTerm) => DMTerm
     index :: (DMTerm, DMTerm, DMTerm) => DMTerm
 #    len :: DMTerm => DMTerm # length of a vector
-    chce :: Tuple{Vector{<:DataType}, DMTerm} => DMTerm
+    chce :: Tuple{Vector{<:Type}, DMTerm} => DMTerm
     gauss :: (Tuple{DMTerm, DMTerm, DMTerm}, lam) => DMTerm
     dmclip :: (Norm, DMTerm) => DMTerm
     dmtranspose :: DMTerm => DMTerm
     dmsubgrad :: (DMTerm, DMTerm) => DMTerm
 end
 
-arg(s::Symbol, τ::DataType) = arg(s,τ,true) # an extra constructor for arg to save me some typing. "interestingness" flag defaults to true
+arg(s::Symbol, τ::Type) = arg(s,τ,true) # an extra constructor for arg to save me some typing. "interestingness" flag defaults to true
 
 function pretty_print(t::DMTerm) :: String
     @match t begin
