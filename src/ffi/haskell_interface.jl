@@ -9,8 +9,22 @@ function callback_issubtype(ca::Cstring, cb::Cstring) :: UInt8
     b = unsafe_string(cb)
     τa = Meta.parse(a)
     τb = Meta.parse(b)
-    res = (eval(τa) <: eval(τb)) ? 1 : 0
-    res
+    res0 = (eval(τa) <: eval(τb))
+
+    if res0
+        # NOTE: This is a very strange workaround for a bug
+        #       where sometimes this callback (even though
+        #       computing the correct result) returns a
+        #       wrong result.
+        #       But strangely enough this does not happen
+        #       if a print is happening which depends on
+        #       the outcome.
+        #       Thus we print here the empty string.
+        print("")
+        return 1
+    else res0
+        return 0
+    end
 end
 
 global_parsetermresult = ""
