@@ -37,7 +37,7 @@ function type_allowed(t::Type)
         return type_allowed(t.parameters[1])
     elseif t <: Tuple
         return all(map(type_allowed, t.parameters))
-    elseif t == DMParams
+     elseif t in [DMParams, DMGrads]
         return true
     else
         return false

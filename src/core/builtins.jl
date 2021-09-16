@@ -9,9 +9,15 @@ struct DMParams
    params :: Flux.Params
 end
 
+"A wrapper for Zygote.Grads, so we can control what you can do with gradients."
+struct DMGrads
+   grads :: Zygote.Grads
+end
+
+
 "Subtract the gradients from the parameters."
-function subtract_gradient!(ps::DMParams, gs::Zygote.Grads)
-   ps.params .-= gs
+function subtract_gradient!(ps::DMParams, gs::DMGrads)
+   ps.params .-= gs.grads
 end
 
 
