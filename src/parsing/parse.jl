@@ -365,14 +365,14 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                         end
                         inast = Meta.parseall(read(args[1], String), filename = args[1])
                         return exprs_to_dmterm([inast.args; tail], inast.args[1], scope)
-                    elseif f == :subtract_gradient!
-                        @assert length(args) == 2 "wrong number of arguments for subtract_gradient!: $ex in $(ln.file) line $(ln.line)"
-                        return dmsubgrad(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope))
-                    elseif isempty(tail)
+                   elseif isempty(tail)
                         if f in F
                             error("recursive call of $f in in $(ln.file) line $(ln.line)")
                         end
                         return exprs_to_dmterm(ex, ln, scope)
+                   elseif f == :subtract_gradient!
+                        @assert length(args) == 2 "wrong number of arguments for subtract_gradient!: $ex in $(ln.file) line $(ln.line)"
+                        return mut_slet(dmsubgrad(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope)),exprs_to_dmterm(tail, ln, scope))
                     elseif string(f)[end] == '!'
                         return mut_slet(var(f, Any), exprs_to_dmterm(tail, ln, scope))
                     else
