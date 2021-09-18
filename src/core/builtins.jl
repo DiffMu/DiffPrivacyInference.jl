@@ -5,12 +5,12 @@ NoData() = Any
 NoData(T::DataType) = T
 
 "A wrapper for Flux.Params, so we can control mutation."
-struct DMParams
+mutable struct DMParams
    params :: Flux.Params
 end
 
 "A wrapper for Zygote.Grads, so we can control what you can do with gradients."
-struct DMGrads
+mutable struct DMGrads
    grads :: Zygote.Grads
 end
 
@@ -21,15 +21,14 @@ function subtract_gradient!(ps::DMParams, gs::DMGrads)
 end
 
 
-"Make the input function DP by applying the gaussian mechanism."
-function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f)
-   noise(ff) = ff + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
-   map(ff -> noise.(ff), f) # apply noise element-wise to make it work on matrix-valued f's too
+"Make the input gradient DP by applying the gaussian mechanism."
+function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, f::DMGrads)
+   noise!(ff) = ff + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
+   map!(ff -> noise!.(ff), f.grads, f.grads) # apply noise element-wise
 end
 
-#=
-"Clip the input matrix, that is, normalize all rows that have norm > 1."
-function clip(l::Norm, m::Union{Matrix, Vector})
+"Clip the gradient, i.e. scale by 1/norm(g) if norm(g)>1."
+function clip!(l::Norm, g::DMGrads)
 
     p = @match l begin
         L1 => 1
@@ -37,22 +36,11 @@ function clip(l::Norm, m::Union{Matrix, Vector})
         L∞ => Inf
     end
 
-    # TODO julia is col-major, we should switch...
-    mapslices(r -> norm(r,p) > 1 ? .   mul!(r, (1/norm(r,p))) : r, m, dims = [ndims(v)])
-end
-=#
+    n = norm(g.grads, p)
 
-function clip(l::Norm, m)
-
-    p = @match l begin
-        L1 => 1
-        L2 => 2
-        L∞ => Inf
+    if n > 1
+       g.grads .*= (1/n)
     end
-
-    n = norm(m, p)
-
-    n > 1 ? (m .* (1/n)) : m
 end
 
 
@@ -70,8 +58,15 @@ builtin_ops = Dict(
                    :(==) => (2, τs -> Binary(DMOpEq(), τs...)),
                   )
 
+builtin_mutations = Dict(
+                         :gaussian_mechanism! => gauss,
+                         :clip! => dmclip,
+                         :subtract_gradient! => dmsubgrad
+                        )
+
 is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
-is_builtin(f::Symbol) = haskey(builtin_ops,f) || f in [:clip, :gaussian_mechanism, :subtract_gradient!]
+is_builtin_mutation(f::Symbol) = haskey(builtin_mutations,f)
+is_builtin(f::Symbol) = is_builtin_op(f) || is_builtin_mutation(f)
 
 "Get a map from some argument `DMType`s to the `DMTypeOp` corresponding to the input julia function."
 getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : error("Unsupported builtin op $f.")

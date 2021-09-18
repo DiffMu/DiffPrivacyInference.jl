@@ -26,7 +26,7 @@ export tup , tlet , loop , slet , mut_slet , index , len , chce, gauss, mcreate,
 
 export L1, L2, L∞, U
 
-export gaussian_mechanism, clip, subtract_gradient!
+export gaussian_mechanism!, clip!, subtract_gradient!
 
 export string_to_dmterm, file_to_dmterm, evaluate, Priv, NoData
 #export infer_sensitivity, infer_sensitivity_from_string, infer_sensitivity_from_file, Priv

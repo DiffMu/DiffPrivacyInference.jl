@@ -370,9 +370,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                             error("recursive call of $f in in $(ln.file) line $(ln.line)")
                         end
                         return exprs_to_dmterm(ex, ln, scope)
-                   elseif f == :subtract_gradient!
-                        @assert length(args) == 2 "wrong number of arguments for subtract_gradient!: $ex in $(ln.file) line $(ln.line)"
-                        return mut_slet(dmsubgrad(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope)),exprs_to_dmterm(tail, ln, scope))
+                    elseif is_builtin_mutation(f)
+                        ctor = builtin_mutations[f]
+                        return mut_slet(ctor(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope)),exprs_to_dmterm(tail, ln, scope))
                     elseif string(f)[end] == '!'
                         return mut_slet(var(f, Any), exprs_to_dmterm(tail, ln, scope))
                     else
@@ -451,9 +451,9 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 elseif callee == :transpose
                     @assert length(args) == 1 "wrong number of arguments for transpose: $ex in $(ln.file) line $(ln.line)"
                     return dmtranspose(exprs_to_dmterm(args[1], ln, scope))
-                elseif callee == :subtract_gradient!
-                    @assert length(args) == 2 "wrong number of arguments for subtract_gradient!: $ex in $(ln.file) line $(ln.line)"
-                    return dmsubgrad(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope))
+                elseif is_builtin_mutation(f)
+                        ctor = builtin_mutations[f]
+                        return ctor(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope))
                 elseif callee isa Symbol && is_builtin_op(callee)
                     if length(args) == 1
                         return  op(callee, [exprs_to_dmterm(args[1], ln, scope)])
