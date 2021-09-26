@@ -97,6 +97,7 @@ end
 
 function test_expr_parser(term)
     ast = Meta.parse("begin $term end")
+    sanitize([ast], LineNumberNode(1, "none"), [])
 
     # Code from https://stackoverflow.com/questions/45451245/how-to-unparse-a-julia-expression
     B     = IOBuffer();              # will use to 'capture' the s_expr in
