@@ -24,13 +24,70 @@ end
 
 
 "Enforce the hygiene rules on a single expression."
-function sanitize(ex, ln::LineNumberNode, current = Dict()) :: Tuple{Dict, Dict}
-    sanitize([ex], ln, current)
+function sanitize(ex, ln::LineNumberNode, F, current = Dict()) :: Tuple{Dict, Dict}
+    sanitize([ex], ln, F, current)
 end
 
 
+function merge_blocks(b1, b2) :: Expr
+   (e1, e2) = @match (b1, b2) begin
+      (Expr(:block, e1...), Expr(:block, e2...))  => (e1,e2)
+      (Expr(:block, e1...), e2)  => (e1,e2)
+      (e1, Expr(:block, e2...))  => (e1,e2)
+      (e1, e2) => (e1,e2)
+   end
+   return Expr(:block, [e1; e2]...)
+end
+
+rearrange(exin::Symbol) :: Symbol = exin
+rearrange(exin::LineNumberNode) :: LineNumberNode = exin
+rearrange(exin::Number) :: Number = exin
+function rearrange(exin::Expr) :: Expr
+   @match exin begin
+      Expr(:block, exs...) => let
+         ex = exs[1]
+         tail = length(exs)==2 ? exs[2] : Expr(:block,exs[2:end]...)
+         @match ex begin
+            Expr(:call, :include, args) => let
+               inast = Meta.parseall(read(args[1], String), filename = args[1])
+               return merge_blocks(rearrange(inast), rearrange(tail))
+            end
+            Expr(:if, cond, ifb, elseb) => let
+               rtail = rearrange(tail)
+               rifb = merge_blocks(rearrange(ifb), rtail)
+               relseb = merge_blocks(rearrange(elseb), rtail)
+               return Expr(:if, rearrange(cond), rifb, relseb)
+            end
+            Expr(:if, cond, ifb) => let
+               rtail = rearrange(tail)
+               rifb = merge_blocks(rearrange(ifb), rtail)
+               return Expr(:if, rearrange(cond), rifb, tail)
+            end
+            Expr(:elseif, cond, ifb, elseb) => let
+               rtail = rearrange(tail)
+               rifb = merge_blocks(rearrange(ifb), rtail)
+               relseb = merge_blocks(rearrange(elseb), rtail)
+               return Expr(:elseif, rearrange(cond), rifb, relseb)
+            end
+            Expr(:elseif, cond, ifb) => let
+               rtail = rearrange(tail)
+               rifb = merge_blocks(rearrange(ifb), rtail)
+               return Expr(:if, rearrange(cond), rifb, tail)
+            end
+            head => let
+               return merge_blocks(rearrange(head), rearrange(tail))
+            end
+         end
+      end
+      Expr(head, args...) => return Expr(head, map(rearrange, args)...)
+   end
+end
+
+
+
+
 """
-    sanitize(exs, ln, current = Dict())
+    sanitize(exs, ln, F, current = Dict())
 
 Enforce the following hygiene rules on a block of expressions:
 
@@ -42,9 +99,10 @@ It is not allowed to
 # Arguments:
 - `exs::AbstractArray`: vector of  `Expr`s, `LineNumberNode`s, `Number`s and `Symbols`.
 - `ln::LineNumberNode`: the current line and file.
+- `F`: Names of the functions in whose bodys the `exs` live.
 - `current = Dict()`: the variables that are assigned to in the current scope, that is within the current function body.
 """
-function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: Tuple{Dict, Dict}
+function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict()) :: Tuple{Dict, Dict}
 
     inner = Dict()
 
@@ -67,7 +125,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                 end
 
                 # sanitize the body, with only the arguments in scope.
-                fin, fcur = sanitize(body, ln, Dict(v => body.args[1] for v in vs))
+                fin, fcur = sanitize(body, ln, F ∪ [head.args[1]], Dict(v => body.args[1] for v in vs))
 
                 # if inner scopes within the function body modify the function arguments, error
                 culprits = vs ∩ keys(fin)
@@ -111,7 +169,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
 
                 # give the lambda a temporary name so we can use the code for :function
                 tempname = gensym()
-                fin, fcur = sanitize(Expr(:function, Expr(:call, tempname, largs...), body), ln, current)
+                fin, fcur = sanitize(Expr(:function, Expr(:call, tempname, largs...), body), ln, F, current)
                 # the temporary name should not stay in cur tho
                 delete!(fcur, tempname)
 
@@ -121,8 +179,9 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
 
             Expr(:(=), ase, asd) => let
                 @match ase begin
-                    Expr(:call, f...) =>let
-                        fin, fcur = sanitize(Expr(:function, ase, asd), ln, current)
+                    Expr(:call, f...) => let
+                        fin, fcur = sanitize(Expr(:function, ase, asd), ln, F, current)
+                        F = F ∪ [ase.args[1]]
                         inner = merge(fin, inner)
                         current = merge(fcur, current)
                         continue;
@@ -134,7 +193,8 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                         if (s isa Symbol && !haskey(current, s))
                            current[s] = ln
                         elseif s isa Expr && s.head == :call
-                           fin, fcur = sanitize(Expr(:function, ase, asd), ln, current)
+                           fin, fcur = sanitize(Expr(:function, ase, asd), ln, F, current)
+                           F = F ∪ [ase.args[1]]
                            inner = merge(fin, inner)
                            current = merge(fcur, current)
                            continue;
@@ -161,7 +221,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                     _ => error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
                 end;
 
-                din, dcur = sanitize(asd, ln)
+                din, dcur = sanitize(asd, ln, F)
 
                 # julia allows x = y = 10, we don't
                 if !isempty(keys(dcur))
@@ -180,7 +240,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                 if !haskey(current, ase)
                     error("trying to overwrite variable $ase that is not in scope in $(ln.file) line $(ln.line)")
                 end
-                fin, fcur = sanitize(Expr(:(=), ase, Expr(:+, ase, asd)), ln, current)
+                fin, fcur = sanitize(Expr(:(=), ase, Expr(:+, ase, asd)), ln, F, current)
 
                 inner = merge(fin, inner)
                 current = merge(fcur, current)
@@ -190,7 +250,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                 if !haskey(current, ase)
                     error("trying to overwrite variable $ase that is not in scope in $(ln.file) line $(ln.line)")
                 end
-                fin, fcur = sanitize(Expr(:(=), ase, Expr(:-, ase, asd)), ln, current)
+                fin, fcur = sanitize(Expr(:(=), ase, Expr(:-, ase, asd)), ln, F, current)
 
                 inner = merge(fin, inner)
                 current = merge(fcur, current)
@@ -200,13 +260,16 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
                 if !haskey(current, ase)
                     error("trying to overwrite variable $ase that is not in scope in $(ln.file) line $(ln.line)")
                 end
-                fin, fcur = sanitize(Expr(:(=), ase, Expr(:*, ase, asd)), ln, current)
+                fin, fcur = sanitize(Expr(:(=), ase, Expr(:*, ase, asd)), ln, F, current)
 
                 inner = merge(fin, inner)
                 current = merge(fcur, current)
             end;
 
             Expr(:call, f, args...) => let
+                if f in F
+                   error("recursive call of $f in in $(ln.file) line $(ln.line)")
+                end
                 if f == :include
                     if length(args) != 1
                         error("include with mapexpr not supported: $ex in $(ln.file) line $(ln.line)")
@@ -214,19 +277,19 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, current = Dict()) :: T
 
                     # parse and sanitize the whole included file, too
                     inast = Meta.parseall(read(args[1], String), filename = args[1])
-                    iinn, icur = sanitize(inast.args, inast.args[1], current)
+                    iinn, icur = sanitize(inast.args, inast.args[1], [], current)
                     inner = merge(inner, iinn)
                     current = merge(current, icur)
 
                 elseif !(f isa Symbol)
-                    fin, fcur = sanitize(f, ln, current)
+                    fin, fcur = sanitize(f, ln, F, current)
                     inner = merge(fin, inner)
                     current = merge(fcur, current)
                 end
             end;
 
             Expr(_, args...) => let
-                ein, ecur = sanitize(args, ln, current)
+                ein, ecur = sanitize(args, ln, F, current)
                 inner = merge(ein, inner)
                 current = merge(ecur, current)
             end;
