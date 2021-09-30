@@ -97,6 +97,7 @@ end
 
 function test_expr_parser(term)
     ast = Meta.parse("begin $term end")
+    ast = rearrange(ast)
     sanitize([ast], LineNumberNode(1, "none"), [])
 
     # Code from https://stackoverflow.com/questions/45451245/how-to-unparse-a-julia-expression

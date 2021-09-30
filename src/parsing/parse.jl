@@ -451,8 +451,8 @@ function exprs_to_dmterm(exs, ln, scope = ([],[],[], false)) :: DMTerm
                 elseif callee == :transpose
                     @assert length(args) == 1 "wrong number of arguments for transpose: $ex in $(ln.file) line $(ln.line)"
                     return dmtranspose(exprs_to_dmterm(args[1], ln, scope))
-                elseif is_builtin_mutation(f)
-                        ctor = builtin_mutations[f]
+                elseif is_builtin_mutation(callee)
+                        ctor = builtin_mutations[callee]
                         return ctor(exprs_to_dmterm(args[1], ln, scope), exprs_to_dmterm(args[2], ln, scope))
                 elseif callee isa Symbol && is_builtin_op(callee)
                     if length(args) == 1
