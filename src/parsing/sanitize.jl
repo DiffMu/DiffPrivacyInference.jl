@@ -54,25 +54,25 @@ function rearrange(exin::Expr) :: Expr
             end
             Expr(:if, cond, ifb, elseb) => let
                rtail = rearrange(tail)
-               rifb = merge_blocks(rearrange(ifb), rtail)
-               relseb = merge_blocks(rearrange(elseb), rtail)
+               rifb = rearrange(merge_blocks(ifb, rtail))
+               relseb = rearrange(merge_blocks(elseb, rtail))
                return Expr(:if, rearrange(cond), rifb, relseb)
             end
             Expr(:if, cond, ifb) => let
                rtail = rearrange(tail)
-               rifb = merge_blocks(rearrange(ifb), rtail)
+               rifb = rearrange(merge_blocks(ifb, rtail))
                return Expr(:if, rearrange(cond), rifb, tail)
             end
             Expr(:elseif, cond, ifb, elseb) => let
                rtail = rearrange(tail)
-               rifb = merge_blocks(rearrange(ifb), rtail)
-               relseb = merge_blocks(rearrange(elseb), rtail)
+               rifb = rearrange(merge_blocks(ifb, rtail))
+               relseb = rearrange(merge_blocks(elseb, rtail))
                return Expr(:elseif, rearrange(cond), rifb, relseb)
             end
             Expr(:elseif, cond, ifb) => let
                rtail = rearrange(tail)
-               rifb = merge_blocks(rearrange(ifb), rtail)
-               return Expr(:if, rearrange(cond), rifb, tail)
+               rifb = rearrange(merge_blocks(ifb, rtail))
+               return Expr(:if, rearrange(cond), rifb, rtail)
             end
             head => let
                return merge_blocks(rearrange(head), rearrange(tail))
@@ -121,6 +121,7 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                     @match a begin
                         ::Symbol => push!(vs, a)
                         Expr(:(::), s, T) => push!(vs, s)
+                        x => error("Invalid function argument $x in $(ln.file) line $(ln.line)")
                     end;
                 end
 
