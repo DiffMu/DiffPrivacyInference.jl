@@ -32,7 +32,7 @@ export string_to_dmterm, file_to_dmterm, evaluate, Priv, NoData
 #export infer_sensitivity, infer_sensitivity_from_string, infer_sensitivity_from_file, Priv
 export pretty_print
 
-export typecheck_hs_from_dmterm, test_hs, test_expr_parser
+export typecheck_hs_from_string, test_hs, test_expr_parser
 
 export DMParams, DMGrads
 
