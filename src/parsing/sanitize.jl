@@ -39,6 +39,7 @@ function merge_blocks(b1, b2) :: Expr
    return Expr(:block, [e1; e2]...)
 end
 
+rearrange(::Nothing) = nothing
 rearrange(exin::Symbol) :: Symbol = exin
 rearrange(exin::LineNumberNode) :: LineNumberNode = exin
 rearrange(exin::Number) :: Number = exin
@@ -49,8 +50,11 @@ function rearrange(exin::Expr) :: Expr
          tail = length(exs)==2 ? exs[2] : Expr(:block,exs[2:end]...)
          @match ex begin
             Expr(:call, :include, args) => let
+               if length(args) != 1
+                  error("include with mapexpr not supported: $ex")
+               end
                inast = Meta.parseall(read(args[1], String), filename = args[1])
-               return merge_blocks(rearrange(inast), rearrange(tail))
+               return rearrange(merge_blocks(inast, tail))
             end
             Expr(:if, cond, ifb, elseb) => let
                rtail = rearrange(tail)
@@ -61,7 +65,7 @@ function rearrange(exin::Expr) :: Expr
             Expr(:if, cond, ifb) => let
                rtail = rearrange(tail)
                rifb = rearrange(merge_blocks(ifb, rtail))
-               return Expr(:if, rearrange(cond), rifb, tail)
+               return Expr(:if, rearrange(cond), rifb, rtail)
             end
             Expr(:elseif, cond, ifb, elseb) => let
                rtail = rearrange(tail)
@@ -288,6 +292,8 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                     current = merge(fcur, current)
                 end
             end;
+
+            Expr(:return, args...) => error("Use of return is not permitted: $ex in $(ln.file) line $(ln.line)")
 
             Expr(_, args...) => let
                 ein, ecur = sanitize(args, ln, F, current)
