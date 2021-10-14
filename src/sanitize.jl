@@ -42,6 +42,7 @@ end
 rearrange(::Nothing) = nothing
 rearrange(exin::Symbol) :: Symbol = exin
 rearrange(exin::LineNumberNode) :: LineNumberNode = exin
+rearrange(exin::QuoteNode) = rearrange(exin.value)
 rearrange(exin::Number) :: Number = exin
 function rearrange(exin::Expr) :: Expr
    @match exin begin
@@ -292,8 +293,6 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                     current = merge(fcur, current)
                 end
             end;
-
-            Expr(:return, args...) => error("Use of return is not permitted: $ex in $(ln.file) line $(ln.line)")
 
             Expr(_, args...) => let
                 ein, ecur = sanitize(args, ln, F, current)
