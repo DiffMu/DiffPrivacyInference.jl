@@ -1,4 +1,33 @@
 
+
+####################################################################
+# julia interface
+
+builtin_ops = Dict(
+                   :ceil => (1, τs -> Unary(DMOpCeil(), τs...)),
+                   :+ => (2, τs -> Binary(DMOpAdd(), τs...)),
+                   :- => (2, τs -> Binary(DMOpSub(), τs...)),
+                   :* => (2, τs -> Binary(DMOpMul(), τs...)),
+                   :/ => (2, τs -> Binary(DMOpDiv(), τs...)),
+                   :% => (2, τs -> Binary(DMOpMod(), τs...)),
+                   :rem => (2, τs -> Binary(DMOpMod(), τs...)),
+                   :(==) => (2, τs -> Binary(DMOpEq(), τs...)),
+                  )
+
+builtin_mutations = Dict(
+                         :gaussian_mechanism! => gauss,
+                         :clip! => dmclip,
+                         :subtract_gradient! => dmsubgrad
+                        )
+
+is_builtin_op(f::Symbol) = haskey(builtin_ops,f)
+is_builtin_mutation(f::Symbol) = haskey(builtin_mutations,f)
+is_builtin(f::Symbol) = is_builtin_op(f) || is_builtin_mutation(f)
+
+"Get a map from some argument `DMType`s to the `DMTypeOp` corresponding to the input julia function."
+getDMOp(f::Symbol) = is_builtin_op(f) ? builtin_ops[f] : error("Unsupported builtin op $f.")
+
+
 """
 file_to_dmterm(file::AbstractString)
 
