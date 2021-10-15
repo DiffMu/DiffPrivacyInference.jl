@@ -12,12 +12,14 @@ end
 Clip = Union{Norm, Unbounded}
 
 
-
 Priv() = Any
 Priv(T::DataType) = T
 
 NoData() = Any
 NoData(T::DataType) = T
+
+BlackBox() = Any
+BlackBox(T::DataType) = T
 
 "A wrapper for Flux.Params, so we can control mutation."
 mutable struct DMParams
@@ -32,7 +34,9 @@ end
 
 "Subtract the gradients from the parameters."
 function subtract_gradient!(ps::DMParams, gs::DMGrads)
-   ps.params .-= gs.grads
+   for p in ps.params
+      p .-= gs.grads[p]
+   end
 end
 
 
