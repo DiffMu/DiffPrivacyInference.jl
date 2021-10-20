@@ -187,7 +187,6 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                 @match ase begin
                     Expr(:call, f...) => let
                         fin, fcur = sanitize(Expr(:function, ase, asd), ln, F, current)
-                        F = F ∪ [ase.args[1]]
                         inner = merge(fin, inner)
                         current = merge(fcur, current)
                         continue;
@@ -200,7 +199,6 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                            current[s] = ln
                         elseif s isa Expr && s.head == :call
                            fin, fcur = sanitize(Expr(:function, ase, asd), ln, F, current)
-                           F = F ∪ [ase.args[1]]
                            inner = merge(fin, inner)
                            current = merge(fcur, current)
                            continue;
