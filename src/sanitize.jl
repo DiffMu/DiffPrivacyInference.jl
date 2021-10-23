@@ -89,6 +89,23 @@ function rearrange(exin::Expr) :: Expr
 end
 
 
+# we forbid number types finer than Integer and Real as function signatures, so we can
+# decide on dispatch without having to carry the exact julia type.
+function type_allowed(t::Type)
+    if t in [Integer, Real, Number, Any]
+        return true
+    elseif t == Matrix
+        return true
+    elseif t <: Matrix
+        return type_allowed(t.parameters[1])
+    elseif t <: Tuple
+        return all(map(type_allowed, t.parameters))
+     elseif t in [DMParams, DMGrads]
+        return true
+    else
+        return false
+    end
+end
 
 
 """
@@ -125,7 +142,14 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                 for a in head.args[2:end]
                     @match a begin
                         ::Symbol => push!(vs, a)
-                        Expr(:(::), s, T) => push!(vs, s)
+                        Expr(:(::), s, T) => let
+                            if !type_allowed(eval(T))
+                                error("dispatxh on number types finer than Real or Integer is not allowed!
+                                       Argument $s has type $T in definition of function $head")
+                            else
+                                push!(vs, s)
+                            end
+                        end;
                         x => error("Invalid function argument $x in $(ln.file) line $(ln.line)")
                     end;
                 end
