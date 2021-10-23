@@ -144,8 +144,12 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                         ::Symbol => push!(vs, a)
                         Expr(:(::), s, T) => let
                             if !type_allowed(eval(T))
-                                error("dispatxh on number types finer than Real or Integer is not allowed!
-                                       Argument $s has type $T in definition of function $head")
+                                if (eval(T) <: Number)
+                                   error("Dispatch on number types finer than Real or Integer is not allowed!
+                                          Argument $s has type $T in definition of function $head")
+				else
+				   error("Type $T not supported as function argument type of $s in definition of function $head")
+ 				end
                             else
                                 push!(vs, s)
                             end
