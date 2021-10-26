@@ -20,6 +20,6 @@ export Priv, NoData, BlackBox
 
 export typecheck_hs_from_string, test_hs, test_expr_parser
 
-export DMParams, DMGrads
+export DMModel, DMGrads
 
 end # module

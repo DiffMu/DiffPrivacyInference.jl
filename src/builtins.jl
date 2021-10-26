@@ -22,8 +22,10 @@ BlackBox() = Any
 BlackBox(T::DataType) = T
 
 "A wrapper for Flux.Params, so we can control mutation."
-mutable struct DMParams
+mutable struct DMModel
+   model
    params :: Flux.Params
+   DMModel(m) = new(m, Flux.params(m))
 end
 
 "A wrapper for Zygote.Grads, so we can control what you can do with gradients."
@@ -33,7 +35,7 @@ end
 
 
 "Subtract the gradients from the parameters."
-function subtract_gradient!(ps::DMParams, gs::DMGrads)
+function subtract_gradient!(ps::DMModel, gs::DMGrads)
    for p in ps.params
       p .-= gs.grads[p]
    end
