@@ -79,6 +79,13 @@ function rearrange(exin::Expr) :: Expr
                rifb = rearrange(merge_blocks(ifb, rtail))
                return Expr(:if, rearrange(cond), rifb, rtail)
             end
+            Expr(:import, _) => let
+                if length(ex.args[1].args) > 1
+                   error("Only standalone includes are allowed. You tried to import specific namesin $ex.")
+                else
+		   rearrange(tail) # just ignore the import.
+		end
+            end;
             head => let
                return merge_blocks(rearrange(head), rearrange(tail))
             end
