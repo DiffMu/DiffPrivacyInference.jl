@@ -103,7 +103,11 @@ function type_allowed(t::Type)
         return true
     elseif t == Matrix
         return true
+    elseif t == Vector
+        return true
     elseif t <: Matrix
+        return type_allowed(t.parameters[1])
+    elseif t <: Vector
         return type_allowed(t.parameters[1])
     elseif t <: Tuple
         return all(map(type_allowed, t.parameters))
