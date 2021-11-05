@@ -21,6 +21,9 @@ NoData(T::DataType) = T
 BlackBox() = Any
 BlackBox(T::DataType) = T
 
+Robust() = Any
+Robust(T::DataType) = T
+
 "A wrapper for Flux.Params, so we can control mutation."
 mutable struct DMModel
    model # a flux model
@@ -43,7 +46,7 @@ function subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
    return DMModel(cm)
 end
 
-copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
+copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(deepcopy(g.grads.grads)), g.grads.params))
 
 "Make the input gradient DP by applying the gaussian mechanism."
 function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f::DMGrads) :: DMGrads

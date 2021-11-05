@@ -16,7 +16,7 @@ greet() = print("Hello World!")
 export L1, L2, L∞, U
 
 export gaussian_mechanism, clip, subtract_gradient
-export Priv, NoData, BlackBox
+export Priv, NoData, BlackBox, Robust
 
 export typecheck_hs_from_string, test_hs, test_expr_parser
 

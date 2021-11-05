@@ -117,7 +117,7 @@ function type_allowed(t::Type)
         return false
     end
 end
-
+type_allowed(t) = false
 
 """
     sanitize(exs, ln, F, current = Dict())
@@ -234,15 +234,17 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                         if !haskey(current, ase) current[ase] = ln end
                     end
                     Expr(:(::), s, T) => let
-                        if (s isa Symbol && !haskey(current, s))
-                           current[s] = ln
+                        if s isa Symbol
+                           if !haskey(current, s)
+                              current[s] = ln
+                           end
                         elseif s isa Expr && s.head == :call
                            fin, fcur = sanitize(Expr(:function, ase, asd), ln, F, current)
                            inner = merge(fin, inner)
                            current = merge(fcur, current)
                            continue;
                         else
-                           error("unsupported assignment in $ex, $(ln.file) line $(ln.line)")
+                           error("unsupported assignment in $(ex.args[1].args), $(ln.file) line $(ln.line)")
                         end
                     end
                     Expr(:tuple, tnames...) => let
