@@ -36,6 +36,9 @@ function callback_parseterm(ci::Cstring) :: Cstring
     ast = rearrange(ast)
     sanitize([ast], LineNumberNode(1, "none"), [])
 
+    # NOTE: This is but a way to print the julia expr to a string,
+    #       which for some (?) reason is better than string() method.
+    #
     # Code from https://stackoverflow.com/questions/45451245/how-to-unparse-a-julia-expression
     B     = IOBuffer();              # will use to 'capture' the s_expr in
     Expr1 = ast                      # the expr we want to generate an s_expr for
@@ -83,6 +86,9 @@ function typecheck_hs_from_string(term)
     ast = rearrange(ast)
     sanitize([ast], LineNumberNode(1, "none"), [])
 
+    # NOTE: This is but a way to print the julia expr to a string,
+    #       which for some (?) reason is better than string() method.
+    #
     # Code from https://stackoverflow.com/questions/45451245/how-to-unparse-a-julia-expression
     B     = IOBuffer();              # will use to 'capture' the s_expr in
     Expr1 = ast                      # the expr we want to generate an s_expr for
@@ -151,6 +157,9 @@ function test_expr_parser(term)
     ast = rearrange(ast)
     sanitize([ast], LineNumberNode(1, "none"), [])
 
+    # NOTE: This is but a way to print the julia expr to a string,
+    #       which for some (?) reason is better than string() method.
+    #
     # Code from https://stackoverflow.com/questions/45451245/how-to-unparse-a-julia-expression
     B     = IOBuffer();              # will use to 'capture' the s_expr in
     Expr1 = ast                      # the expr we want to generate an s_expr for
