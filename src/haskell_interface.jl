@@ -31,8 +31,13 @@ global_parsetermresult = ""
 
 function callback_parseterm(ci::Cstring) :: Cstring
     input = unsafe_string(ci)
-    t = string_to_dmterm(input)
-    output = string(t)
+
+    ast = Meta.parse("begin $input end")
+    ast = rearrange(ast)
+    sanitize([ast], LineNumberNode(1, "none"), [])
+
+    # t = string_to_dmterm(input)
+    output = string(ast)
     global_parsetermresult = output
     pointer(global_parsetermresult)
 end
