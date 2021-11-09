@@ -24,6 +24,8 @@ BlackBox(T::DataType) = T
 Robust() = Any
 Robust(T::DataType) = T
 
+convert(m) = m
+
 "A wrapper for Flux.Params, so we can control mutation."
 mutable struct DMModel
    model # a flux model
