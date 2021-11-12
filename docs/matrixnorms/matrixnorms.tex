@@ -1,0 +1,100 @@
+\documentclass{article}
+    % General document formatting
+    \usepackage[margin=0.7in]{geometry}
+    \usepackage[parfill]{parskip}
+    \usepackage[utf8]{inputenc}
+
+    % Related to math
+    \usepackage{amsmath,amssymb,amsfonts,amsthm}
+
+\begin{document}
+
+\section*{Why all this?}
+Differential privacy is given w.r.t. datasets that "differ in only one entry", but the mechanisms we have for making a function differentially private measure the noise they add in terms of a sensitivity that is given w.r.t. e.g. the $L2$-distance. Hence we need to check sensitivity of functions w.r.t. different input- and output metrics.
+
+\section*{Metric Spaces}
+$(M, d)$ where $M$ is a set and $d : M \times M \rightarrow \mathbb{R}$ s.t.
+\begin{itemize}
+   \item $d(x,y) = 0 \Leftrightarrow x = y$
+   \item $d(x,y) = d(y,x)$
+   \item $d(x,z) \leq d(x,y) + d(y,z)$
+\end{itemize}
+
+\section*{Sensitivity}
+for metric spaces $M,N$ a map $f:M\rightarrow N$ is $s$-sensitive if for all $x,y \in M$
+$$d_N(f(x), f(y)) \leq s \cdot d_M(x,y)$$
+"If the input is at most 1 apart, the output is at most $s$ apart."
+
+\section*{Gaussian Mechanism}
+Let $\mathcal{D}$ be some space equipped with the discrete metric (e.g. $(\mathbb{D},L\infty)$). Given a function $f:\mathcal{D}\rightarrow \mathbb{R}^n$ that is $s$-sensitive in $L2$ norm, for every $\delta\in(0,1)$ and $\epsilon\in(0,1)$ the gaussian mechanism
+\[\mathcal{M}_\text{Gauss}(f, \epsilon, \delta)(x) = f(x) + \mathcal{N}^n\left(\mu = 0, \sigma^2 = \frac{2 \ln (1.25/\delta) \cdot s^2}{\epsilon^2}\right)\]
+yields an $(\epsilon,\delta)$-differentially private function.
+
+\section*{Metrics on Numbers}
+\begin{itemize}
+   \item On $\mathbb{R}$ the metric is standard:
+      $$d_\mathbb{R}(x,y) = |x-y|$$
+   \item On $\mathbb{D}$ we just check if the numbers are equal:
+      $$d_\mathbb{D}(x,y) = (x==y ? 0 : 1)$$
+\end{itemize}
+
+
+\section*{Metrics on Vectors}
+\begin{itemize}
+   \item Vectors over $\mathbb{R}$:
+      \[  d_{L1,\mathbb{R}}(v,w) = \sum_i d_\mathbb{R}(v_i, w_i) \]
+      \[  d_{L2,\mathbb{R}}(v,w) = \sqrt{\sum_i d_\mathbb{R}(v_i, w_i)^2} \]
+      \[  d_{L\infty,\mathbb{R}}(v,w) = \max_i d_\mathbb{R}(v_i, w_i) \]
+   \item Vectors over $\mathbb{D}$:
+      \[  d_{L1,\mathbb{D}}(v,w) = \sum_i d_\mathbb{D}(v_i, w_i) = \textnormal{number of entries that differ} \]
+      \[  d_{L2,\mathbb{D}}(v,w) = \sqrt{\sum_i d_\mathbb{D}(v_i, w_i)^2} = \sqrt{d_{L1,\mathbb{D}}(v,w) } \]
+      \[  d_{L\infty,\mathbb{D}}(v,w) = \max_i d_\mathbb{D}(v_i, w_i) = \text{"} 0 \text{ if } v=w \text{, 1 otherwise"} \]
+   \item some facts
+      \begin{itemize}
+         \item for vectors $v\neq w$ we have
+            $$1 = d_{{L\infty},\mathbb{D}}(v,w) \leq d_{L2,\mathbb{D}}(v,w) \leq d_{L1,\mathbb{D}}(v,w)$$
+         \item so if a vector-valued function is $s$-sensitive for a fixed input metric and output metric $d_{L1,\mathbb{D}}$, it is also $s$-sensitive under output metric $d_{L\infty,\mathbb{D}}$
+         \item all functions from $(*,\mathbb{D})$-vectors to $(L\infty,\mathbb{D})$-vectors are 1-sensitve because
+         for $v \neq w$ it is $d_{L\infty, \mathbb{D}}(v,w) = 1$ and  $d_{L*, \mathbb{D}}(v,w) \geq 1$ always
+         \item Clipping $(L\infty,\mathbb{D})$ vectors is such a function and hence 1-sensitive. I don't think clipping vectors in general is 1-sensitive (even if it says so in the paper), because e.g. $d_{L1,\mathbb{D}}$ can become larger:
+            $$d_{L1,\mathbb{D}}([1,1],[1,0]) = 1$$
+            but for the clipped vectors 
+            $$d_{L1,\mathbb{D}}(clip^{L1}([1,1]), clip^{L1}([1,0])) = d_{L1,\mathbb{D}}([0.5,0.5],[1,0]) = 2$$
+      \end{itemize}
+\end{itemize}
+
+\section*{Matrix Type}
+The duet matrix type has the following parameters:
+$$\mathbb{M}^c_l \tau[i,j]$$
+is the type of matrices where
+\begin{itemize}
+   \item the matrix has $i$ rows and $j$ columns
+   \item all rows have $d_{c,\mathbb{R}}(r,0) \leq 1$ (note that this is the $\mathbb{R}$ norm no matter what $\tau$ is. This differs from what is said on p.44 of the paper, but it makes no sense otherwise and in their implementation it's like we think, see last item of "Implications")
+   \item the elements are of type $\tau$ and the metric is chosen accordingly
+   \item sensitivities of variables with this type are given w.r.t. $d_{\mathbb{M}^\star_l\tau}$
+\end{itemize}
+
+\section*{Metrics over Matrices}
+For matrices $m,n \vdash \mathbb{M}^\star_l\tau$ the metric sums over rows:
+      $$d_{\mathbb{M}^\star_l\tau}(m,n) = \sum_j d_{l,\tau}(m_j,n_j)$$
+In particular,
+$$d_{\mathbb{M}^\star_{L1}\mathbb{D}}(m,n) = \text{number of matrix entries that differ}$$
+$$d_{\mathbb{M}^\star_{L\infty}\mathbb{D}}(m,n) = \text{number of matrix rows that differ somewhere}$$
+
+\section*{\texttt{discf}}
+The function $\texttt{discf} : \mathbb{R}\rightarrow\mathbb{D}$ is claimed to be 1-sensitive in the paper. Taking the numbers $0.1$ and $0.2$ as an example, we get
+\[1 = d_{\mathbb{D}}(\texttt{discf}(0.1),\texttt{discf}(0.2)) = 10 \cdot d_{\mathbb{R}}(0.1,0.2)\]
+so using our notion of sensitivity \texttt{discf} must be at least 10-sensitive...
+
+I suspect they used a different definition for sensitivity, namely a function $f:M\rightarrow N$ to be $s$-sensitive iff
+\[\textnormal{max}_{d_M(x,y)=1} d_N(f(x),f(y)) = s\]
+This definition is equivalent to the above one if $M = \mathbb{D}$ but not in general.
+
+\section*{\texttt{convert}}
+We can convert $\mathbb{M}^l_\star\mathbb{D}$ to $ \mathbb{M}^l_l\mathbb{R}$ because all rows of the first type have $l$-norm $\leq 1$ so for any two rows $m_i,n_i$ with $d_{\star,\mathbb{D}}(m_i,n_i) \leq 1$ we have 
+      $$d_{l,\mathbb{R}}(m_i,n_i) \leq d_{l,\mathbb{R}}(m_i,0) + d_{l,\mathbb{R}}(0,n_i) \leq 1 + 1$$
+The inequality is met, e.g. by the vectors $[1,0]$ and $[-1,0]$, as they have $\mathbb{D}$-distance 1 and $L2$-norm 1, but $L2$-distance 2 from each other.
+
+This implies conversion of the rows is 2-sensitive, but in the paper it is declared 1-sensitive. Also the paper version does not preserve clipping on the matrix, even though in their interpreter the \texttt{convert} function is simply the identity.
+
+\end{document}
