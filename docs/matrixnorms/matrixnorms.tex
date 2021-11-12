@@ -52,10 +52,14 @@ yields an $(\epsilon,\delta)$-differentially private function.
    \item some facts
       \begin{itemize}
          \item for vectors $v\neq w$ we have
-            $$1 = d_{{L\infty},\mathbb{D}}(v,w) \leq d_{L2,\mathbb{D}}(v,w) \leq d_{L1,\mathbb{D}}(v,w)$$
-         \item so if a vector-valued function is $s$-sensitive for a fixed input metric and output metric $d_{L1,\mathbb{D}}$, it is also $s$-sensitive under output metric $d_{L\infty,\mathbb{D}}$
-         \item all functions from $(*,\mathbb{D})$-vectors to $(L\infty,\mathbb{D})$-vectors are 1-sensitve because
-         for $v \neq w$ it is $d_{L\infty, \mathbb{D}}(v,w) = 1$ and  $d_{L*, \mathbb{D}}(v,w) \geq 1$ always
+               \begin{equation}
+                   \label{eqn:one}
+                    1 = d_{{L\infty},\mathbb{D}}(v,w) \leq d_{L2,\mathbb{D}}(v,w) \leq d_{L1,\mathbb{D}}(v,w)
+               \end{equation}
+         \item hence if a vector-valued function $f:M->\mathbb{D}^n$ is $s$-sensitive for a fixed input metric and output metric $d_{L1,\mathbb{D}}$, it is also $s$-sensitive under output metric $d_{L\infty,\mathbb{D}}$ because
+         \[d_{L\infty,\mathbb{D}}(f(v),f(w))\overset{(\ref{eqn:one})}{\leq} d_{L2,\mathbb{D}}(f(v),f(w)) \overset{(\ref{eqn:one})}{\leq} d_{L1,\mathbb{D}}(f(v),f(w)) \overset{f \textnormal{ is $s$-sensitive}}{\leq} s \cdot d_M(v,w)\]
+         \item also all functions from $(*,\mathbb{D})$-vectors to $(L\infty,\mathbb{D})$-vectors are 1-sensitve because for $v \neq w$ it is
+         \[1 = d_{L\infty, \mathbb{D}}(v,w) = 1 \overset{(\ref{eqn:one})}{\leq} 1 \cdot d_{L*, \mathbb{D}}(v,w)\]
          \item Clipping $(L\infty,\mathbb{D})$ vectors is such a function and hence 1-sensitive. I don't think clipping vectors in general is 1-sensitive (even if it says so in the paper), because e.g. $d_{L1,\mathbb{D}}$ can become larger:
             $$d_{L1,\mathbb{D}}([1,1],[1,0]) = 1$$
             but for the clipped vectors 
@@ -92,7 +96,7 @@ This definition is equivalent to the above one if $M = \mathbb{D}$ but not in ge
 
 \section*{\texttt{convert}}
 We can convert $\mathbb{M}^l_\star\mathbb{D}$ to $ \mathbb{M}^l_l\mathbb{R}$ because all rows of the first type have $l$-norm $\leq 1$ so for any two rows $m_i,n_i$ with $d_{\star,\mathbb{D}}(m_i,n_i) \leq 1$ we have 
-      $$d_{l,\mathbb{R}}(m_i,n_i) \leq d_{l,\mathbb{R}}(m_i,0) + d_{l,\mathbb{R}}(0,n_i) \leq 1 + 1$$
+      $$d_{l,\mathbb{R}}(m_i,n_i) \leq d_{l,\mathbb{R}}(m_i,0) + d_{l,\mathbb{R}}(0,n_i)  = \leq 1 + 1$$
 The inequality is met, e.g. by the vectors $[1,0]$ and $[-1,0]$, as they have $\mathbb{D}$-distance 1 and $L2$-norm 1, but $L2$-distance 2 from each other.
 
 This implies conversion of the rows is 2-sensitive, but in the paper it is declared 1-sensitive. Also the paper version does not preserve clipping on the matrix, even though in their interpreter the \texttt{convert} function is simply the identity.
