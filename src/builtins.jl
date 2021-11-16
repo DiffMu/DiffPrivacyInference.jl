@@ -36,23 +36,30 @@ mutable struct DMGrads
    grads :: Zygote.Grads
 end
 
+function scale_gradient(s :: Number, gs::DMGrads) :: DMGrads
+   cg = copy_grad(gs)
+   cg.grads .*= s
+   return cg
+end
+
 
 "Subtract the gradients from the parameters."
 function subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
    cm = deepcopy(m.model)
    cp = Flux.params(cm)
    p = Flux.params(m.model)
-   for i in 1:length(Flux.params(m).order.data)
+   for i in 1:size(p.order.data)[1]
       cp[i] .-= gs.grads[p[i]]
    end
    return DMModel(cm)
 end
 
-copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(deepcopy(g.grads.grads)), g.grads.params))
+copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
 
 "Make the input gradient DP by applying the gaussian mechanism."
 function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f::DMGrads) :: DMGrads
    cf = copy_grad(f)
+   println("noies: $(rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2)))")
    noise!(ff) = ff + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
    map!(ff -> noise!.(ff), cf.grads, cf.grads) # apply noise element-wise
    return cf
@@ -69,7 +76,7 @@ function clip(l::Norm, g::DMGrads) :: DMGrads
 
     cg = copy_grad(g)
 
-    n = norm(cg.grads, p)
+    n = norm(cg.grads.grads, p)
 
     if n > 1
        cg.grads .*= (1/n)

@@ -1,6 +1,6 @@
 import Flux
 
-function unbounded_gradient(model::DMModel, d::Vector, l::Vector) :: BlackBox()
+function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox()
    gs = Flux.gradient(Flux.params(model.model)) do
            loss(d,l,model)
         end
@@ -8,26 +8,32 @@ function unbounded_gradient(model::DMModel, d::Vector, l::Vector) :: BlackBox()
 end
 
 function init_model() :: BlackBox()
-   DMModel(Flux.Chain(Flux.Dense(20,100,Flux.σ),Flux.Dense(100,10),Flux.softmax))
+ DMModel(Flux.Chain(
+         Flux.Dense(28*28,40, Flux.relu),
+         Flux.Dense(40, 10),
+         Flux.softmax))
 end
 
-loss(x,y,model) :: BlackBox() = Flux.mse(model.model(x),y)
+loss(X, y, model) = Flux.crossentropy(model.model(X), y)
 
-function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData()) :: Priv()
+function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), n::NoData()) :: Priv()
    model = init_model()
-   (n,m) = size(data)
-   for _ in 1:eta
-       for i in 1:n
+   dim = size(data)[1]
+   aloss = 0
+   for _ in 1:n
+       for i in 1:dim
           d = data[i,:]
           l = labels[i]
           gs = unbounded_gradient(model, d, l)
 
           gs = clip(L2,gs)
           gs = gaussian_mechanism(1/n, eps, del, gs)
-          model = subtract_gradient(model,gs)
+          model = subtract_gradient(model, scale_gradient(eta,gs))
+          aloss += loss(d,l,model)/(n*dim)
+
        end
    end
+   println("avg loss: $aloss")
    model
 end
-
 
