@@ -27,7 +27,7 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), n::
           gs = unbounded_gradient(model, d, l)
 
           gs = clip(L2,gs)
-          gs = gaussian_mechanism(1/n, eps, del, gs)
+          gs = gaussian_mechanism(1/dim, eps, del, gs)
           model = subtract_gradient(model, scale_gradient(eta,gs))
           aloss += loss(d,l,model)/(n*dim)
 

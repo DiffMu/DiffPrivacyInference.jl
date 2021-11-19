@@ -6,4 +6,4 @@ labels = Flux.Data.MNIST.labels();
 X = transpose(hcat(float.(reshape.(images,:))...))
 y = [onehot(y,0:9) for y in labels]
 # train with DP-SGD
-train_dp(X,y,1,0.5,0.2,1)
+train_dp(X,y,1,0.9,0.9,1)
