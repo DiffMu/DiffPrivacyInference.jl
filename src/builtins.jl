@@ -24,7 +24,7 @@ BlackBox(T::DataType) = T
 Robust() = Any
 Robust(T::DataType) = T
 
-convert(m) = m
+norm_convert(m) = m
 
 "A wrapper for Flux.Params, so we can control mutation."
 mutable struct DMModel
@@ -59,7 +59,6 @@ copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g
 "Make the input gradient DP by applying the gaussian mechanism."
 function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f::DMGrads) :: DMGrads
    cf = copy_grad(f)
-   println("noies: $(rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2)))")
    noise!(ff) = ff + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
    map!(ff -> noise!.(ff), cf.grads, cf.grads) # apply noise element-wise
    return cf

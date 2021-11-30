@@ -14,26 +14,26 @@ function init_model() :: BlackBox()
          Flux.softmax))
 end
 
-loss(X, y, model) = Flux.crossentropy(model.model(X), y)
+loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y)
 
-function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), n::NoData()) :: Priv()
+function train_dp(data, labels, eps::NoData(), del::NoData(), n::NoData(), eta::NoData()) :: Priv()
    model = init_model()
-   dim = size(data)[1]
+   (dim, _) = size(data)
    aloss = 0
    for _ in 1:n
        for i in 1:dim
           d = data[i,:]
-          l = labels[i]
+          l = labels[i,:]
           gs = unbounded_gradient(model, d, l)
 
-          gs = clip(L2,gs)
-          gs = gaussian_mechanism(1/dim, eps, del, gs)
-          model = subtract_gradient(model, scale_gradient(eta,gs))
-          aloss += loss(d,l,model)/(n*dim)
+          gs = norm_convert(clip(L2,gs))
+          gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs))
+          model :: Robust() = subtract_gradient(model, scale_gradient(eta, gs))
+    #      aloss += loss(d,l,model)/(n*dim)
 
        end
    end
-   println("avg loss: $aloss")
+   #println("avg loss: $aloss")
    model
 end
 
