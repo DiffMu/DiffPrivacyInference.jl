@@ -28,7 +28,7 @@ function sanitize(ex, ln::LineNumberNode, F, current = Dict()) :: Tuple{Dict, Di
     sanitize([ex], ln, F, current)
 end
 
-
+# put two expressions into one block, merging if both are blocks already
 function merge_blocks(b1, b2) :: Expr
    (e1, e2) = @match (b1, b2) begin
       (Expr(:block, e1...), Expr(:block, e2...))  => (e1,e2)
@@ -39,6 +39,10 @@ function merge_blocks(b1, b2) :: Expr
    return Expr(:block, [e1; e2]...)
 end
 
+# make a new expression that is the input expression but with all blocks
+# being maximal and all conditionals being if-else (no ifelse) and being
+# the last statement in their block (i.e. trailing statements get put into
+# the if/else blocks
 rearrange(::Nothing) = nothing
 rearrange(exin::Symbol) :: Symbol = exin
 rearrange(exin::LineNumberNode) :: LineNumberNode = exin
@@ -46,7 +50,7 @@ rearrange(exin::QuoteNode) = rearrange(exin.value)
 rearrange(exin::Number) :: Number = exin
 function rearrange(exin::Expr) :: Expr
    @match exin begin
-      Expr(:block, exs...) => let
+      Expr(:block, exs...) => let # there is trailing statements.
          ex = exs[1]
          tail = length(exs)==2 ? exs[2] : Expr(:block,exs[2:end]...)
          @match ex begin
@@ -72,7 +76,7 @@ function rearrange(exin::Expr) :: Expr
                rtail = rearrange(tail)
                rifb = rearrange(merge_blocks(ifb, rtail))
                relseb = rearrange(merge_blocks(elseb, rtail))
-               return Expr(:elseif, rearrange(cond), rifb, relseb)
+               return Expr(:if, rearrange(cond), rifb, relseb)
             end
             Expr(:elseif, cond, ifb) => let
                rtail = rearrange(tail)
@@ -83,14 +87,15 @@ function rearrange(exin::Expr) :: Expr
                 if length(ex.args[1].args) > 1
                    error("Only standalone includes are allowed. You tried to import specific namesin $ex.")
                 else
-		   rearrange(tail) # just ignore the import.
-		end
+                   rearrange(tail) # just ignore the import.
+                end
             end;
             head => let
                return merge_blocks(rearrange(head), rearrange(tail))
             end
          end
-      end
+      end;
+      Expr(:elseif, args...) => return Expr(:if, map(rearrange, args)...)
       Expr(head, args...) => return Expr(head, map(rearrange, args)...)
    end
 end
