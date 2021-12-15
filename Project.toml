@@ -4,6 +4,7 @@ authors = ["ooovi <githooovi@posteo.de>"]
 version = "0.1.0"
 
 [deps]
+Clang_jll = "0ee61d77-7f21-5576-8119-9fcc46b10100"
 CodeTracking = "da1fd8a2-8d9e-5ec2-8556-3022fb5608a2"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"

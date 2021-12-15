@@ -1,5 +1,15 @@
+# this code is checkable with our typechecker. the inference result will be the type of the last function
+# in the file, containing the inferred privacy bound as well as constraints on the input variables.
+
+# only imports are permitted, so you cannot use functions from other packages without qualifying them.
+# qualified names cannot be used in functions whose body is supposed to be checked by us, but only
+# in black-box functions that will be ignored by the type checker.
 import Flux
 
+# a black-box function using qualified names to call functions from Flux.
+# the typechecker will just ignore the body of this function and assign infinite sensitivity to all
+# arguments. note that if you mutate any of the arguments, the typechecking result will be invalid,
+# but the typechecker will not warn you about it.
 function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox()
    gs = Flux.gradient(Flux.params(model.model)) do
            loss(d,l,model)
@@ -7,6 +17,8 @@ function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox()
    return DMGrads(gs)
 end
 
+# a black-box function initializing a Flux neural network. To make it work with typecheckable code,
+# the model has to be wrapped in our `DMModel` struct.
 function init_model() :: BlackBox()
  DMModel(Flux.Chain(
          Flux.Dense(28*28,40, Flux.relu),
@@ -14,26 +26,38 @@ function init_model() :: BlackBox()
          Flux.softmax))
 end
 
+# the loss function for our training. using a function from Flux, so it's a black-box too.
 loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y)
 
+# the only function that is actually typechecked: the gradient descent training algorithm.
+# we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
+# get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
 function train_dp(data, labels, eps::NoData(), del::NoData(), n::NoData(), eta::NoData()) :: Priv()
+   # initialize a Flux model.
    model = init_model()
    (dim, _) = size(data)
-   aloss = 0
    for _ in 1:n
        for i in 1:dim
+          # compute the gradient at the i-th data point
           d = data[i,:]
           l = labels[i,:]
           gs = unbounded_gradient(model, d, l)
 
+          # clip the gradient
           gs = norm_convert(clip(L2,gs))
-          gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs))
-          model :: Robust() = subtract_gradient(model, scale_gradient(eta, gs))
-    #      aloss += loss(d,l,model)/(n*dim)
 
+          # apply the gaussian mechanism to the gradient.
+          # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
+          # required to make it DP stays reasonable.
+          # the returned variable is annotated to be `Robust()` to signify it is now DP and
+          # hence it's privacy bounds are robust to post-processing.
+          gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs))
+
+          # update the model by subtracting the noised gradient scaled by the learning rate eta.
+          # we also re-scale the gradient by `dim` to make up for the scaling earlier.
+          model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gs))
        end
    end
-   #println("avg loss: $aloss")
    model
 end
 
