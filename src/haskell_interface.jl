@@ -81,7 +81,11 @@ end
 #     return ()
 # end
 
-function typecheck_hs_from_string(term)
+
+typecheck_hs_from_string(term) = typecheck_hs_from_string_wrapper(term,false)
+typecheck_hs_from_string_detailed(term) = typecheck_hs_from_string_wrapper(term,true)
+
+function typecheck_hs_from_string_wrapper(term, bShowDetailedInfo::Bool)
     ast = Meta.parse("begin $term end")
     ast = rearrange(ast)
     sanitize([ast], LineNumberNode(1, "none"), [])
@@ -105,7 +109,9 @@ function typecheck_hs_from_string(term)
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
     exit = Libdl.dlsym(dm, :wrapperExit)
-    typecheckFromDMTerm = Libdl.dlsym(dm, :typecheckFromCString_DMTerm)
+    typecheckFromDMTerm = (bShowDetailedInfo ?
+        Libdl.dlsym(dm, :typecheckFromCString_DMTerm_Detailed)
+        : Libdl.dlsym(dm, :typecheckFromCString_DMTerm))
 
     # call the library
 
