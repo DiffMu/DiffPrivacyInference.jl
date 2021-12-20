@@ -5,13 +5,33 @@
     L∞
 end
 
-"Annotation for functions whose differential privacy we want to infer."
+"""
+Annotation for functions whose differential privacy we want to infer.
+
+# Examples
+A privacy function with argument `x` whose privacy will be inferred and argument `y` of type
+Integer whose privacy we're not interested in:
+```julia
+function foo(x, y::NoData(Integer)) :: Priv()
+   x
+end
+```
+"""
 Priv() = Any
 Priv(T::DataType) = T
 
 """
 Annotation for function arguments whose privacy is of no interest to us.
 Their privacy will most likely be set to infinity to allow tighter bounds on other arguments.
+
+# Examples
+A privacy function with argument `x` whose privacy will be inferred and argument `y` of type
+Integer whose privacy we're not interested in:
+```julia
+function foo(x, y::NoData(Integer)) :: Priv()
+   x
+end
+```
 """
 NoData() = Any
 NoData(T::DataType) = T
@@ -20,12 +40,18 @@ NoData(T::DataType) = T
 Annotation for functions that cannot be typechecked. Their arguments will be assigned infinite
 sensitivity. Note that it is not allowed to mutate any of the arguments in a function like this,
 if you do the typechecking result will be invalid!
+
+# Examples
+A function calling an imported qualified name, which is not permissible in non-black-boxes:
+```julia
+loss(X, y, m::DMModel) :: BlackBox() = Flux.crossentropy(m.model(X), y)
+```
 """
 BlackBox() = Any
 BlackBox(T::DataType) = T
 
 """
-Annotations for variable assignments that happen after differential privacy was introduced
+Annotation for variable assignments that happen after differential privacy was introduced
 inside a function body. These ensure the robustness-to-post-procassing property of DP is
 made use of in the inference process.
 """

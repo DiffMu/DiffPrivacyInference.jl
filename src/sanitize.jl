@@ -99,6 +99,7 @@ function rearrange(exin::Expr) :: Expr
       Expr(head, args...) => return Expr(head, map(rearrange, args)...)
    end
 end
+rearrange(t) = error("Sanitation error: $t")
 
 
 # we forbid number types finer than Integer and Real as function signatures, so we can
