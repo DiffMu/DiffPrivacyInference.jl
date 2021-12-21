@@ -36,6 +36,33 @@ We cannot check arbitrary `julia` code, partly because we need to so some more w
 - `import`, which will just be ignored by the type checker. You can use stuff from imported modules, but only inside black boxes (see below).
 - `include` statements. The typechecker will load the included file and check it as well.
 
+### Forbidden things
+
+There are a few things you are not allowed to do (which the typechecker will tell you if you try). Namely:
+
+- Your code has to be valid julia code. If it is not, do not expect the typechecker to tell you so or produce reasonable results.
+- You cannot mutate variables that were declared in an outer scope. For example, the following is illegal:
+  ```
+  function foo()
+     x = 10
+     function bar()
+        x = 100
+        x
+      end
+      bar()
+   end
+   ```
+- If you want to use a variable, you have to define it first. E.g. the following is valid julia code but illegal:
+  ```
+  function foo()
+     bar() = a
+     a = 100
+     bar()
+  end
+  ```
+- Recursion is not supported. Do not yet expect legible error messages if you use it...
+- Assignments withing assignments (like `x = y = 10`) are forbidden. Why would you, anyways.
+
 ### Special Types
 
 We have two special types, `DMModel` for wrapping `Flux.jl` models and `DMGrads` for wrapping `Zygote.jl` gradients. If you want to typecheck code that uses an object like that, you need to wrap it in our types so we can ensure you don't do anything illegal with it. See the type documentation in the REPL and the `flux_dp.jl` example in `test/flux_dp` for usage.
@@ -47,7 +74,7 @@ In general, it is a good idea to annotate all function arguments as it will help
 - Our typechecker can infer the sensitivity or the (ε, δ)-differential privacy of function arguments. For every function you write, you have to tell the typechecker whether you expect it to be differentially private by annotating the function head using `function foo(x) :: Priv()`. If you don't annotate, the typechecker will assume that the function is not DP, which might worsen the inferred bounds if it's not true.
 - For differentially private functions, you can tell the typechecker which of it's arguments are actually interesting. For example, when training a model to some data iwth some learning rate, you are interested in the privacy of the input data, not the input model. You would then write your function signature like this: `function train(data, model::NoData(), eta::NoData(Real))`. This allows the typecheker to infer tighter bounds by setting the privacy of non-interesting arguments to infinity in certain tradeoff situations.
 - Differentially private variables in function bodys have the nice property of [robustness to post-processing](https://en.wikipedia.org/wiki/Differential_privacy#Robustness_to_post-processing).If you want to make use of it, you need to annotate those variables to be robust. This you do upon assignment by saying `g :: Robust() = gaussian_mechanism(s,e,d,gg)`
-- If you want to use a function that contains unsupported `julia` syntax, like using qualified names form imported modules, you can make them a *black box* by annotating the function head using `function foo(x) :: BlackBox()`. The typechecker will ignore the function body and assign infinite sensitivity to all arguments. _Warning_: We cannot control what you do inside a black box, but the one thing that you really should not do is *mutate the arguments*. If you do that, the typechecking result will be invalid even though the typechecking code terminates without complaints.
+- If you want to use a function that contains unsupported `julia` syntax, like using qualified names form imported modules, you can make them a *black box* by annotating the function head using `function foo(x) :: BlackBox()`. You can only define a black box on the toplevel scope of wht you want to typecheck (not inside a function, e.g.). Also, black boxes cannot have multiple methods. The typechecker will ignore a black box' function body and assign infinite sensitivity to all arguments. _Warning_: We cannot control what you do inside a black box, but the one thing that you really should not do is *mutate the arguments*. If you do that, the typechecking result will be invalid even though the typechecking code terminates without complaints.
 
 
 ## Usage examples
@@ -55,45 +82,31 @@ In general, it is a good idea to annotate all function arguments as it will help
 To infer the sensitivity of a simple function, use `typecheck_hs_from_string`:
 
 ```
-julia> typecheck_hs_from_string("function foo(x::Integer, y::Real)
-                                    x + 2*y
+
+julia> typecheck_hs_from_string("function foo(x::Matrix{Real}, y::Matrix{Real})
+                                    2*x - y
                                  end")
 ```
 The result will be printed in the REPL:
 ```
-Result: (Fun([([NoFun(Num(Int[--])) @ 1,NoFun(Num(τ_25[--])) @ 2.0] -> NoFun(Num(τ_25[--]))) @ Just [Integer,Real]]),
-State:
-- watcher: NotChanged
-- messages: (hidden)
-
-Meta:
-- sens vars: []
-- type vars: [τ_25 : BaseNum, τ_8 : *]
-- sens subs:   η_1 := 1, η_0 := 1, η_3 := 2.0, η_2 := 0
-- type subs:   τ_17 := τ_25[--], τ_11 := τ_25[--], τa_1 := Num(τ_25[--]), τr_2 := Num(τ_25[--]), τ_16 := Int[--], τ_20 := τ_25, τ_9 := Num(τ_25[--]), τ_10 := Num(Real[--]), τa_0 := Num(Int[--]), τr_6 := Num(τ_25[--]), τa_5 := Num(τ_25[--]), τ_15 := Int[--], τ_21 := Real, τ_3 := NoFun(Num(Int[--])), τ_24 := Int, τa_4 := Num(Int[2.0]), τ_14 := Num(Int[--]), τ_22 := Int, τ_19 := τ_25, τ_7 := NoFun(Num(τ_25[--])), τ_13 := Num(Int[--]), τ_18 := τ_25, τ_23 := Int, τ_12 := Real[--]
-- fixed TVars: 
-- constraints:
+---------------------------------------------------------------------------
+Type:
+Fun([([NoFun(Matrix<n: τ_10, c: τ_8>[s_5 × s_4](Num(τ_44[--]))) @ 2.0,NoFun(Matrix<n: τ_10, c: τ_11>[s_5 × s_4](Num(τ_38[--]))) @ 1] -> NoFun(Matrix<n: τ_10, c: U>[s_5 × s_4](Num(τ_40[--])))) @ Just [Matrix{Real},Matrix{Real}]])
+---------------------------------------------------------------------------
+Constraints:
    - top:
-constr_11 : [final,worst,global,exact,special] IsLessEqual (τ_25,Real)
+constr_25 : [final,worst,global,exact,special] IsSupremum (τ_44,τ_38) :=: τ_40
    - others:
 []
-
-Types:
-Left 
-)
 ()
 ```
-That's a lot of informaion, but the most interesting thing is this part:
-```
-Result: (Fun([([NoFun(Num(Int[--])) @ 1,NoFun(Num(τ_25[--])) @ 2.0] -> NoFun(Num(τ_25[--]))) @ Just [Integer,Real]]),
-```
-It says the function is 1-sensitive in its first and 2-sensitive in its second input. The fist input needs to be an integer, and the second type is variable but the output type will be the same as that of the second argument. But that is not quite all, the second interesting part is this:
+It says the cehcked code is a function (`Fun(...)`) of two arguments which is is 2-sensitive in its first and 1-sensitive in its second input (indeicated by the `@ 2.0` annotation). The imput types both need to be matrices of matching dimensions (the variables `s_5` and `s_6`) whose elements are of some numeric type (`Num(...)`). But that is not quite all, as there is more output:
 ```
 - constraints:
    - top:
-constr_11 : [final,worst,global,exact,special] IsLessEqual (τ_25,Real)
+constr_25 : [final,worst,global,exact,special] IsSupremum (τ_44,τ_38) :=: τ_40
 ```
-It is the list of constraints on the type variables that occur in the result type that the typechecker could not resolve. In this case it tells us that the type variable `τ_25` can in fact not be any type, but needs to be a subtype of `Real`.
+It is the list of constraints on the type variables that occur in the result type that the typechecker could not resolve. In this case it tells us that the element type of the output matrix, `τ_40`, is not just any type, but the supremum of the input matrices' element types `τ_44` and `τ_38`.
 
 
 For a full-blown example head to the `test/flux_dp` folder, where you will find a differentially private implementation of a gradient descent algorithm that is capable of learning to classify handwritten numbers.
