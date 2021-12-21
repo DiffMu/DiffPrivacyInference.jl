@@ -156,6 +156,32 @@ function test_hs()
     return ()
 end
 
+function test_single_hs()
+
+    # load the shared library
+    # Note, the library has to be available on a path in $LD_LIBRARY_PATH
+    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+
+    # get function pointers for the relevant functions
+    init = Libdl.dlsym(dm, :wrapperInit)
+    exit = Libdl.dlsym(dm, :wrapperExit)
+    runHaskellTests = Libdl.dlsym(dm, :runSingleHaskellTest)
+
+    # call the library
+    ccall(init, Cvoid, ())
+
+    c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
+    c_callback_parseterm = @cfunction(callback_parseterm, Cstring, (Cstring,))
+
+    ccall(runHaskellTests, Cvoid, (Ptr{Cvoid},Ptr{Cvoid},), c_callback_issubtype, c_callback_parseterm)
+    ccall(exit, Cvoid, ())
+
+    # unload the library
+    Libdl.dlclose(dm)
+
+    return ()
+end
+
 
 
 function test_expr_parser(term)
