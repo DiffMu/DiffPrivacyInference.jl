@@ -81,12 +81,27 @@ end
 #     return ()
 # end
 
+"""
+typecheck_from_file(file::AbstractString)
 
-typecheck_hs_from_string(term) = typecheck_hs_from_string_wrapper(term,false)
-typecheck_hs_from_string_detailed(term) = typecheck_hs_from_string_wrapper(term,true)
-
-function typecheck_hs_from_string_wrapper(term, bShowDetailedInfo::Bool)
+Typecheck the file named `file`, calling the haskell bcakend. Includes are resolved and parsed as well.
+The typechecking result will be printed to the REPL. It will be the inferred type of the last statement in the file.
+"""
+function typecheck_from_file(file::AbstractString)
+    ast = Meta.parseall(read(file, String), filename = file)
+    println("read file $file")
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),false)
+end
+function typecheck_hs_from_string(term)
     ast = Meta.parse("begin $term end")
+    typecheck_hs_from_string_wrapper(ast,false)
+end
+function typecheck_hs_from_string_detailed(term)
+    ast = Meta.parse("begin $term end")
+    typecheck_hs_from_string_wrapper(term,true)
+end
+
+function typecheck_hs_from_string_wrapper(ast::Expr, bShowDetailedInfo::Bool)
     ast = rearrange(ast)
     sanitize([ast], LineNumberNode(1, "none"), [])
 
