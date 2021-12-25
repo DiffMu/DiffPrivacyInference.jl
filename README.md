@@ -109,4 +109,4 @@ constr_25 : [final,worst,global,exact,special] IsSupremum (τ_44,τ_38) :=: τ_4
 It is the list of constraints on the type variables that occur in the result type that the typechecker could not resolve. In this case it tells us that the element type of the output matrix, `τ_40`, is not just any type, but the supremum of the input matrices' element types `τ_44` and `τ_38`.
 
 
-For a full-blown example head to the `test/flux_dp` folder, where you will find a differentially private implementation of a gradient descent algorithm that is capable of learning to classify handwritten numbers.
+For a full-blown example head to the [`test/flux_dp`](https://github.com/DiffMu/DiffPrivacyInference.jl/tree/main/test/flux_dp) folder, where you will find a differentially private implementation of a gradient descent algorithm that is capable of learning to classify handwritten numbers.
