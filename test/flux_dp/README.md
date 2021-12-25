@@ -218,7 +218,7 @@ result = train_dp(X,y,0.9,0.2,1,1)
 Check out what the model learned:
 ```
 
-julia> m.model(X[1000,:])
+julia> result.model(X[1000,:])
 10-element Vector{Float64}:
 3.1432804621054714e-6
 1.1914194765455694e-7
