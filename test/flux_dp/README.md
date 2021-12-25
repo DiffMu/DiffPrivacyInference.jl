@@ -212,7 +212,7 @@ y = [i == label ? 1 : 0 for label in labels, i in 0:9]
 Now we can include the file we tyepechecked and run it with some parameters! Training will take some time.
 ```
 include("flux_dp.jl")
-result = train_dp(X,y,0.9,0.2,1,1)
+result = train_dp(X,y,0.9,0.2,1)
 ```
 
 Check out what the model learned:
