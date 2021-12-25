@@ -32,31 +32,29 @@ loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y)
 # the only function that is actually typechecked: the gradient descent training algorithm.
 # we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
 # get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
-function train_dp(data, labels, eps::NoData(), del::NoData(), n::NoData(), eta::NoData()) :: Priv()
+function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData()) :: Priv()
    # initialize a Flux model.
    model = init_model()
    (dim, _) = size(data)
-   for _ in 1:n
-       for i in 1:dim
-          # compute the gradient at the i-th data point
-          d = data[i,:]
-          l = labels[i,:]
-          gs = unbounded_gradient(model, d, l)
+   for i in 1:dim
+      # compute the gradient at the i-th data point
+      d = data[i,:]
+      l = labels[i,:]
+      gs = unbounded_gradient(model, d, l)
 
-          # clip the gradient
-          gs = norm_convert(clip(L2,gs))
+      # clip the gradient
+      gs = norm_convert(clip(L2,gs))
 
-          # apply the gaussian mechanism to the gradient.
-          # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
-          # required to make it DP stays reasonable.
-          # the returned variable is annotated to be `Robust()` to signify it is now DP and
-          # hence it's privacy bounds are robust to post-processing.
-          gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs))
+      # apply the gaussian mechanism to the gradient.
+      # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
+      # required to make it DP stays reasonable.
+      # the returned variable is annotated to be `Robust()` to signify it is now DP and
+      # hence it's privacy bounds are robust to post-processing.
+      gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs))
 
-          # update the model by subtracting the noised gradient scaled by the learning rate eta.
-          # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-          model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gs))
-       end
+      # update the model by subtracting the noised gradient scaled by the learning rate eta.
+      # we also re-scale the gradient by `dim` to make up for the scaling earlier.
+      model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gs))
    end
    model
 end
