@@ -58,18 +58,18 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData()) :: 
       gs = unbounded_gradient(model, d, l)
 
       # clip the gradient
-      gs = norm_convert(clip(L2,gs))
+      gsc = norm_convert(clip(L2,gs))
 
       # apply the gaussian mechanism to the gradient.
       # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
       # required to make it DP stays reasonable.
       # the returned variable is annotated to be `Robust()` to signify it is now DP and
       # hence it's privacy bounds are robust to post-processing.
-      gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs))
+      gsg :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc))
 
       # update the model by subtracting the noised gradient scaled by the learning rate eta.
       # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-      model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gs))
+      model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gsg))
    end
    model
 end
