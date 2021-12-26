@@ -239,16 +239,12 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                     ::Symbol => let
                         if !haskey(current, ase)
                            current[ase] = ln
-                        else
-                           error("Reassignment of variable $ase in $(ln.file) line $(ln.line). This is currently not permitted.")
                         end
                     end
                     Expr(:(::), s, T) => let
                         if s isa Symbol
                            if !haskey(current, s)
                               current[s] = ln
-                           else
-                              error("Reassignment of variable $s in $(ln.file) line $(ln.line). This is currently not permitted.")
                            end
                         elseif s isa Expr && s.head == :call
                            fin, fcur = sanitize(Expr(:function, ase, asd), ln, F, current)
@@ -271,8 +267,6 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                         function handle_elem(s::Symbol)
                            if !haskey(current, s)
                               current[s] = ln
-                           else
-                              error("Reassignment of variable $s in $(ln.file) line $(ln.line). This is currently not permitted.")
                            end
                         end
                         map(handle_elem, tnames)
