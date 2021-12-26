@@ -98,7 +98,7 @@ function typecheck_hs_from_string(term)
 end
 function typecheck_hs_from_string_detailed(term)
     ast = Meta.parse("begin $term end")
-    typecheck_hs_from_string_wrapper(term,true)
+    typecheck_hs_from_string_wrapper(ast,true)
 end
 
 function typecheck_hs_from_string_wrapper(ast::Expr, bShowDetailedInfo::Bool)
