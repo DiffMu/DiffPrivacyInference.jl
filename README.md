@@ -74,7 +74,7 @@ There are a few things you are not allowed to do (which the typechecker will tel
 
 ### Special Types
 
-We have two special types, `DMModel` for wrapping `Flux.jl` models and `DMGrads` for wrapping `Zygote.jl` gradients. If you want to typecheck code that uses an object like that, you need to wrap it in our types so we can ensure you don't do anything illegal with it. See the type documentation in the REPL and the `flux_dp.jl` example in `test/flux_dp` for usage.
+We have two special types, `DMModel` for wrapping `Flux.jl` models and `DMGrads` for wrapping `Zygote.jl` gradients. If you want to typecheck code that uses an object like that, you need to wrap it in our types so we can ensure you don't do anything illegal with it. See the type documentation in the REPL and the `flux_dp.jl` example in [`test/flux_dp`](https://github.com/DiffMu/DiffPrivacyInference.jl/tree/main/test/flux_dp) for usage.
 
 ### Special annotations
 
