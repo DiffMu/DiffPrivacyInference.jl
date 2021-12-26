@@ -40,7 +40,7 @@ We cannot check arbitrary `julia` code, partly because we need to do some more w
 
 There are a few things you are not allowed to do (which the typechecker will tell you if you try). Namely:
 
-- Your code has to be valid julia code. If it is not, do not expect the typechecker to tell you so or produce reasonable results.
+- Your code has to be valid julia code. If it is not, do not expect the typechecker to always tell you so or produce reasonable results.
 - You cannot mutate variables that were declared in an outer scope. For example, the following is illegal:
   ```
   function foo()
@@ -60,6 +60,7 @@ There are a few things you are not allowed to do (which the typechecker will tel
      bar()
   end
   ```
+- For now, there are restrictions when it comes to redefining variables. It is forbidden to reassign a variable name with a value that has a different type than the variable's brevious type. Note that this means DMTypes, not julia types -- i.e. constant numbers have different types than non-constant ones and there is several matrix types containing dimension information. Sorry for the inconvenience, we will work this out soon. At this moment, it's probably for the best if you use a new name instead of reassigning.
 - Recursion is not supported. Do not yet expect legible error messages if you use it...
 - Assignments within assignments (like `x = y = 10`) are forbidden. Why would you, anyways.
 
