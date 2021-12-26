@@ -60,7 +60,15 @@ There are a few things you are not allowed to do (which the typechecker will tel
      bar()
   end
   ```
-- For now, there are restrictions when it comes to redefining variables. It is forbidden to reassign a variable name with a value that has a different type than the variable's brevious type. Note that this means DMTypes, not julia types -- i.e. constant numbers have different types than non-constant ones and there is several matrix types containing dimension information. Sorry for the inconvenience, we will work this out soon. At this moment, it's probably for the best if you use a new name instead of reassigning.
+- For now, it is not permitted to reassign variables, hence the following is forbidden:
+  ```
+  function foo()
+     x = 1
+     y = x+2
+     x = 2
+     y
+  end
+  ```
 - Recursion is not supported. Do not yet expect legible error messages if you use it...
 - Assignments within assignments (like `x = y = 10`) are forbidden. Why would you, anyways.
 
