@@ -202,3 +202,37 @@ function clip(l::Norm, g::DMGrads) :: DMGrads
     return cg
 end
 
+
+"""
+    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple)
+
+Take a uniform sample (with replacement) of `n` rows of the matrix `m` and corresponding rows of matrix `v`.
+"""
+function sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple{Matrix, Matrix}
+    r = rand(axes(m,1), n)
+    return (m[r,:], v[r,:])
+end
+
+
+"""
+    sum_gradients(g::DMGrads, gs::DMGrads...) :: DMGrads
+
+Sum two or more `DMGrads` gradients. Errors if they belong to different DMModels.
+"""
+function sum_gradients(g::DMGrads, gs::DMGrads...) :: DMGrads
+   return DMGrads(.+(g.grads,[gg.grads for gg in gs]...))
+end
+
+
+"""
+    zero_gradient(m::DMModel) :: DMGrads
+
+Create a zero gradient for the given model.
+"""
+function zero_gradient(m::DMModel) :: DMGrads
+  eg = Zygote.Grads(IdDict{Any,Any}(), Flux.params(m.model))
+  for p in eg.params
+     eg[p] = fill!(similar(p), 0)
+  end
+  return DMGrads(eg)
+end
