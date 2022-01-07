@@ -48,20 +48,21 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
 
          # clip the gradient
          clip!(L2,gs)
+         norm_convert(gs)
 
-         G = sum_gradients(norm_convert(gs),gsc)
+         G = sum_gradients(gs,G)
       end
 
       # apply the gaussian mechanism to the gradient.
       # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
       # required to make it DP stays reasonable.
-      # the returned variable is annotated to be `Robust()` to signify it is now DP and
-      # hence it's privacy bounds are robust to post-processing.
-      gaussian_mechanism!(2/b, eps, del, scale_gradient(1/b, G))
+      scale_gradient!(1/b,G)
+      gaussian_mechanism!(2/b, eps, del, G)
 
       # update the model by subtracting the noised gradient scaled by the learning rate eta.
       # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-      subtract_gradient!(model, scale_gradient(eta, G))
+      scale_gradient!(eta, G)
+      subtract_gradient!(model, G)
    end
    model
 end
