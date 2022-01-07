@@ -92,6 +92,11 @@ function typecheck_from_file(file::AbstractString)
     println("read file $file")
     typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),false)
 end
+function typecheck_from_file_detailed(file::AbstractString)
+    ast = Meta.parseall(read(file, String), filename = file)
+    println("read file $file")
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),true)
+end
 function typecheck_hs_from_string(term)
     ast = Meta.parse("begin $term end")
     typecheck_hs_from_string_wrapper(ast,false)

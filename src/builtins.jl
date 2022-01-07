@@ -125,51 +125,41 @@ copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g
 
 
 """
-    scale_gradient(s::Number, gs::DMGrads) :: DMGrads
+    scale_gradient!(s::Number, gs::DMGrads) :: DMGrads
 
 Scale the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-by the scalar `s`.
-For now, this does not mutate the input, but creates a copy of the gradient and returns the modified
-copy. This is expensive, but we cannot track mutation yet.
+by the scalar `s`. Mutates the gradient.
 """
-function scale_gradient(s :: Number, gs::DMGrads) :: DMGrads
-   cg = copy_grad(gs)
+function scale_gradient!(s :: Number, cg::DMGrads) :: DMGrads
    cg.grads .*= s
    return cg
 end
 
 
 """
-    subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
+    subtract_gradient!(m::DMModel, gs::DMGrads) :: DMModel
 
 Subtract the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-from the parameters of the model `m`.
-For now, this does not mutate the input, but creates a copy of the gradient and returns the modified
-copy. This is expensive, but we cannot track mutation yet.
+from the parameters of the model `m`. Mutates the model.
 """
-function subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
-   cm = deepcopy(m.model)
-   cp = Flux.params(cm)
+function subtract_gradient!(m::DMModel, gs::DMGrads) :: DMModel
    p = Flux.params(m.model)
    for i in 1:size(p.order.data)[1]
-      cp[i] .-= gs.grads[p[i]]
+      p[i] .-= gs.grads[p[i]]
    end
-   return DMModel(cm)
+   return m
 end
 
 
 """
-    gaussian_mechanism(s::Real, ϵ::Real, δ::Real, g::DMGrads) :: DMGrads
+    gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, g::DMGrads) :: DMGrads
 
 Apply the gaussian mechanism to the input gradient, adding gaussian noise with SD of
 `(2 * log(1.25/δ) * s^2) / ϵ^2)` to each gradient entry seperately. This introduces
 `(ϵ, δ)`-differential privacy to all variables the gradient depends on with sensitivity
-at most `s`.
-For now, this does not mutate the input, but creates a copy of the gradient and returns the modified
-copy. This is expensive, but we cannot track mutation yet.
+at most `s`. Mutates the gradient.
 """
-function gaussian_mechanism(s::Real, ϵ::Real, δ::Real, f::DMGrads) :: DMGrads
-   cf = copy_grad(f)
+function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: DMGrads
    noise!(ff) = ff + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
    map!(ff -> noise!.(ff), cf.grads, cf.grads) # apply noise element-wise
    return cf
@@ -177,21 +167,17 @@ end
 
 
 """
-    clip(l::Norm, g::DMGrads) :: DMGrads
+    clip!(l::Norm, g::DMGrads) :: DMGrads
 
-Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
-For now, this does not mutate the input, but creates a copy of the gradient and returns the modified
-copy. This is expensive, but we cannot track mutation yet.
+Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient.
 """
-function clip(l::Norm, g::DMGrads) :: DMGrads
+function clip!(l::Norm, cg::DMGrads) :: DMGrads
 
     p = @match l begin
         L1 => 1
         L2 => 2
         L∞ => Inf
     end
-
-    cg = copy_grad(g)
 
     n = norm(cg.grads.grads, p)
 
