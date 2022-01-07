@@ -57,13 +57,13 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
       # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
       # required to make it DP stays reasonable.
       scale_gradient!(1/b,G)
-      gaussian_mechanism!(2/b, eps, del, G)
+      gaussian_mechanism!(2/b, eps, del, G) :: Robust()
 
       # update the model by subtracting the noised gradient scaled by the learning rate eta.
       # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-      scale_gradient!(eta, G)
-      subtract_gradient!(model, G)
-   end
+      scale_gradient!(eta, G) :: Robust()
+      subtract_gradient!(model, G) :: Robust()
+   end :: Robust()
    model
 end
 
