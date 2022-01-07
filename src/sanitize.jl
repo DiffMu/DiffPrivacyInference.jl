@@ -179,16 +179,16 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
                 fin, fcur = sanitize(body, ln, F ∪ [head.args[1]], Dict(v => body.args[1] for v in vs))
 
                 # if inner scopes within the function body modify the function arguments, error
-                culprits = vs ∩ keys(fin)
-                if !isempty(culprits)
-                    err = "forbidden mutation of a variable from an outer scope!\n"
-                    for k in culprits
-                        err *= "    Variable $k, argument of function $(head.args[1])"
-                        err *= " defined at $(body.args[1].file) line $(body.args[1].line),"
-                        err *= " is assigned to in a nested scope in $(fin[k].file) line $(fin[k].line)\n"
-                    end
-                    error(err)
-                end
+                # culprits = vs ∩ keys(fin)
+                # if !isempty(culprits)
+                #     err = "forbidden mutation of a variable from an outer scope!\n"
+                #     for k in culprits
+                #         err *= "    Variable $k, argument of function $(head.args[1])"
+                #         err *= " defined at $(body.args[1].file) line $(body.args[1].line),"
+                #         err *= " is assigned to in a nested scope in $(fin[k].file) line $(fin[k].line)\n"
+                #     end
+                #     error(err)
+                # end
 
                 # everything that was assigned to in the function body gets collected in "inner" of this exs.
                 # then once we are done with the current scope we can check if some inner scope modified
@@ -355,15 +355,15 @@ function sanitize(exs::AbstractArray, ln::LineNumberNode, F = [], current = Dict
     # inner contains everything that was assigned to in any inner scope of exs
     # current contains everything that was assigned to in the top-level scope of exs,
     # plus the arguments of the function if exs is in the top-level scope of a function.
-    culprits = keys(inner) ∩ keys(current)
-    if !isempty(culprits)
-        err = "forbidden mutation of a variable from an outer scope!\n"
-        for k in culprits
-            err *= "    Variable $k, defined at $(current[k].file) line $(current[k].line),"
-            err *= " is assigned to in a nested scope in $(inner[k].file) line $(inner[k].line)\n"
-        end
-        error(err)
-    end
+    # culprits = keys(inner) ∩ keys(current)
+    # if !isempty(culprits)
+    #     err = "forbidden mutation of a variable from an outer scope!\n"
+    #     for k in culprits
+    #         err *= "    Variable $k, defined at $(current[k].file) line $(current[k].line),"
+    #         err *= " is assigned to in a nested scope in $(inner[k].file) line $(inner[k].line)\n"
+    #     end
+    #     error(err)
+    # end
 
     return (inner, current)
 end
