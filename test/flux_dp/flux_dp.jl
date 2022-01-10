@@ -48,7 +48,7 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
 
          # clip the gradient
          clip!(L2,gs)
-         norm_convert(gs)
+         norm_convert!(gs)
 
          G = sum_gradients(gs,G)
       end

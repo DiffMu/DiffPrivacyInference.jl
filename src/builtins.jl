@@ -60,7 +60,7 @@ Robust(T::DataType) = T
 
 
 """
-   norm_convert(m::T) :: T
+   norm_convert!(m::T) :: T
 
 Make a clipped vector/gradient measured using the discrete norm into a vector/gradient measured with the
 clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
