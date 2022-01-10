@@ -167,6 +167,21 @@ end
 
 
 """
+    laplacian_mechanism!(s::Real, ϵ::Real, g::DMGrads) :: Tuple{}
+
+Apply the laplacian mechanism to the input gradient, adding laplacian noise with scaling parameter of
+`(s / ϵ)` and location zero to each gradient entry seperately. This introduces
+`(ϵ, 0)`-differential privacy to all variables the gradient depends on with sensitivity
+at most `s`. Mutates the gradient, returns ().
+"""
+function laplacian_mechanism!(s::Real, ϵ::Real, cf::DMGrads) :: Tuple{}
+   noise!(ff) = ff + rand(Laplace(0, s / ϵ))
+   map!(ff -> noise!.(ff), cf.grads, cf.grads) # apply noise element-wise
+   return ()
+end
+
+
+"""
     clip!(l::Norm, g::DMGrads) :: Tuple{}
 
 Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient, returns ().
