@@ -51,13 +51,11 @@ BlackBox() = Any
 BlackBox(T::DataType) = T
 
 """
-Annotation for variable assignments that happen after differential privacy was introduced
-inside a function body. These ensure the robustness-to-post-procassing property of DP is
-made use of in the inference process.
+Annotation for variables of a function that are privacy functions themselves. You have to
+annotate privacy function function arguments, otherwise typechecking will assume a non-private
+function and fail if you insert a privacy function.
 """
-Robust() = Any
-Robust(T::DataType) = T
-
+PrivacyFunction = Function
 
 """
    norm_convert!(m::T) :: T
@@ -205,7 +203,7 @@ end
 
 
 """
-    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple)
+    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple
 
 Take a uniform sample (with replacement) of `n` rows of the matrix `m` and corresponding rows of matrix `v`.
 """
