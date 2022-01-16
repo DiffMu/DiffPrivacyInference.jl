@@ -235,3 +235,31 @@ function zero_gradient(m::DMModel) :: DMGrads
   end
   return DMGrads(eg)
 end
+
+
+###########################################
+# Internal use
+function internal_expect_const(a)
+    a
+end
+
+###########################################
+# Demutation testing
+
+mutable struct Box
+    internal_box_content
+end
+
+function new_box(m)
+    Box(m)
+end
+
+function get_box(m)
+    m.internal_box_content
+end
+
+function map_box!(f,m)
+    m.internal_box_content = f(m.internal_box_content)
+end
+
+
