@@ -65,7 +65,7 @@ clipping norm instead. Does not change the value of the argument. It can be used
 obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
 mechanism (which expects the input to be in L2-norm land).
 """
-norm_convert(m) = m
+norm_convert!(m) = m
 
 
 """
@@ -102,7 +102,7 @@ A wrapper for Zygote.Grads, so we can control that only typecheckable operations
 # Examples
 A black-box function computing the gradient of some `DMModel`, given a loss function `loss`:
 ```julia
- function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox()
+function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox()
    gs = Flux.gradient(Flux.params(model.model)) do
            loss(d,l,model)
         end
@@ -115,11 +115,26 @@ mutable struct DMGrads
 end
 
 
-# Create and return a copy of a DMGrads object, where only the gradient part of the Zygote
-# gradient is copied while the part pointing to the parameters of a model is kept. Thus we get
-# an object that we can mutate safely while retaining information on which entry of the gradient
-# belongs to which parameter of which model.
-# copy_grad(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
+"""
+    return_copy(g::DMGrads)
+Create and return a copy of a DMGrads object, where only the gradient part of the Zygote
+gradient is copied while the part pointing to the parameters of a model is kept. Thus we get
+an object that we can mutate safely while retaining information on which entry of the gradient
+belongs to which parameter of which model. If you want to return a `DMGrads` object from a function,
+you have to return a copy.
+
+# Examples
+A function returning a copy of the gradient object:
+```julia
+function compute_and_scale_gradient(model::DMModel, d, l) :: BlackBox()
+   gs = unbounded_gradient(model, d, l)
+   scale_gradient!(100, gs)
+   return return_copy(gs)
+end
+```
+"""
+return_copy(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
+return_copy(g::DMModel) :: DMModel = DMModel(deepcopy(g.params))
 
 
 """
@@ -129,7 +144,9 @@ Scale the gradient represented by the Zygote.Grads struct wrapped in the input D
 by the scalar `s`. Mutates the gradient, returs ().
 """
 function scale_gradient!(s :: Number, cg::DMGrads) :: Tuple{}
-   cg.grads .*= s
+   for g in cg.grads
+      rmul!(g, s)
+   end
    return ()
 end
 
@@ -158,8 +175,9 @@ Apply the gaussian mechanism to the input gradient, adding gaussian noise with S
 at most `s`. Mutates the gradient, returns ().
 """
 function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Tuple{}
-   noise!(ff) = ff + rand(Normal(0, (2 * log(1.25/δ) * s^2) / ϵ^2))
-   map!(ff -> noise!.(ff), cf.grads, cf.grads) # apply noise element-wise
+   for p in cf.grads.params
+      cf.grads[p] += rand(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), size(p))
+   end
    return ()
 end
 
@@ -195,7 +213,7 @@ function clip!(l::Norm, cg::DMGrads) :: Tuple{}
     n = norm(cg.grads.grads, p)
 
     if n > 1
-       cg.grads .*= (1/n)
+       scale_gradient!(1/n, cg)
     end
 
     return ()
