@@ -8,7 +8,6 @@ using Flux
 using Zygote
 
 include("builtins.jl")
-include("sanitize.jl")
 include("haskell_interface.jl")
 
 greet() = print("Hello World!")

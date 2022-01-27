@@ -1,7 +1,32 @@
 
 using Base.Libc.Libdl
 
+# make Expr matchable
+@as_record Expr
 
+function expand_includes(exin)
+   @match exin begin
+      Expr(:call, :include, args...) => let
+         if length(args) != 1
+            error("include with mapexpr not supported: $exin")
+         end
+         inast = Meta.parseall(read(args[1], String), filename = args[1])
+         @match inast begin
+            Expr(:toplevel, args...) => return expand_includes(Expr(:block, args...))
+            _ => error("Unexpected include: $(typeof(inast))")
+         end
+      end;
+      Expr(:import, _) => let
+          if length(exin.args[1].args) > 1
+             error("Only standalone includes are allowed. You tried to import specific namesin $exin.")
+          else
+             return Symbol("nothing") # just ignore the import.
+          end
+      end;
+      Expr(head, args...) => return Expr(head, map(expand_includes, args)...)
+      e => return e
+   end
+end
 
 
 function callback_issubtype(ca::Cstring, cb::Cstring) :: UInt8
@@ -33,8 +58,7 @@ function callback_parseterm(ci::Cstring) :: Cstring
     input = unsafe_string(ci)
 
     ast = Meta.parse("begin $input end")
-    ast = rearrange(ast)
-    sanitize([ast], LineNumberNode(1, "none"), [])
+    ast = expand_includes(ast)
 
     # NOTE: This is but a way to print the julia expr to a string,
     #       which for some (?) reason is better than string() method.
@@ -107,8 +131,7 @@ function typecheck_hs_from_string_detailed(term)
 end
 
 function typecheck_hs_from_string_wrapper(ast::Expr, bShowDetailedInfo::Bool)
-    ast = rearrange(ast)
-    sanitize([ast], LineNumberNode(1, "none"), [])
+    ast = expand_includes(ast)
 
     # NOTE: This is but a way to print the julia expr to a string,
     #       which for some (?) reason is better than string() method.
@@ -206,8 +229,7 @@ end
 
 function test_expr_parser(term)
     ast = Meta.parse("begin $term end")
-    ast = rearrange(ast)
-    sanitize([ast], LineNumberNode(1, "none"), [])
+    ast = expand_includes(ast)
 
     # NOTE: This is but a way to print the julia expr to a string,
     #       which for some (?) reason is better than string() method.
