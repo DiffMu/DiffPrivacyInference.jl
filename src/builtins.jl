@@ -229,6 +229,27 @@ end
 
 
 """
+    above_threshold(queries :: AbstractVector, epsilon :: Real, d, T :: Number) :: Integer
+The above-threshold mechanism. Input is a vector of 1-sensitive queries on dataset `d` mapping to
+the reals. Returns the index of the first query whose result at `d` plus `(4/epsilon)`-Laplacian
+noise is above the given threshold `T` plus `(2/epsilon)`-Laplacian noise. This is `(epsilon,0)`-private in `d`!
+"""
+function above_threshold(queries :: AbstractVector, epsilon :: Real, d, T :: Number) :: Integer
+   T = laplacian_mechanism(2, epsilon, T)
+   n = length(queries)
+   for i in 1:n
+      qq = queries[i](d)
+      qq = laplacian_mechanism(4, epsilon, qq)
+      if qq >= T
+         return i
+      end
+   end
+   return n
+end
+
+
+
+"""
     clip!(l::Norm, g::DMGrads) :: Tuple{}
 
 Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient, returns ().
