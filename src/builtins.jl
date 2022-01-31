@@ -166,6 +166,19 @@ function subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
 end
 
 
+
+
+
+"""
+    gaussian_mechanism(s::Real, ϵ::Real, δ::Real, g)
+
+Apply the gaussian mechanism to the input, adding gaussian noise with SD of
+`(2 * log(1.25/δ) * s^2) / ϵ^2)`. This introduces
+`(ϵ, δ)`-differential privacy to all variables the input depends on with sensitivity
+at most `s`. Makes a copy of the input and returns the noised copy.
+"""
+gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
+
 """
     gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, g::DMGrads) :: Tuple{}
 
@@ -174,26 +187,44 @@ Apply the gaussian mechanism to the input gradient, adding gaussian noise with S
 `(ϵ, δ)`-differential privacy to all variables the gradient depends on with sensitivity
 at most `s`. Mutates the gradient, returns ().
 """
-function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Tuple{}
-   for p in cf.grads.params
-      cf.grads[p] += rand(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), size(p))
-   end
-   return ()
-end
+gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Tuple{} = additive_noise!(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
 
+
+
+"""
+    laplacian_mechanism(s::Real, ϵ::Real, g)
+
+Apply the laplacian mechanism to the input, adding laplacian noise with scaling parameter of
+`(s / ϵ)` and location zero to each gradient entry seperately. This introduces
+`(ϵ, 0)`-differential privacy to all variables the input depends on with sensitivity
+at most `s`. Makes a copy of the input, then noises and returns the copy.
+"""
+laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(Laplace(0, s / ϵ), cf)
 
 """
     laplacian_mechanism!(s::Real, ϵ::Real, g::DMGrads) :: Tuple{}
 
-Apply the laplacian mechanism to the input gradient, adding laplacian noise with scaling parameter of
+Apply the laplacian mechanism to the input, adding laplacian noise with scaling parameter of
 `(s / ϵ)` and location zero to each gradient entry seperately. This introduces
-`(ϵ, 0)`-differential privacy to all variables the gradient depends on with sensitivity
-at most `s`. Mutates the gradient, returns ().
+`(ϵ, 0)`-differential privacy to all variables the input depends on with sensitivity
+at most `s`. Mutates the input, returns ().
 """
-function laplacian_mechanism!(s::Real, ϵ::Real, cf::DMGrads) :: Tuple{}
-   noise!(ff) = ff + rand(Laplace(0, s / ϵ))
-   map!(ff -> noise!.(ff), cf.grads, cf.grads) # apply noise element-wise
+laplacian_mechanism!(s::Real, ϵ::Real, cf :: DMGrads) = additive_noise!(Laplace(0, s / ϵ), cf)
+
+
+function additive_noise!(dist, cf::DMGrads) :: Tuple{}
+   for p in cf.grads.params
+      cf.grads[p] += rand(dist, size(p))
+   end
    return ()
+end
+additive_noise(dist, m :: AbstractMatrix) :: AbstractMatrix = m + rand(dist, size(m))
+additive_noise(dist, m :: AbstractVector) :: AbstractVector = m + rand(dist, size(m))
+additive_noise(dist, m :: Number) :: Number = m + rand(dist)
+function additive_noise(dist, c::DMGrads) :: Tuple{}
+   cf = return_copy(c)
+   additive_noise!(dist, cf)
+   return cf
 end
 
 
