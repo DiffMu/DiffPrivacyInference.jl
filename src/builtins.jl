@@ -135,6 +135,7 @@ end
 """
 return_copy(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
 return_copy(g::DMModel) :: DMModel = DMModel(deepcopy(g.params))
+return_copy(g::AbstractVecOrMat) = deepcopy(g)
 
 
 """
@@ -218,8 +219,7 @@ function additive_noise!(dist, cf::DMGrads) :: Tuple{}
    end
    return ()
 end
-additive_noise(dist, m :: AbstractMatrix) :: AbstractMatrix = m + rand(dist, size(m))
-additive_noise(dist, m :: AbstractVector) :: AbstractVector = m + rand(dist, size(m))
+additive_noise(dist, m :: AbstractVector) = m + rand(dist, size(m))
 additive_noise(dist, m :: Number) :: Number = m + rand(dist)
 function additive_noise(dist, c::DMGrads) :: Tuple{}
    cf = return_copy(c)
@@ -229,15 +229,14 @@ end
 
 
 """
-    above_threshold(queries :: AbstractVector, epsilon :: Real, d, T :: Number) :: Integer
+    above_threshold(queries :: Vector{Function}, epsilon :: Real, d, T :: Number) :: Integer
 The above-threshold mechanism. Input is a vector of 1-sensitive queries on dataset `d` mapping to
 the reals. Returns the index of the first query whose result at `d` plus `(4/epsilon)`-Laplacian
 noise is above the given threshold `T` plus `(2/epsilon)`-Laplacian noise. This is `(epsilon,0)`-private in `d`!
 """
-function above_threshold(queries :: AbstractVector, epsilon :: Real, d, T :: Number) :: Integer
+function above_threshold(queries :: Vector{F} where F <: Function, epsilon :: Real, d, T :: Number) :: Integer
    T = laplacian_mechanism(2, epsilon, T)
-   n = length(queries)
-   for i in 1:n
+   for i in 1:length(queries)
       qq = queries[i](d)
       qq = laplacian_mechanism(4, epsilon, qq)
       if qq >= T
@@ -269,6 +268,48 @@ function clip!(l::Norm, cg::DMGrads) :: Tuple{}
     end
 
     return ()
+end
+
+"""
+    clip(l::Norm, g::AbstractVector)
+
+Return a clipped copy of the input vector, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
+"""
+function clip(l::Norm, cg::AbstractVector)
+    p = @match l begin
+        L1 => 1
+        L2 => 2
+        L∞ => Inf
+    end
+
+    n = norm(cg, p)
+
+    ccg = deepcopy(cg)
+
+    if n > 1
+       ccg .*= 1/n
+    end
+
+    return ccg
+end
+
+
+"""
+    clip(v::T, upper::T, lower::T) where T <: Number
+
+Clip the number `v`, i.e. return `v` if it is in `[lower,upper]`, return `upper` if `v` is larger than `upper`,
+and return `lower` if `v` is smaller than `lower`.
+"""
+function clip(v::T, upper::T, lower::T) where T <: Number
+   if lower > upper
+      error("Lower bound must be less or equal upper bound.")
+   elseif v > upper
+      return upper
+   elseif v < lower
+      return lower
+   else
+      return v
+   end
 end
 
 

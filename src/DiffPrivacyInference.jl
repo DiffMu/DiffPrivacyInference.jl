@@ -14,7 +14,7 @@ greet() = print("Hello World!")
 
 export L1, L2, L∞, U
 
-export gaussian_mechanism!, laplacian_mechanism!, gaussian_mechanism, laplacian_mechanism, clip!, subtract_gradient!, scale_gradient!, norm_convert!, sample, sum_gradients, zero_gradient, above_threshold
+export gaussian_mechanism!, laplacian_mechanism!, gaussian_mechanism, laplacian_mechanism, clip!, subtract_gradient!, scale_gradient!, norm_convert!, sample, sum_gradients, zero_gradient, above_threshold, return_copy, clip
 export internal_expect_const, new_box, get_box, map_box!
 export Priv, NoData, BlackBox, PrivacyFunction
 
