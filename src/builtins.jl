@@ -116,7 +116,7 @@ end
 
 
 """
-    return_copy(g::DMGrads)
+    clone(g::DMGrads)
 Create and return a copy of a DMGrads object, where only the gradient part of the Zygote
 gradient is copied while the part pointing to the parameters of a model is kept. Thus we get
 an object that we can mutate safely while retaining information on which entry of the gradient
@@ -129,13 +129,13 @@ A function returning a copy of the gradient object:
 function compute_and_scale_gradient(model::DMModel, d, l) :: BlackBox()
    gs = unbounded_gradient(model, d, l)
    scale_gradient!(100, gs)
-   return return_copy(gs)
+   return clone(gs)
 end
 ```
 """
-return_copy(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
-return_copy(g::DMModel) :: DMModel = DMModel(deepcopy(g.params))
-return_copy(g::AbstractVecOrMat) = deepcopy(g)
+clone(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
+clone(g::DMModel) :: DMModel = DMModel(deepcopy(g.params))
+clone(g::AbstractVecOrMat) = deepcopy(g)
 
 
 """
@@ -222,7 +222,7 @@ end
 additive_noise(dist, m :: AbstractVector) = m + rand(dist, size(m))
 additive_noise(dist, m :: Number) :: Number = m + rand(dist)
 function additive_noise(dist, c::DMGrads) :: Tuple{}
-   cf = return_copy(c)
+   cf = clone(c)
    additive_noise!(dist, cf)
    return cf
 end
