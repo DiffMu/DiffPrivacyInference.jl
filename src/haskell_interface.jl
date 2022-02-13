@@ -16,13 +16,6 @@ function expand_includes(exin)
             _ => error("Unexpected include: $(typeof(inast))")
          end
       end;
-      Expr(:import, _) => let
-          if length(exin.args[1].args) > 1
-             error("Only standalone includes are allowed. You tried to import specific namesin $exin.")
-          else
-             return Symbol("nothing") # just ignore the import.
-          end
-      end;
       Expr(head, args...) => return Expr(head, map(expand_includes, args)...)
       e => return e
    end
