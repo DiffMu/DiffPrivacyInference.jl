@@ -64,7 +64,6 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
       # we also re-scale the gradient by `dim` to make up for the scaling earlier.
       scale_gradient!(eta, G)
       subtract_gradient!(model, G)
-
    end
    model
 end
