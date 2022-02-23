@@ -10,7 +10,7 @@ import Flux
 # the typechecker will just ignore the body of this function and assign infinite sensitivity to all
 # arguments. note that if you mutate any of the arguments, the typechecking result will be invalid,
 # but the typechecker will not warn you about it.
-function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox()
+function unbounded_gradient(model::DMModel, d, l) :: BlackBox()
    gs = Flux.gradient(Flux.params(model.model)) do
            loss(d,l,model)
         end
@@ -34,9 +34,10 @@ loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y)
 # get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
 function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer), b::NoData(Integer)) :: Priv()
    # initialize a Flux model.
-   model = init_model()
+   n_params = 31810
+   model = unbox(init_model(), DMModel, n_params)
    (dim, _) = size(data)
-   for i in 1:k
+   for i in 1:k*(dim/b)
       D, L = sample(b, data, labels)
       G = zero_gradient(model)
 
@@ -44,7 +45,7 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
          # compute the gradient at the i-th data point
          d = D[j,:]
          l = L[j,:]
-         gs = unbounded_gradient(model, d, l)
+         gs = unbox(unbounded_gradient(model, d, l), DMGrads, n_params)
 
          # clip the gradient
          clip!(L2,gs)
@@ -56,14 +57,15 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
       # apply the gaussian mechanism to the gradient.
       # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
       # required to make it DP stays reasonable.
-      scale_gradient!(1/b,G)
-      gaussian_mechanism!(2/b, eps, del, G) :: Robust()
+      scale_gradient!(1/b, G)
+      gaussian_mechanism!(2/b, eps, del, G)
 
       # update the model by subtracting the noised gradient scaled by the learning rate eta.
       # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-      scale_gradient!(eta, G) :: Robust()
-      subtract_gradient!(model, G) :: Robust()
-   end :: Robust()
+      scale_gradient!(eta, G)
+      subtract_gradient!(model, G)
+
+   end
    model
 end
 
