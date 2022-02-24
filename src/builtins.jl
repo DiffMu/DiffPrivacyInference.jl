@@ -138,6 +138,18 @@ clone(g::DMModel) :: DMModel = DMModel(deepcopy(g.params))
 clone(g::AbstractVecOrMat) = deepcopy(g)
 
 
+unbox(x::T where T<:Real, ::Type{Real}) = !(x isa Integer) ? x : error("Unbox encountered Integer where Real was expected.")
+unbox(x::T where T<:Integer, ::Type{Integer}) = x
+unbox(x::DMModel, ::DMModel, l) = unbox_size(x, (l,)) 
+unbox(x::DMGrads, ::DMGrads, l) = unbox_size(x, (l,))
+unbox(x::T where T<:Vector{<:Real}, ::Type{Vector{<:Real}}, l) = !(x isa Vector{<:Integer}) ? unbox_size(x,(l,)) : error("Unbox encountered Integer vector where Real vector was expected.")
+unbox(x::T where T<:Vector{<:Integer}, ::Type{Vector{<:Integer}}, l) = unbox_size(x,(l,))
+unbox(x::T where T<:Matrix{<:Real}, ::Type{Matrix{<:Real}}, s) = !(x isa Matrix{<:Integer}) ? unbox_size(x,s) : error("Unbox encountered Integer Matrix where Real Matrix was expected.")
+unbox(x::T where T<:Matrix{<:Integer}, ::Type{Matrix{<:Integer}}, s) = unbox_size(x,s)
+
+unbox_size(x, s::Tuple) = (size(x) == s) ? x : error("Unbox expected size $s but got $(size(x))")
+
+
 """
     scale_gradient!(s::Number, gs::DMGrads) :: Tuple{}
 
