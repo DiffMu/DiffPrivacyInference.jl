@@ -56,10 +56,11 @@ yields an $(\epsilon,\delta)$-differentially private function.
                    \label{eqn:one}
                     1 = d_{{L\infty},\mathbb{D}}(v,w) \leq d_{L2,\mathbb{D}}(v,w) \leq d_{L1,\mathbb{D}}(v,w)
                \end{equation}
-         \item hence if a vector-valued function $f:M->\mathbb{D}^n$ is $s$-sensitive for a fixed input metric and output metric $d_{L1,\mathbb{D}}$, it is also $s$-sensitive under output metric $d_{L\infty,\mathbb{D}}$ because
+         \item hence if a vector-valued function $f:M\rightarrow\mathbb{D}^n$ is $s$-sensitive for a fixed input metric and output metric $d_{L1,\mathbb{D}}$, it is also $s$-sensitive under output metric $d_{L\infty,\mathbb{D}}$ because
          \[d_{L\infty,\mathbb{D}}(f(v),f(w))\overset{(\ref{eqn:one})}{\leq} d_{L2,\mathbb{D}}(f(v),f(w)) \overset{(\ref{eqn:one})}{\leq} d_{L1,\mathbb{D}}(f(v),f(w)) \overset{f \textnormal{ is $s$-sensitive}}{\leq} s \cdot d_M(v,w)\]
-         \item also all functions from $(*,\mathbb{D})$-vectors to $(L\infty,\mathbb{D})$-vectors are 1-sensitve because for $v \neq w$ it is
-         \[1 = d_{L\infty, \mathbb{D}}(v,w) = 1 \overset{(\ref{eqn:one})}{\leq} 1 \cdot d_{L*, \mathbb{D}}(v,w)\]
+         \item also all functions $f$ from $(*,\mathbb{D})$-vectors to $(L\infty,\mathbb{D})$-vectors are 1-sensitve because for $v \neq w$ it is
+         \[1 = d_{L\infty, \mathbb{D}}(f(v),f(w)) \overset{(\ref{eqn:one})}{\leq} 1 \cdot d_{L*, \mathbb{D}}(v,w)\]
+         (This is true even for matrix input, see next section.)
          \item Clipping $(L\infty,\mathbb{D})$ vectors is such a function and hence 1-sensitive. I don't think clipping vectors in general is 1-sensitive (even if it says so in the paper), because e.g. $d_{L1,\mathbb{D}}$ can become larger:
             $$d_{L1,\mathbb{D}}([1,1],[1,0]) = 1$$
             but for the clipped vectors 
@@ -79,11 +80,20 @@ is the type of matrices where
 \end{itemize}
 
 \section*{Metrics over Matrices}
-For matrices $m,n \vdash \mathbb{M}^\star_l\tau$ the metric sums over rows:
+\begin{itemize}
+\item For matrices $m,n \vdash \mathbb{M}^\star_l\tau$ the metric sums over rows:
       $$d_{\mathbb{M}^\star_l\tau}(m,n) = \sum_j d_{l,\tau}(m_j,n_j)$$
-In particular,
+\item In particular,
 $$d_{\mathbb{M}^\star_{L1}\mathbb{D}}(m,n) = \text{number of matrix entries that differ}$$
 $$d_{\mathbb{M}^\star_{L\infty}\mathbb{D}}(m,n) = \text{number of matrix rows that differ somewhere}$$
+\item some facts
+   \begin{itemize}
+      \item all functions $f$ from $(*,\mathbb{D})$-matrices to $(L\infty,\mathbb{D})$-vectors are 1-sensitve because for $v \neq w$ it is
+         \[d_{L*, \mathbb{D}}(v,w) >= 1\]
+         and hence
+         \[1 = d_{L\infty, \mathbb{D}}(f(v),f(w)) \overset{(\ref{eqn:one})}{\leq} 1 \cdot d_{L*, \mathbb{D}}(v,w)\]
+   \end{itemize}
+\end{itemize}
 
 \section*{\texttt{discf}}
 The function $\texttt{discf} : \mathbb{R}\rightarrow\mathbb{D}$ is claimed to be 1-sensitive in the paper. Taking the numbers $0.1$ and $0.2$ as an example, we get
@@ -100,5 +110,9 @@ We can convert $\mathbb{M}^l_\star\mathbb{D}$ to $ \mathbb{M}^l_l\mathbb{R}$ bec
 The inequality is met, e.g. by the vectors $[1,0]$ and $[-1,0]$, as they have $\mathbb{D}$-distance 1 and $L2$-norm 1, but $L2$-distance 2 from each other.
 
 This implies conversion of the rows is 2-sensitive, but in the paper it is declared 1-sensitive. Also the paper version does not preserve clipping on the matrix, even though in their interpreter the \texttt{convert} function is simply the identity.
+
+\section*{\texttt{black boxes}}
+All functions $f$ from $(*,\mathbb{D})$-matrices (also vectors) to $(L\infty,\mathbb{D})$-vectors are 1-sensitve.
+
 
 \end{document}
