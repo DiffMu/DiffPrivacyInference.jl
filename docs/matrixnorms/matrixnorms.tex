@@ -114,5 +114,8 @@ This implies conversion of the rows is 2-sensitive, but in the paper it is decla
 \section*{\texttt{black boxes}}
 All functions $f$ from $(*,\mathbb{D})$-matrices (also vectors) to $(L\infty,\mathbb{D})$-vectors are 1-sensitve.
 
-
+\section*{\texttt{matrix-to-vector conversion}}
+As the metric on matrices is defined as the sum of row-wise vector metrics, we have that for 1-row matrices $m,n$: 
+$$d_{\mathbb{M}^\star_l\tau}(m,n) = \sum_j d_{l,\tau}(m_j,n_j) = d_{l,\tau}(m_1,n_1)$$
+where $m_1, n_1$ are the single row vectors. \"converting\" a 1-row matrix to a vector with the same element type, clip and norm parameters is hence 1-sensitive.
 \end{document}
