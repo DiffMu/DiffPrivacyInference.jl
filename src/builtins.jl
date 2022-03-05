@@ -255,7 +255,7 @@ function above_threshold(queries :: Vector{F} where F <: Function, epsilon :: Re
          return i
       end
    end
-   return n
+   return length(queries)
 end
 
 
@@ -359,6 +359,55 @@ function zero_gradient(m::DMModel) :: DMGrads
   return DMGrads(eg)
 end
 
+
+"""
+    map_rows(f::Function, m::AbstractMatrix)
+
+Map the Vector-to-Vector function `f` to the rows of `m`. 
+"""
+map_rows(f::Function, m::AbstractMatrix) = mapslices(f,m;dims=(2,))
+
+"""
+    map_cols(f::Function, m::AbstractMatrix)
+
+Map the Vector-to-Vector-function `f` to the columns of `m`. 
+"""
+map_cols(f::Function, m::AbstractMatrix) = mapslices(f,m;dims=(1,))
+
+
+"""
+    map_cols_binary(f::Function, m::AbstractMatrix)
+
+Map the binary Vector-to-Vector-function `f` to the columns of `m` and `n`. 
+"""
+function map_cols_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
+   a = [f(x,y) for (x,y) in zip(eachcol(m),eachcol(n))]
+   reshape(hcat(a...), (length(a[1]), length(a)))
+end
+
+
+"""
+    reduce_cols(f::Function, m::AbstractMatrix)
+
+Apply the privacy function `f` to each column of the matrix `m`, return a vector of the results. 
+"""
+reduce_cols(f::Function, m::AbstractMatrix) = [f(Matrix(reshape(c, length(c), 1))) for c in eachcol(m)]
+
+
+function row_to_vec(m::AbstractMatrix)
+   @assert (size(m)[1] == 1) "Tried to make a vector from a matrix that has more than one row"
+   Vector(vec(m))
+end
+
+function vec_to_row(m::AbstractVector)
+   @assert (size(m)[1] == 1) "Tried to make a vector from a matrix that has more than one row"
+   Vector(vec(m))
+end
+
+
+disc(n::Number) = n
+
+fold(f,i,v) = foldl(f,v; init=i)
 
 ###########################################
 # Internal use
