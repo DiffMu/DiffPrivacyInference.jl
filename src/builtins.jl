@@ -35,6 +35,7 @@ end
 """
 NoData() = Any
 NoData(T::DataType) = T
+NoData(T::Type) = T
 
 """
 Annotation for functions that cannot be typechecked. Their arguments will be assigned infinite
@@ -241,7 +242,8 @@ end
 
 
 """
-    above_threshold(queries :: Vector{Function}, epsilon :: Real, d, T :: Number) :: Integer
+    above_threshold(queries :: Vector{Function}, epsilon :: Real, d, T :: Number) :: Integeri
+
 The above-threshold mechanism. Input is a vector of 1-sensitive queries on dataset `d` mapping to
 the reals. Returns the index of the first query whose result at `d` plus `(4/epsilon)`-Laplacian
 noise is above the given threshold `T` plus `(2/epsilon)`-Laplacian noise. This is `(epsilon,0)`-private in `d`!
@@ -259,6 +261,27 @@ function above_threshold(queries :: Vector{F} where F <: Function, epsilon :: Re
 end
 
 
+"""
+    exponential_mechanism(r::Number, eps::Number, xs::Vector, u::Function)
+
+Return an element of the input vector `xs` based on the score given by the function `u`,
+mapping from the elements of `xs` to a real number. The probability for element `e` to be
+chosen is proportional to `exp(eps*u(e)/(2*r))`. The mechanism is `(eps,0)`-private in the variables that `u`
+is `r`-sensitive in.
+"""
+function exponential_mechanism(r, eps, xs, u)
+    # compute score for each entry of xs
+    scores = [u(x) for x in xs]
+    
+    # compute probability weight for each entry 
+    p = [exp(eps * score / (2 * r)) for score in scores]
+    
+    # clip to make a probability vector
+    p = clip(L1, p)
+
+    # choose from xs based on the probabilities
+    return xs[rand(Distributions.Categorical(p))]
+end
 
 """
     clip!(l::Norm, g::DMGrads) :: Tuple{}
@@ -381,7 +404,7 @@ map_cols(f::Function, m::AbstractMatrix) = mapslices(f,m;dims=(1,))
 Map the binary Vector-to-Vector-function `f` to the columns of `m` and `n`. 
 """
 function map_cols_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
-   a = [f(x,y) for (x,y) in zip(eachcol(m),eachcol(n))]
+   a = [f(collect(x),collect(y)) for (x,y) in zip(eachcol(m),eachcol(n))]
    reshape(hcat(a...), (length(a[1]), length(a)))
 end
 
@@ -391,7 +414,7 @@ end
 
 Apply the privacy function `f` to each column of the matrix `m`, return a vector of the results. 
 """
-reduce_cols(f::Function, m::AbstractMatrix) = [f(Matrix(reshape(c, length(c), 1))) for c in eachcol(m)]
+reduce_cols(f::Function, m::AbstractMatrix) = [f(Matrix(reshape(c, (length(c), 1)))) for c in eachcol(m)]
 
 
 function row_to_vec(m::AbstractMatrix)
@@ -399,9 +422,8 @@ function row_to_vec(m::AbstractMatrix)
    Vector(vec(m))
 end
 
-function vec_to_row(m::AbstractVector)
-   @assert (size(m)[1] == 1) "Tried to make a vector from a matrix that has more than one row"
-   Vector(vec(m))
+function vec_to_row(v::AbstractVector)
+   reshape(v, (1, length(v)))
 end
 
 
