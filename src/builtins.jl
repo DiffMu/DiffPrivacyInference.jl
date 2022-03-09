@@ -5,6 +5,10 @@
     L∞
 end
 
+
+###########################################
+# Annotations
+
 """
 Annotation for functions whose differential privacy we want to infer.
 
@@ -58,16 +62,9 @@ function and fail if you insert a privacy function.
 """
 PrivacyFunction = Function
 
-"""
-   norm_convert!(m::T) :: T
 
-Make a clipped vector/gradient measured using the discrete norm into a vector/gradient measured with the
-clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
-obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
-mechanism (which expects the input to be in L2-norm land).
-"""
-norm_convert!(m) = m
-
+###########################################
+# Flux wrappers
 
 """
 A wrapper for Flux models, so we can control that only typecheckable operations are executed on the model.
@@ -151,36 +148,20 @@ unbox(x::T where T<:Matrix{<:Integer}, ::Type{Matrix{<:Integer}}, s) = unbox_siz
 unbox_size(x, s::Tuple) = (size(x) == s) ? x : error("Unbox expected size $s but got $(size(x))")
 
 
-"""
-    scale_gradient!(s::Number, gs::DMGrads) :: Tuple{}
-
-Scale the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-by the scalar `s`. Mutates the gradient, returs ().
-"""
-function scale_gradient!(s :: Number, cg::DMGrads) :: Tuple{}
-   for g in cg.grads
-      rmul!(g, s)
-   end
-   return ()
-end
-
 
 """
-    subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
+   norm_convert!(m::T) :: T
 
-Subtract the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-from the parameters of the model `m`. Mutates the model, returns ().
+Make a clipped vector/gradient measured using the discrete norm into a vector/gradient measured with the
+clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
+obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
+mechanism (which expects the input to be in L2-norm land).
 """
-function subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
-   p = Flux.params(m.model)
-   for i in 1:size(p.order.data)[1]
-      p[i] .-= gs.grads[p[i]]
-   end
-   return ()
-end
+norm_convert!(m) = m
 
 
-
+###########################################
+# private mechanisms
 
 
 """
@@ -202,7 +183,6 @@ Apply the gaussian mechanism to the input gradient, adding gaussian noise with S
 at most `s`. Mutates the gradient, returns ().
 """
 gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Tuple{} = additive_noise!(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
-
 
 
 """
@@ -283,6 +263,21 @@ function exponential_mechanism(r, eps, xs, u)
     return xs[rand(Distributions.Categorical(p))]
 end
 
+
+"""
+    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple
+
+Take a uniform sample (with replacement) of `n` rows of the matrix `m` and corresponding rows of matrix `v`.
+"""
+function sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple{Matrix, Matrix}
+    r = rand(axes(m,1), n)
+    return (m[r,:], v[r,:])
+end
+
+
+###########################################
+# clipping things
+
 """
     clip!(l::Norm, g::DMGrads) :: Tuple{}
 
@@ -304,6 +299,7 @@ function clip!(l::Norm, cg::DMGrads) :: Tuple{}
 
     return ()
 end
+
 
 """
     clip(l::Norm, g::AbstractVector)
@@ -347,15 +343,35 @@ function clip(v::T, upper::T, lower::T) where T <: Number
    end
 end
 
+###########################################
+# gradients
 
 """
-    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple
+    scale_gradient!(s::Number, gs::DMGrads) :: Tuple{}
 
-Take a uniform sample (with replacement) of `n` rows of the matrix `m` and corresponding rows of matrix `v`.
+Scale the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
+by the scalar `s`. Mutates the gradient, returs ().
 """
-function sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple{Matrix, Matrix}
-    r = rand(axes(m,1), n)
-    return (m[r,:], v[r,:])
+function scale_gradient!(s :: Number, cg::DMGrads) :: Tuple{}
+   for g in cg.grads
+      rmul!(g, s)
+   end
+   return ()
+end
+
+
+"""
+    subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
+
+Subtract the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
+from the parameters of the model `m`. Mutates the model, returns ().
+"""
+function subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
+   p = Flux.params(m.model)
+   for i in 1:size(p.order.data)[1]
+      p[i] .-= gs.grads[p[i]]
+   end
+   return ()
 end
 
 
@@ -382,6 +398,8 @@ function zero_gradient(m::DMModel) :: DMGrads
   return DMGrads(eg)
 end
 
+###########################################
+# matrix stuff
 
 """
     map_rows(f::Function, m::AbstractMatrix)
@@ -417,6 +435,14 @@ Apply the privacy function `f` to each column of the matrix `m`, return a vector
 reduce_cols(f::Function, m::AbstractMatrix) = [f(Matrix(reshape(c, (length(c), 1)))) for c in eachcol(m)]
 
 
+
+
+###########################################
+# Internal use
+function internal_expect_const(a)
+    a
+end
+
 function row_to_vec(m::AbstractMatrix)
    @assert (size(m)[1] == 1) "Tried to make a vector from a matrix that has more than one row"
    Vector(vec(m))
@@ -430,12 +456,6 @@ end
 disc(n::Number) = n
 
 fold(f,i,v) = foldl(f,v; init=i)
-
-###########################################
-# Internal use
-function internal_expect_const(a)
-    a
-end
 
 ###########################################
 # Demutation testing
