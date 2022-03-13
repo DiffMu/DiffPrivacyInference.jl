@@ -1,3 +1,6 @@
+
+module FluxDP
+using DiffPrivacyInference
 # this code is checkable with our typechecker. the inference result will be the type of the last function
 # in the file, containing the inferred privacy bound as well as constraints on the input variables.
 
@@ -62,9 +65,10 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
 
       # update the model by subtracting the noised gradient scaled by the learning rate eta.
       # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-      scale_gradient!(eta, G)
+      scale_gradient!(eta*b, G)
       subtract_gradient!(model, G)
    end
    model
 end
 
+end

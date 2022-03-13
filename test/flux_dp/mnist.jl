@@ -10,5 +10,17 @@ y = [i == label ? 1 : 0 for label in labels, i in 0:9]
 
 # train with DP-GD
 include("flux_dp.jl")
-train_dp(X,y,0.9,0.2,0.1,5000,100)
 
+split = Int(ceil(length(images) * 0.8))
+
+X_train = X[1:split, :]
+X_test = X[split+1:end, :]
+y_train = y[1:split,:]
+y_test = y[split+1:end,:]
+
+m = FluxDP.train_dp(X_train,y_train,0.9,0.2,12,10,100)
+
+loss(x,y) = Flux.crossentropy(m.model(x), y)
+accuracy((d, l,)) = sum(loss(d,l)) / length(d)
+println(map(accuracy, zip(eachrow(X_test),eachrow(y_test))))
+sum(map(accuracy, zip(eachrow(X_test),eachrow(y_test)))) / length(y_test)
