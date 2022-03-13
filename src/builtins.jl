@@ -93,6 +93,7 @@ mutable struct DMModel
    model # a flux model
 end
 
+Base.size(m::DMModel) = (sum(length, Flux.params(m.model)),)
 
 """
 A wrapper for Zygote.Grads, so we can control that only typecheckable operations are executed on the gradient.
@@ -112,6 +113,7 @@ mutable struct DMGrads
    grads :: Zygote.Grads
 end
 
+Base.size(gs::DMGrads) = (sum(length, gs.grads.params),)
 
 """
     clone(g::DMGrads)
@@ -138,8 +140,8 @@ clone(g::AbstractVecOrMat) = deepcopy(g)
 
 unbox(x::T where T<:Real, ::Type{Real}) = !(x isa Integer) ? x : error("Unbox encountered Integer where Real was expected.")
 unbox(x::T where T<:Integer, ::Type{Integer}) = x
-unbox(x::DMModel, ::DMModel, l) = unbox_size(x, (l,)) 
-unbox(x::DMGrads, ::DMGrads, l) = unbox_size(x, (l,))
+unbox(x::DMModel, ::Type{DMModel}, l) = unbox_size(x, (l,)) 
+unbox(x::DMGrads, ::Type{DMGrads}, l) = unbox_size(x, (l,))
 unbox(x::T where T<:Vector{<:Real}, ::Type{Vector{<:Real}}, l) = !(x isa Vector{<:Integer}) ? unbox_size(x,(l,)) : error("Unbox encountered Integer vector where Real vector was expected.")
 unbox(x::T where T<:Vector{<:Integer}, ::Type{Vector{<:Integer}}, l) = unbox_size(x,(l,))
 unbox(x::T where T<:Matrix{<:Real}, ::Type{Matrix{<:Real}}, s) = !(x isa Matrix{<:Integer}) ? unbox_size(x,s) : error("Unbox encountered Integer Matrix where Real Matrix was expected.")
@@ -343,6 +345,7 @@ function clip(v::T, upper::T, lower::T) where T <: Number
    end
 end
 
+
 ###########################################
 # gradients
 
@@ -398,6 +401,7 @@ function zero_gradient(m::DMModel) :: DMGrads
   return DMGrads(eg)
 end
 
+
 ###########################################
 # matrix stuff
 
@@ -435,8 +439,6 @@ Apply the privacy function `f` to each column of the matrix `m`, return a vector
 reduce_cols(f::Function, m::AbstractMatrix) = [f(Matrix(reshape(c, (length(c), 1)))) for c in eachcol(m)]
 
 
-
-
 ###########################################
 # Internal use
 function internal_expect_const(a)
@@ -455,7 +457,7 @@ end
 
 disc(n::Number) = n
 
-fold(f,i,v) = foldl(f,v; init=i)
+fold(f,i,m) = vec_to_row(collect(foldl(f, v, init=i) for v in eachcol(m)))
 
 ###########################################
 # Demutation testing
