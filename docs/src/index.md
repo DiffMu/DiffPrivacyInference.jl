@@ -58,7 +58,6 @@ We can analyse entire files using [`infer_sensitivity_from_file`](@ref), also re
 
 ## Implementation reference
 ```@contents
-Pages = ["reference/public.md", "reference/core.md", "reference/parsing.md", "reference/typechecking.md"]
+Pages = ["docs/builtins.md"]
 ```
-
 
