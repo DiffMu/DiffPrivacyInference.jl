@@ -6,8 +6,15 @@ using Documenter, DiffPrivacyInference
 makedocs(sitename="DiffPrivacyInference",
          pages = [
              "index.md",
-             "Documentation" => [
-                 "docs/builtins.md"
+             "Getting Started" => [
+                 "getting_started/installation.md"
+             ],
+             "Tutorial" => [
+                 "tutorial/01_sensitivity_functions.md",
+                 "tutorial/02_privacy_functions.md"
+             ],
+             "Full Reference" => [
+                 "full_reference/builtins.md"
                  # "reference/public.md",
                  # "reference/core.md",
                  # "reference/parsing.md",

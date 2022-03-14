@@ -1,5 +1,5 @@
 
-# DiffPrivacyInference.jl
+# Overview
 
 The goal of this project is to create a type checker which can automatically analyze [Julia](https://julialang.org/) programs with respect to [differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) guarantees.
 
@@ -56,8 +56,8 @@ The output tells us that this is a two-argument function which is 42-sensitive i
 We can analyse entire files using [`infer_sensitivity_from_file`](@ref), also resolving includes. Running the inference algorithm like this will result in the type of the last statement in the file, i.e. of the thing that running all commands in the file would entail.
 
 
-## Implementation reference
-```@contents
-Pages = ["docs/builtins.md"]
-```
+<!-- ## Implementation reference -->
+<!-- ```@contents -->
+<!-- Pages = ["docs/builtins.md"] -->
+<!-- ``` -->
 
