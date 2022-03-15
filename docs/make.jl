@@ -1,14 +1,23 @@
 
+push!(LOAD_PATH,"../src/")
+
 using Documenter, DiffPrivacyInference
 
 makedocs(sitename="DiffPrivacyInference",
          pages = [
              "index.md",
-             "Documentation" => [
-                 "reference/public.md",
-                 "reference/core.md",
-                 "reference/parsing.md",
-                 "reference/typechecking.md",
+             "Getting Started" => [
+                 "getting_started/installation.md"
+             ],
+             "Tutorial" => [
+                 "tutorial/01_sensitivity_functions.md",
+                 "tutorial/02_privacy_functions.md"
+             ],
+             "Full Reference" => [
+                 "full_reference/types.md",
+                 "full_reference/annotations.md",
+                 "full_reference/builtins.md",
+                 "full_reference/mutating_functions.md"
              ]
          ]
 )
