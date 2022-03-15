@@ -162,6 +162,17 @@ mechanism (which expects the input to be in L2-norm land).
 norm_convert!(m) = m
 
 
+"""
+   norm_convert(m::T) :: T
+
+Make a clipped vector/gradient measured using the discrete norm into a vector/gradient measured with the
+clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
+obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
+mechanism (which expects the input to be in L2-norm land).
+"""
+norm_convert(m) = clone(m)
+
+
 ###########################################
 # private mechanisms
 
@@ -302,6 +313,29 @@ function clip!(l::Norm, cg::DMGrads) :: Tuple{}
     return ()
 end
 
+"""
+    clip(l::Norm, g::DMGrads) :: Tuple{}
+
+Return a clipped copy of the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
+"""
+function clip(l::Norm, cg::DMGrads) :: Tuple{}
+
+    p = @match l begin
+        L1 => 1
+        L2 => 2
+        L∞ => Inf
+    end
+
+    n = norm(cg.grads.grads, p)
+
+    ccg = clone(cg)
+
+    if n > 1
+       scale_gradient!(1/n, ccg)
+    end
+
+    return ccg
+end
 
 """
     clip(l::Norm, g::AbstractVector)
@@ -421,7 +455,7 @@ map_cols(f::Function, m::AbstractMatrix) = mapslices(f,m;dims=(1,))
 
 
 """
-    map_cols_binary(f::Function, m::AbstractMatrix)
+    map_cols_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
 
 Map the binary Vector-to-Vector-function `f` to the columns of `m` and `n`. 
 """
@@ -430,6 +464,15 @@ function map_cols_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
    reshape(hcat(a...), (length(a[1]), length(a)))
 end
 
+"""
+    map_rows_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
+
+Map the binary Vector-to-Vector-function `f` to the columns of `m` and `n`. 
+"""
+function map_rows_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
+   a = [f(collect(x),collect(y)) for (x,y) in zip(eachrow(m),eachrow(n))]
+   Matrix(transpose(hcat(a...)))
+end
 
 """
     reduce_cols(f::Function, m::AbstractMatrix)
@@ -457,6 +500,11 @@ end
 
 disc(n::Number) = n
 
+"""
+    fold(f::Function, i, m::AbstractMatrix)
+
+
+"""
 fold(f,i,m) = vec_to_row(collect(foldl(f, v, init=i) for v in eachcol(m)))
 
 ###########################################
