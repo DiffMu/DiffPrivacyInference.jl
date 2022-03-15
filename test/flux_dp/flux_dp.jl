@@ -32,10 +32,8 @@ end
 # the loss function for our training. using a function from Flux, so it's a black-box too.
 loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y)
 
-# the only function that is actually typechecked: the gradient descent training algorithm.
-# we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
-# get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
-function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer), b::NoData(Integer)) :: Priv()
+
+function train_dp(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer), b::NoData(Integer)) :: Priv()
    # initialize a Flux model.
    n_params = 31810
    model = unbox(init_model(), DMModel, n_params)
@@ -45,7 +43,7 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
       G = zero_gradient(model)
 
       for j in 1:b
-         # compute the gradient at the i-th data point
+         # compute the gradient at the j-th data point
          d = D[j,:]
          l = L[j,:]
          gs = unbox(unbounded_gradient(model, d, l), DMGrads, n_params)
@@ -54,21 +52,55 @@ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::
          clip!(L2,gs)
          norm_convert!(gs)
 
+         # aggregate sum of batch gradients
          G = sum_gradients(gs,G)
       end
 
-      # apply the gaussian mechanism to the gradient.
-      # we scale the gradient prior to this to bound it's sensitivity to 2/dim, so the noise
+      # apply the gaussian mechanism to the batch mean gradient.
+      # scaling G bounds it's sensitivity to 2/dim, so the noise
       # required to make it DP stays reasonable.
       scale_gradient!(1/b, G)
-      gaussian_mechanism!(2/b, eps, del, G)
+      gaussian_mechanism!(2, eps, del, G)
 
       # update the model by subtracting the noised gradient scaled by the learning rate eta.
-      # we also re-scale the gradient by `dim` to make up for the scaling earlier.
-      scale_gradient!(eta*b, G)
+      scale_gradient!(eta, G)
       subtract_gradient!(model, G)
    end
    model
+end
+
+# we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
+# get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
+# k specifies the number of times we iterate the whole dataset
+# b specifies the minibatch size
+# eta is the learning rate
+# the version without minibatching
+function train_dp_nobatch(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::NoData(), del::NoData(), eta::NoData()) :: Priv()
+   # initialize a Flux model.
+   n_params2 = 31810
+   model2 = unbox(init_model(), DMModel, n_params2)
+   (dim2, _) = size(data)
+      for j2 in 1:dim2
+         # compute the gradient at the j-th data point
+         d = data[j2,:]
+         l = labels[j2,:]
+         gs2 = unbox(unbounded_gradient(model2, d, l), DMGrads, n_params2)
+   
+         # clip the gradient
+         clip!(L2,gs2)
+         norm_convert!(gs2)
+   
+         # apply the gaussian mechanism to the batch mean gradient.
+         # scaling G bounds it's sensitivity to 2/dim, so the noise
+         # required to make it DP stays reasonable.
+         gaussian_mechanism!(2, eps, del, gs2)
+   
+         # update the model by subtracting the noised gradient scaled by the learning rate eta.
+         # we also re-scale the gradient by `b` to make up for the scaling earlier.
+         scale_gradient!(eta, gs2)
+         subtract_gradient!(model2, gs2)
+   end
+   model2
 end
 
 end
