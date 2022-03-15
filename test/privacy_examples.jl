@@ -1,4 +1,6 @@
 
+module PrivacyExamples
+
 ########################################################
 # from https://github.com/uvm-plaid/programming-dp
 
@@ -10,34 +12,18 @@ function count(f::NoData(Function), d::Matrix, eps::NoData(Real)) :: Priv()
    counter = laplacian_mechanism(1,eps,dd)
    counter
 end
-
-
-##########
-# chapter 5: histogram
-# TODO need parallel composition.
+  
 
 ##########
-# chapter 7
-# TODO implement using loop
-function avg_attack(query, epsilon, k) :: Priv()
-   v = zeros(k)
-   vv = map(x -> laplacian_mechanism(1,epsilon,query), v)
-   sum(vv)/k
-end
-   
+# chapter 10: DP summary statistics
 
-##########
-# chapter 10: DP average computation
-
-function sum(xs)
-   s = 0.
-   for i in 1:length(xs)
-      s = s + xs[i]
-   end
-   s
+# sum has sensitivity 1 (in L1 metric)
+function sum(xs::Vector)
+   fold((x,y) -> x+y, 0., vec_to_row(xs))
 end
 
 # compute a (epsilon,0)-DP version of the average of a vector
+# TODO we cannot check this properly, see issue #227
 function auto_avg(xs::Vector{<:Real}, bs::NoData(Vector), epsilon::NoData(Real)) :: Priv()
 
    # the query we want to make   
@@ -65,6 +51,8 @@ function auto_avg(xs::Vector{<:Real}, bs::NoData(Vector), epsilon::NoData(Real))
    noisy_sum/noisy_count
 end
 
+# compute a (epsilon,0)-DP version of the variance of a vector
+# TODO same as above
 function auto_variance(xs, bs::NoData(), epsilon::NoData()) :: Priv()
    epsilon_avg = epsilon / 4
    mu = auto_avg(xs,bs,epsilon_avg)
@@ -96,25 +84,48 @@ end
 
 
 
-########################################################3
-# from the duet paper: for adaptive clipping.
+########################################################
+# DP summary statistics
 
+# one-hot vector saying whether row i of b*xs gets clipped.
 function filter_box(b::Real, xs::Matrix) :: BlackBox()
    cxs = map(x -> clip(L2, b*x), eachrow(xs))
-   println(cxs)
-   clone([(rm == rn ? 1. : 0.) for (rm,rn) in zip(eachrow(xs), (cxs))])
+   [(rm == rn ? 1. : 0.) for (rm,rn) in zip(eachrow(xs), (cxs))]
 end
 
-function test_scale(b::Real, xs::Matrix{<:Real})
-   (d,_) = size(xs)
-   xxs = unbox(filter_box(b,xs),Vector{<:Real},d)
-   count(x -> x==1., xxs)
-end
-
-function set_clipping_param(test_scale,xs::Matrix{<:Real}, eps::Real, bs::Vector{<:Real})::Priv()
+# return the index of the first element b in bs s.t. 90% of the rows of b*xs do not get clipped.
+function select_clipping_param(xs::Matrix{<:Real}, eps::NoData(Real), bs::Vector{<:Real})::Priv()
+   function test_scale(b::Real, xs::Matrix{<:Real})
+      (d,_) = size(xs)
+      xxs = unbox(filter_box(b,xs),Vector{<:Real},d)
+      1.0*count(x -> x==1., xxs)
+   end
    (dim, _) = size(xs)
    target = 0.9 * dim
    fs = map(b -> (xs -> test_scale(b,xs)), bs)
    above_threshold(fs, eps, xs, target)
 end
 
+# compute (eps,del)-dp mean of a 1-col matrix (basically a col vector...)
+function dp_col_mean(v::Matrix{<:Real}, eps::NoData(Real), del::NoData(Real), bs::NoData(Vector{<:Real})) :: Priv()
+
+     # find a scalar b s.t. 90% of rows (i.e. entries of the col vector) of b*v remain unclipped
+     bp = select_clipping_param(v, eps/2, bs)
+     b = bs[bp]
+
+     # scale each row (i.e. each entry of the col vector...) and clip
+     clipped = map_rows(x -> clip(L1,disc(b)*x), v)
+     norm_convert!(clipped)
+
+     # compute mean of clipped col vector
+     (nrows,_) = size(v)
+     sm = fold((x,y)->x+y, 0., clipped) / nrows
+
+     # add noise to mean
+     g = gaussian_mechanism(2/nrows, eps/2, del, sm)
+     # re-scale
+     disc(1/b) * disc(g)
+
+end
+
+end

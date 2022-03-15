@@ -479,7 +479,7 @@ end
 
 Apply the privacy function `f` to each column of the matrix `m`, return a vector of the results. 
 """
-reduce_cols(f::Function, m::AbstractMatrix) = [f(Matrix(reshape(c, (length(c), 1)))) for c in eachcol(m)]
+reduce_cols(f::Function, m::AbstractMatrix) = [f(vec_to_col(c)) for c in eachcol(m)]
 
 
 ###########################################
@@ -497,15 +497,17 @@ function vec_to_row(v::AbstractVector)
    reshape(v, (1, length(v)))
 end
 
+function vec_to_col(v::AbstractVector)
+   Matrix(reshape(v, (length(v), 1)))
+end
+
 
 disc(n::Number) = n
 
-"""
-    fold(f::Function, i, m::AbstractMatrix)
+fold(f, i, m) = foldl(f, m, init=i)
 
-
-"""
-fold(f,i,m) = vec_to_row(collect(foldl(f, v, init=i) for v in eachcol(m)))
+fold_rows(f,i,m) = vec_to_row(collect(foldl(f, eachrow(m), init=i)))
+fold_cols(f,i,m) = vec_to_col(collect(foldl(f, eachcol(m), init=i)))
 
 ###########################################
 # Demutation testing
