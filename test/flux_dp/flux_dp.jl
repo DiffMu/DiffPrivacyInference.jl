@@ -114,22 +114,20 @@ function train_dp_noloop(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::NoDa
    # initialize a Flux model.
    n_paramss2 = 31810
    model23 = unbox(init_model(), DMModel, n_paramss2)
+   function body(d, l, model::NoData()) :: Priv()
+      gs2 = unbox(unbounded_gradient(model, d, l), DMGrads, n_paramss2)
+       # clip the gradient
+      clip!(L2,gs2)
+      norm_convert!(gs2)
+ 
+      gaussian_mechanism!(2, eps, del, gs2)
+      scale_gradient!(eta, gs2)
+      subtract_gradient(model, gs2)
+   end
    for _ in 1:k
-         function body(d, l, model) :: Priv()
-            gs2 = unbox(unbounded_gradient(model, d, l), DMGrads, n_paramss2)
-      
-            # clip the gradient
-            clip!(L2,gs2)
-            norm_convert!(gs2)
-      
-            gaussian_mechanism!(2, eps, del, gs2)
-            scale_gradient!(eta, gs2)
-            subtract_gradient(model, gs2)
-         end
-         model23 = parallel_private_fold_rows(body, model23, data, labels)
-    end
+      model23 = parallel_private_fold_rows(body, model23, data, labels)
+   end
    model23
 end
-
 
 end
