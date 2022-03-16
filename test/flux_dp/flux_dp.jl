@@ -103,4 +103,33 @@ function train_dp_nobatch(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::NoD
    model2
 end
 
+
+# we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
+# get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
+# k specifies the number of times we iterate the whole dataset
+# b specifies the minibatch size
+# eta is the learning rate
+# the version without minibatching
+function train_dp_noloop(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer)) :: Priv()
+   # initialize a Flux model.
+   n_paramss2 = 31810
+   model23 = unbox(init_model(), DMModel, n_paramss2)
+   for _ in 1:k
+         function body(d, l, model) :: Priv()
+            gs2 = unbox(unbounded_gradient(model, d, l), DMGrads, n_paramss2)
+      
+            # clip the gradient
+            clip!(L2,gs2)
+            norm_convert!(gs2)
+      
+            gaussian_mechanism!(2, eps, del, gs2)
+            scale_gradient!(eta, gs2)
+            subtract_gradient(model, gs2)
+         end
+         model23 = parallel_private_fold_rows(body, model23, data, labels)
+    end
+   model23
+end
+
+
 end

@@ -134,7 +134,7 @@ end
 ```
 """
 clone(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
-clone(g::DMModel) :: DMModel = DMModel(deepcopy(g.params))
+clone(g::DMModel) :: DMModel = g # TODO!!! DMModel(copy(g.model))
 clone(g::AbstractVecOrMat) = deepcopy(g)
 
 
@@ -413,6 +413,23 @@ end
 
 
 """
+    subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
+
+Subtract the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
+from the parameters of a fresh copy of the model `m`. Returns the updated copy (careful, this is expensive).
+"""
+function subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
+   cm = clone(m)
+   p = Flux.params(cm.model)
+   for i in 1:size(p.order.data)[1]
+      p[i] .-= gs.grads[p[i]]
+   end
+   return cm
+end
+
+
+
+"""
     sum_gradients(g::DMGrads, gs::DMGrads...) :: DMGrads
 
 Sum two or more `DMGrads` gradients. Errors if they belong to different DMModels.
@@ -503,6 +520,10 @@ end
 
 
 disc(n::Number) = n
+
+function parallel_private_fold_rows(f, i, m, n)
+   foldl((i,(x,y))->f(x,y,i), [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))], init=i)
+end
 
 fold(f, i, m) = foldl(f, m, init=i)
 
