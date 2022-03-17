@@ -134,7 +134,6 @@ end
 ```
 """
 clone(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.grads.params))
-clone(g::DMModel) :: DMModel = g # TODO!!! DMModel(copy(g.model))
 clone(g::AbstractVecOrMat) = deepcopy(g)
 
 
@@ -196,14 +195,17 @@ gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(Normal(0, (
 
 
 """
-    gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, g::DMGrads) :: Tuple{}
+    gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, g::DMGrads) :: Nothing
 
 Apply the gaussian mechanism to the input gradient, adding gaussian noise with SD of
 `(2 * log(1.25/δ) * s^2) / ϵ^2)` to each gradient entry seperately. This introduces
 `(ϵ, δ)`-differential privacy to all variables the gradient depends on with sensitivity
-at most `s`. Mutates the gradient, returns ().
+at most `s`. Mutates the gradient, returns `nothing`.
 """
-gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Tuple{} = additive_noise!(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
+function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Nothing
+   additive_noise!(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
+   return nothing
+end
 
 
 """
@@ -218,25 +220,28 @@ laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(Laplace(0, s / ϵ), 
 
 
 """
-    laplacian_mechanism!(s::Real, ϵ::Real, g::DMGrads) :: Tuple{}
+    laplacian_mechanism!(s::Real, ϵ::Real, g::DMGrads) :: Nothing
 
 Apply the laplacian mechanism to the input, adding laplacian noise with scaling parameter of
 `(s / ϵ)` and location zero to each gradient entry seperately. This introduces
 `(ϵ, 0)`-differential privacy to all variables the input depends on with sensitivity
-at most `s`. Mutates the input, returns ().
+at most `s`. Mutates the input, returns `nothing`.
 """
-laplacian_mechanism!(s::Real, ϵ::Real, cf :: DMGrads) = additive_noise!(Laplace(0, s / ϵ), cf)
+function laplacian_mechanism!(s::Real, ϵ::Real, cf :: DMGrads) :: Nothing
+   additive_noise!(Laplace(0, s / ϵ), cf)
+   return nothing
+end
 
 
-function additive_noise!(dist, cf::DMGrads) :: Tuple{}
+function additive_noise!(dist, cf::DMGrads) :: Nothing
    for p in cf.grads.params
       cf.grads[p] += rand(dist, size(p))
    end
-   return ()
+   return nothing
 end
 additive_noise(dist, m :: AbstractVector) = m + rand(dist, size(m))
 additive_noise(dist, m :: Number) :: Number = m + rand(dist)
-function additive_noise(dist, c::DMGrads) :: Tuple{}
+function additive_noise(dist, c::DMGrads) :: DMGrads
    cf = clone(c)
    additive_noise!(dist, cf)
    return cf
@@ -301,11 +306,11 @@ end
 # clipping things
 
 """
-    clip!(l::Norm, g::DMGrads) :: Tuple{}
+    clip!(l::Norm, g::DMGrads) :: Nothing
 
-Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient, returns ().
+Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient, returns `nothing`.
 """
-function clip!(l::Norm, cg::DMGrads) :: Tuple{}
+function clip!(l::Norm, cg::DMGrads) :: Nothing
 
     p = @match l begin
         L1 => 1
@@ -319,16 +324,16 @@ function clip!(l::Norm, cg::DMGrads) :: Tuple{}
        scale_gradient!(1/n, cg)
     end
 
-    return ()
+    return nothing
 end
 
 
 """
-    clip(l::Norm, g::DMGrads) :: Tuple{}
+    clip(l::Norm, g::DMGrads) :: Nothing
 
 Return a clipped copy of the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
 """
-function clip(l::Norm, cg::DMGrads) :: Tuple{}
+function clip(l::Norm, cg::DMGrads) :: DMGrads
 
     p = @match l begin
         L1 => 1
@@ -395,47 +400,31 @@ end
 # gradients
 
 """
-    scale_gradient!(s::Number, gs::DMGrads) :: Tuple{}
+    scale_gradient!(s::Number, gs::DMGrads) :: Nothing
 
 Scale the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-by the scalar `s`. Mutates the gradient, returs ().
+by the scalar `s`. Mutates the gradient, returs `nothing`.
 """
-function scale_gradient!(s :: Number, cg::DMGrads) :: Tuple{}
+function scale_gradient!(s :: Number, cg::DMGrads) :: Nothing
    for g in cg.grads
       rmul!(g, s)
    end
-   return ()
+   return nothing
 end
 
 
 """
-    subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
+    subtract_gradient!(m::DMModel, gs::DMGrads) :: Nothing
 
 Subtract the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-from the parameters of the model `m`. Mutates the model, returns ().
+from the parameters of the model `m`. Mutates the model, returns `nothing`.
 """
-function subtract_gradient!(m::DMModel, gs::DMGrads) :: Tuple{}
+function subtract_gradient!(m::DMModel, gs::DMGrads) :: Nothing
    p = Flux.params(m.model)
    for i in 1:size(p.order.data)[1]
       p[i] .-= gs.grads[p[i]]
    end
-   return ()
-end
-
-
-"""
-    subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
-
-Subtract the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-from the parameters of a fresh copy of the model `m`. Returns the updated copy (careful, this is expensive).
-"""
-function subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
-   cm = clone(m)
-   p = Flux.params(cm.model)
-   for i in 1:size(p.order.data)[1]
-      p[i] .-= gs.grads[p[i]]
-   end
-   return cm
+   return nothing
 end
 
 
@@ -531,6 +520,22 @@ the fold is `(eps,del)`-private in the input matrices. The input matrices are ex
 """
 function parallel_private_fold_rows(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
    foldl((i,(x,y))->f(x,y,i), [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))], init=i)
+end
+
+
+"""
+    parallel_private_fold_rows(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
+
+Fold the privacy function `f :: Vector -> Vector -> I -> I` over the two input matrices' rows simultaneously.
+Allows for `f` to mutate the accumulator, returns nothing. 
+This is parallel composition on the rows of `m` and `n`, so if `f` is `(eps,del)`-private in it's first two arguments,
+the fold is `(eps,del)`-private in the input matrices. The input matrices are expected to be measured in the discrete norm.
+"""
+function parallel_private_fold_rows!(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
+   for (x,y) in [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))] 
+      f(x,y,i)
+   end
+   return nothing
 end
 
 
