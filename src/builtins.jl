@@ -173,6 +173,13 @@ mechanism (which expects the input to be in L2-norm land).
 norm_convert(m) = clone(m)
 
 
+"""
+    disc(n::Number) :: Number
+Return `n`, but let the typechecker know that you want it to be measured in the discrete norm.
+"""
+disc(n::Number) = n
+
+
 ###########################################
 # private mechanisms
 
@@ -186,6 +193,7 @@ Apply the gaussian mechanism to the input, adding gaussian noise with SD of
 at most `s`. Makes a copy of the input and returns the noised copy.
 """
 gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
+
 
 """
     gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, g::DMGrads) :: Tuple{}
@@ -207,6 +215,7 @@ Apply the laplacian mechanism to the input, adding laplacian noise with scaling 
 at most `s`. Makes a copy of the input, then noises and returns the copy.
 """
 laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(Laplace(0, s / ϵ), cf)
+
 
 """
     laplacian_mechanism!(s::Real, ϵ::Real, g::DMGrads) :: Tuple{}
@@ -313,6 +322,7 @@ function clip!(l::Norm, cg::DMGrads) :: Tuple{}
     return ()
 end
 
+
 """
     clip(l::Norm, g::DMGrads) :: Tuple{}
 
@@ -336,6 +346,7 @@ function clip(l::Norm, cg::DMGrads) :: Tuple{}
 
     return ccg
 end
+
 
 """
     clip(l::Norm, g::AbstractVector)
@@ -428,7 +439,6 @@ function subtract_gradient(m::DMModel, gs::DMGrads) :: DMModel
 end
 
 
-
 """
     sum_gradients(g::DMGrads, gs::DMGrads...) :: DMGrads
 
@@ -463,6 +473,7 @@ Map the Vector-to-Vector function `f` to the rows of `m`.
 """
 map_rows(f::Function, m::AbstractMatrix) = mapslices(f,m;dims=(2,))
 
+
 """
     map_cols(f::Function, m::AbstractMatrix)
 
@@ -481,6 +492,7 @@ function map_cols_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
    reshape(hcat(a...), (length(a[1]), length(a)))
 end
 
+
 """
     map_rows_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
 
@@ -491,12 +503,58 @@ function map_rows_binary(f::Function, m::AbstractMatrix, n::AbstractMatrix)
    Matrix(transpose(hcat(a...)))
 end
 
+
+"""
+   fold(f::Function, i, m::AbstractMatrix)
+
+Fold the function `f` over all entries of `m`, using initial value `i`.
+"""
+fold(f::Function, i, m::AbstractMatrix) = foldl(f, m, init=i)
+
+
 """
     reduce_cols(f::Function, m::AbstractMatrix)
 
-Apply the privacy function `f` to each column of the matrix `m`, return a vector of the results. 
+Apply the privacy function `f :: (r x 1)-Matrix -> T` to each column of the `(r x c)`-Matrix `m`, return a vector of the results.
+If `f` is `(eps,del)`-private in its argument, the reduction is `(r*eps, r*del)`-private in `m`.
+
 """
 reduce_cols(f::Function, m::AbstractMatrix) = [f(vec_to_col(c)) for c in eachcol(m)]
+
+
+"""
+    parallel_private_fold_rows(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
+
+Fold the privacy function `f :: Vector -> Vector -> I -> I` over the two input matrices' rows simultaneously.
+This is parallel composition on the rows of `m` and `n`, so if `f` is `(eps,del)`-private in it's first two arguments,
+the fold is `(eps,del)`-private in the input matrices. The input matrices are expected to be measured in the discrete norm.
+"""
+function parallel_private_fold_rows(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
+   foldl((i,(x,y))->f(x,y,i), [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))], init=i)
+end
+
+
+"""
+    row_to_vec(m::AbstractMatrix) :: Vector
+
+Make the one-row matrix `m` into a vector.
+"""
+function row_to_vec(m::AbstractMatrix)
+   @assert (size(m)[1] == 1) "Tried to make a vector from a matrix that has more than one row"
+   Vector(vec(m))
+end
+
+
+"""
+    vec_to_row(v::AbstractVector) :: Matrix
+
+Make the vector `v` into a one-row matrix.
+"""
+function vec_to_row(v::AbstractVector)
+   reshape(v, (1, length(v)))
+end
+
+
 
 
 ###########################################
@@ -505,30 +563,10 @@ function internal_expect_const(a)
     a
 end
 
-function row_to_vec(m::AbstractMatrix)
-   @assert (size(m)[1] == 1) "Tried to make a vector from a matrix that has more than one row"
-   Vector(vec(m))
-end
-
-function vec_to_row(v::AbstractVector)
-   reshape(v, (1, length(v)))
-end
-
-function vec_to_col(v::AbstractVector)
-   Matrix(reshape(v, (length(v), 1)))
-end
 
 
-disc(n::Number) = n
-
-function parallel_private_fold_rows(f, i, m, n)
-   foldl((i,(x,y))->f(x,y,i), [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))], init=i)
-end
-
-fold(f, i, m) = foldl(f, m, init=i)
-
-fold_rows(f,i,m) = vec_to_row(collect(foldl(f, eachrow(m), init=i)))
-fold_cols(f,i,m) = vec_to_col(collect(foldl(f, eachcol(m), init=i)))
+#fold_rows(f,i,m) = vec_to_row(collect(foldl(f, eachrow(m), init=i)))
+#fold_cols(f,i,m) = vec_to_col(collect(foldl(f, eachcol(m), init=i)))
 
 ###########################################
 # Demutation testing
