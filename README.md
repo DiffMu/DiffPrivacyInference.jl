@@ -20,3 +20,8 @@ Next up is smoothing out the integration into Flux.jl and then implementing and 
 We have moved most of the typecheker implementation to haskell, callable from the `julia` REPL via an FFI. For now, please head to the repository of the [haskell part of the project](https://github.com/DiffMu/DiffPrivacyInferenceHs) for installation instructions of the current development state. Once the typechecker is in a usable state, we will provide a simple installation procedure using the `julia` package manager.
 
 
+
+## Getting started
+
+For a short guide on how to write typecheckable code as well as example usage, head to the [quick guide](https://diffmu.github.io/DiffPrivacyInference.jl/dev/getting_started/quick_guide/) in our documentation.
+
