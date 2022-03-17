@@ -7,7 +7,8 @@ makedocs(sitename="DiffPrivacyInference",
          pages = [
              "index.md",
              "Getting Started" => [
-                 "getting_started/installation.md"
+                 "getting_started/installation.md",
+                 "getting_started/quick_guide.md"
              ],
              "Tutorial" => [
                  "tutorial/01_sensitivity_functions.md",
@@ -17,6 +18,7 @@ makedocs(sitename="DiffPrivacyInference",
                  "full_reference/types.md",
                  "full_reference/annotations.md",
                  "full_reference/builtins.md",
+                 "full_reference/scoping_rules.md",
                  "full_reference/mutating_functions.md"
              ]
          ]
