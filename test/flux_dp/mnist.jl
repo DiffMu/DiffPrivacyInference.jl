@@ -22,7 +22,7 @@ n_test = size(X_test)[1]
 include("flux_dp.jl")
 
 #m = FluxDP.train_dp(X_train,y_train,0.2,0.2,0.2,5,1000)
-m = FluxDP.train_dp_noloop(X_train,y_train,0.2,0.2,0.2, 1)
+m = FluxDP.train_dp_nobatch_noloop(X_train,y_train,0.2,0.2,0.2,1000)
 
 # compute some stats
 loss(x,y) = Flux.crossentropy(m.model(x), y)
