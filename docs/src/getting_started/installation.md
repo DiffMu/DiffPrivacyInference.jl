@@ -44,24 +44,24 @@ In particular, in order to run/build from source, you need:
     
 ### Usage
     
-    To parse a string and then typecheck it using the haskell backend, do
-    ```julia
-    julia> term = string_to_dmterm("function my_identity(a)
-                                      return a
-                                    end")
+To parse a string and then typecheck it using the haskell backend, do
+```julia
+julia> term = string_to_dmterm("function my_identity(a)
+                                  return a
+                                end")
 
-    julia> typecheck_hs_from_dmterm(term)
-    ```
-    To execute all (haskell-)tests, simply run
-    ```julia
-    julia> test_hs()
-    ```
+julia> typecheck_hs_from_dmterm(term)
+```
+To execute all (haskell-)tests, simply run
+```julia
+julia> test_hs()
+```
     
 ### Tips & Tricks
-    You may want to use [`Revise.jl`]() so you don't have to restart the REPL everytime you change the code. If you put
-    ```
-    using Revise
-    ```
-    in your `~/.julia/config/startup.jl` (or wherever you keep your julia config), you won't have to type it on every REPL restart.
+You may want to use [`Revise.jl`]() so you don't have to restart the REPL everytime you change the code. If you put
+```julia
+using Revise
+```
+in your `~/.julia/config/startup.jl` (or wherever you keep your julia config), you won't have to type it on every REPL restart.
 
 
