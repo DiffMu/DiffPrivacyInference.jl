@@ -63,6 +63,32 @@ function and fail if you insert a privacy function.
 PrivacyFunction = Function
 
 
+"""
+Annotation for real numbers with the discrete metric, i.e.
+    d(a,b) = (a==b) ? 1 : 0
+Use it to tell the typechecker you want to infer sensitivity/privacy of a function variable
+w.r.t. to the discrete metric. An alias for julia's `Real` type, so you cannot dispatch on it.
+"""
+Data = Real
+
+
+# TODO link to docs
+"""
+    MetricMatrix(T, N<:Norm)
+Annotate matrices with the desired metric you want them to be measured in by the typechecker.
+Just maps to Matrix{T}.
+"""
+MetricMatrix(T, L::Norm) = Matrix{T}
+
+
+"""
+    MetricVector(T, N<:Norm)
+Annotate matrices with the desired metric you want them to be measured in by the typechecker.
+Just maps to Vector{T}.
+"""
+MetricVector(T, L::Norm) = Vector{T}
+
+
 ###########################################
 # Flux wrappers
 
@@ -153,7 +179,7 @@ unbox_size(x, s::Tuple) = (size(x) == s) ? x : error("Unbox expected size $s but
 """
    norm_convert!(m::T) :: T
 
-Make a clipped vector/gradient measured using the discrete norm into a vector/gradient measured with the
+Make a clipped vector/gradient measured using the discrete metric into a vector/gradient measured with the
 clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
 obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
 mechanism (which expects the input to be in L2-norm land).
@@ -173,10 +199,10 @@ norm_convert(m) = clone(m)
 
 
 """
-    disc(n::Number) :: Number
-Return `n`, but let the typechecker know that you want it to be measured in the discrete norm.
+    disc(n::Real) :: Data
+Return `n`, but let the typechecker know that you want it to be measured in the discrete metric.
 """
-disc(n::Number) = n
+disc(n::Real) = n
 
 
 ###########################################
