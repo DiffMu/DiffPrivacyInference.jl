@@ -9,7 +9,7 @@ function filter_box(b::Real, xs::Matrix) :: BlackBox()
 end
 
 # return the index of the first element b in bs s.t. 90% of the rows of b*xs do not get clipped.
-function select_clipping_param(xs::Matrix{<:Real}, eps::NoData(Real), bs::Vector{<:Real})::Priv()
+function select_clipping_param(xs::Matrix{<:Real}, eps::Static(Real), bs::Vector{<:Real})::Priv()
    function test_scale(b::Real, xs::Matrix{<:Real})
       (d,_) = size(xs)
       xxs = unbox(filter_box(b,xs),Vector{<:Real},d)
@@ -22,7 +22,7 @@ function select_clipping_param(xs::Matrix{<:Real}, eps::NoData(Real), bs::Vector
 end
 
     
-function col_means(m::Matrix{<:Real}, eps::NoData(), del::NoData(), bs::NoData(Vector{<:Real})) :: Priv() 
+function col_means(m::Matrix{<:Real}, eps::Static(), del::Static(), bs::Static(Vector{<:Real})) :: Priv() 
    # compute (eps,del)-dp mean of a 1-col matrix (basically a col vector...)
    function dp_col_mean(v::Matrix{<:Real}) :: Priv()
         # find a scalar b s.t. 90% of rows (i.e. entries of the col vector) of b*v remain unclipped
@@ -47,11 +47,11 @@ end
 
 # the only function that is actually typechecked: the gradient descent training algorithm.
 # we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
-# get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
-function train_dp_bounded_grad(data, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer), grad::NoData(Function), model::NoData(DMModel)) :: Priv()
+# get a `Static()` annotation. it's a privacy function, so we annotate it with `Priv()`.
+function train_dp_bounded_grad(data, eps::Static(), del::Static(), eta::Static(), k::Static(Integer), grad::Static(Function), model::Static(DMModel)) :: Priv()
 
    # the computation we do on each data row seperately. 
-   function body!(d, l, model::NoData()) :: Priv()
+   function body!(d, l, model::Static()) :: Priv()
       # compute gradient for current model
       gs2 = unbox(unbounded_gradient(model, d, l), DMGrads, n_paramss2)
 
@@ -74,7 +74,7 @@ function train_dp_bounded_grad(data, eps::NoData(), del::NoData(), eta::NoData()
    model23
 end
 
-function main(m, eps::NoData(), del::NoData(), bs::NoData(Vector), eta::NoData(), k::NoData(), b::NoData(), grad::Function, model::NoData(DMModel)) :: Priv()
+function main(m, eps::Static(), del::Static(), bs::Static(Vector), eta::Static(), k::Static(), b::Static(), grad::Function, model::Static(DMModel)) :: Priv()
    means = col_means(m, eps, del, bs)
    centered = map_cols_binary((col::Vector, mean::Vector) -> map(x -> x - mean[1], col), m, vec_to_row(means))
    function select(col) :: Priv()

@@ -31,8 +31,8 @@ loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y)
 
 # the only function that is actually typechecked: the gradient descent training algorithm.
 # we're only interested in the privacy of the `data` and `labels` inputs so all other parameters
-# get a `NoData()` annotation. it's a privacy function, so we annotate it with `Priv()`.
-function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer), b::NoData(Integer)) :: Priv()
+# get a `Static()` annotation. it's a privacy function, so we annotate it with `Priv()`.
+function train_dp(data, labels, eps::Static(), del::Static(), eta::Static(), k::Static(Integer), b::Static(Integer)) :: Priv()
    # initialize a Flux model.
    model = init_model()
    (dim, _) = size(data)

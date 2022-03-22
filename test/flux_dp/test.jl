@@ -11,7 +11,7 @@ end
 
 
 # compute a (epsilon,0)-DP version of the average of a vector
-function auto_avg(xs::Vector{<:Real}, bs::NoData(Vector), epsilon::NoData(Real)) :: Priv()
+function auto_avg(xs::Vector{<:Real}, bs::Static(Vector), epsilon::Static(Real)) :: Priv()
 
    # the query we want to make   
    clipped_sum(m,b) = sum(map(x -> clip(x,b,0.), m))
@@ -69,7 +69,7 @@ end
 #   above_threshold(fs, eps, xs, target)
 #end
 #
-# function col_means_nop(m::Matrix{<:Real}, eps::NoData(), del::NoData(), bs::NoData(Vector{<:Real})) :: Priv() 
+# function col_means_nop(m::Matrix{<:Real}, eps::Static(), del::Static(), bs::Static(Vector{<:Real})) :: Priv() 
 #          # compute dp mean of a 1-row matrix (basically a col vector...)
 #          function dp_col_mean(v::Matrix{<:Real}) :: Priv()
 #            # find a scalar b s.t. 90% of rows of b*v remain unclipped
@@ -96,7 +96,7 @@ end
 #
 #
 ##
-##function dp_col_mean(v::Matrix{<:Real}, bs::NoData(Vector), eps::NoData(), del::NoData()) :: Priv()
+##function dp_col_mean(v::Matrix{<:Real}, bs::Static(Vector), eps::Static(), del::Static()) :: Priv()
 ##             bpb = select_clipping_param(v, eps/2, bs)
 ##            bb = bs[bpb]
 ##
@@ -128,7 +128,7 @@ end
 #end
 #
 #       
-#function col_means(m::Matrix{<:Real}, eps::NoData(), del::NoData(), bs::Vector{<:Real}) :: Priv() 
+#function col_means(m::Matrix{<:Real}, eps::Static(), del::Static(), bs::Vector{<:Real}) :: Priv() 
 #   # compute dp mean of a 1-row matrix (basically a col vector...)
 #   function dp_col_mean(v::Matrix{<:Real}) :: Priv()
 #     # find a scalar b s.t. 90% of rows of b*v remain unclipped
@@ -157,7 +157,7 @@ end
 #   map_cols_binary(center_col, mat, means)
 #end
 #
-#function col_scale_params(centered, eps::NoData(), del::NoData(), bs::NoData(Vector), means::Matrix) :: Priv()
+#function col_scale_params(centered, eps::Static(), del::Static(), bs::Static(Vector), means::Matrix) :: Priv()
 #   function select(col) :: Priv()
 #      select_clipping_param(col, eps, bs)
 #   end
@@ -169,7 +169,7 @@ end
 #   map_cols_binary(scale_col, centered, scales)
 #end
 #   
-#function main(m, eps::NoData(), del::NoData(), bs::NoData(Vector), eta::NoData(), k::NoData(), b::NoData()) :: Priv()
+#function main(m, eps::Static(), del::Static(), bs::Static(Vector), eta::Static(), k::Static(), b::Static()) :: Priv()
 #   means = vec_to_row(col_means(m, eps, del, bs))
 #   centered = center(m, means)
 #   scales = col_scale_params(centered, eps, del, bs, means)

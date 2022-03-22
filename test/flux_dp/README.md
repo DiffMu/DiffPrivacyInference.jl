@@ -37,14 +37,14 @@ end
 
 Now comes the only function whose body ist actually typechecked: the gradient descent training algorithm. There is a lot going on here:
 
-- We're only interested in the privacy of the `data` and `labels` inputs, so all other parameters get a `NoData()` annotation.
+- We're only interested in the privacy of the `data` and `labels` inputs, so all other parameters get a `Static()` annotation.
 - It's supposed to be a differentially private function, so we annotate it with `Priv()`.
 - It initializes the network and iterates over all data/label pairs, computing the gradient and making differentially private updates to the model.
 - There is a few peculiarities concerning that last part:
    - Model updates and gradient operations (like scaling) can only be done using our very limited set of builtin functions for that purpose. See [here](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/src/builtins.jl) for the definitions of these.
    - Differential privacy is a property expressed using a notion of distance between inputs of a function. This means all vectors, matrices, gradients and models in our code carry a norm describing which notion of distance is used for which object (See [this pdf](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/docs/matrixnorms/matrixnorms.pdf) and section 4.2 of the [duet paper](https://arxiv.org/abs/1909.02481) for more on the topic). Here, we use the `norm_convert` builtin function to make the clipped gradient measured using the discrete norm into a gradient measured with the clipping norm (`L2`, here) instead. This is necessary as the gradient obtained from a black box computation lives in discrete-norm land, while the Gaussian machanism expects the input to live in L2-norm land (see the `mgauss` rule on page 43 of the [duet paper](https://arxiv.org/abs/1909.02481)).
 ```
-function train_dp(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::NoData(), del::NoData(), eta::NoData(), k::NoData(Integer), b::NoData(Integer)) :: Priv()
+function train_dp(data::Matrix{<:Real}, labels::Matrix{<:Real}, eps::Static(), del::Static(), eta::Static(), k::Static(Integer), b::Static(Integer)) :: Priv()
    # initialize a Flux model. as this is a black box, we have to use `unbox` and provide
    # return type and number of parameters of the returned model.
    n_params = 31810
@@ -120,7 +120,7 @@ Constraints:
 constr_52 : IsLessEqual (2.0⋅ceil(s_73)⋅(1 / s_73),2.0)
   Restricting the variable:  D
   In the gauss call Gauss (2.0, gen_eps_uls_11, gen_del_uls_12, gen_G#_40_10)
-  All variables which are *NOT* annotated as 'NoData' and are used in the body gen_G#_40_10
+  All variables which are *NOT* annotated as 'Static' and are used in the body gen_G#_40_10
   Have to have sensitivity <=  2.0
 ,
 constr_21 : IsLess (∑∅,s_22)
@@ -135,7 +135,7 @@ constr_65 : IsLessEqual (s_60,1)
 constr_51 : IsLessEqual (2.0⋅ceil(s_73)⋅(1 / s_73),2.0)
   Restricting the variable:  L
   In the gauss call Gauss (2.0, gen_eps_uls_11, gen_del_uls_12, gen_G#_40_10)
-  All variables which are *NOT* annotated as 'NoData' and are used in the body gen_G#_40_10
+  All variables which are *NOT* annotated as 'Static' and are used in the body gen_G#_40_10
   Have to have sensitivity <=  2.0
 ,
 constr_22 : IsLess (∑∅,s_23)

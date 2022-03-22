@@ -16,7 +16,7 @@ Annotation for functions whose differential privacy we want to infer.
 A privacy function with argument `x` whose privacy will be inferred and argument `y` of type
 Integer whose privacy we're not interested in:
 ```julia
-function foo(x, y::NoData(Integer)) :: Priv()
+function foo(x, y::Static(Integer)) :: Priv()
    x
 end
 ```
@@ -32,14 +32,14 @@ Their privacy will most likely be set to infinity to allow tighter bounds on oth
 A privacy function with argument `x` whose privacy will be inferred and argument `y` of type
 Integer whose privacy we're not interested in:
 ```julia
-function foo(x, y::NoData(Integer)) :: Priv()
+function foo(x, y::Static(Integer)) :: Priv()
    x
 end
 ```
 """
-NoData() = Any
-NoData(T::DataType) = T
-NoData(T::Type) = T
+Static() = Any
+Static(T::DataType) = T
+Static(T::Type) = T
 
 """
 Annotation for functions that cannot be typechecked. Their arguments will be assigned infinite
@@ -78,7 +78,7 @@ Data = Real
 Annotate matrices with the desired metric you want them to be measured in by the typechecker.
 Just maps to Matrix{T}.
 """
-MetricMatrix(T, L::Norm) = Matrix{T}
+MetricMatrix(T, L::Norm) = Matrix{<:T}
 
 
 """
@@ -86,7 +86,15 @@ MetricMatrix(T, L::Norm) = Matrix{T}
 Annotate matrices with the desired metric you want them to be measured in by the typechecker.
 Just maps to Vector{T}.
 """
-MetricVector(T, L::Norm) = Vector{T}
+MetricVector(T, L::Norm) = Vector{<:T}
+
+
+"""
+    MetricGradient(T, N<:Norm)
+Annotate gradients with the desired metric you want them to be measured in by the typechecker.
+Just maps to DMGrad.
+"""
+MetricGradient(T, L::Norm) = DMGrad
 
 
 ###########################################

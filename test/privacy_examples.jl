@@ -7,7 +7,7 @@ module PrivacyExamples
 ##########
 # chapter 4: counting query
 # DP-count the number of rows of d that f maps to something non-zero
-function count(f::NoData(Function), d::Matrix, eps::NoData(Real)) :: Priv()
+function count(f::Static(Function), d::Matrix, eps::Static(Real)) :: Priv()
    dd = count(f, d)
    counter = laplacian_mechanism(1,eps,dd)
    counter
@@ -24,7 +24,7 @@ end
 
 # compute a (epsilon,0)-DP version of the average of a vector
 # TODO we cannot check this properly, see issue #227
-function auto_avg(xs::Vector{<:Real}, bs::NoData(Vector), epsilon::NoData(Real)) :: Priv()
+function auto_avg(xs::Vector{<:Real}, bs::Static(Vector), epsilon::Static(Real)) :: Priv()
 
    # the query we want to make   
    clipped_sum(m,b) = sum(map(x -> clip(x,b,0.), m))
@@ -53,7 +53,7 @@ end
 
 # compute a (epsilon,0)-DP version of the variance of a vector
 # TODO same as above
-function auto_variance(xs, bs::NoData(), epsilon::NoData()) :: Priv()
+function auto_variance(xs, bs::Static(), epsilon::Static()) :: Priv()
    epsilon_avg = epsilon / 4
    mu = auto_avg(xs,bs,epsilon_avg)
 
@@ -94,7 +94,7 @@ function filter_box(b::Real, xs::Matrix) :: BlackBox()
 end
 
 # return the index of the first element b in bs s.t. 90% of the rows of b*xs do not get clipped.
-function select_clipping_param(xs::Matrix{<:Real}, eps::NoData(Real), bs::Vector{<:Real})::Priv()
+function select_clipping_param(xs::Matrix{<:Real}, eps::Static(Real), bs::Vector{<:Real})::Priv()
    function test_scale(b::Real, xs::Matrix{<:Real})
       (d,_) = size(xs)
       xxs = unbox(filter_box(b,xs),Vector{<:Real},d)
@@ -107,7 +107,7 @@ function select_clipping_param(xs::Matrix{<:Real}, eps::NoData(Real), bs::Vector
 end
 
 # compute (eps,del)-dp mean of a 1-col matrix (basically a col vector...)
-function dp_col_mean(v::Matrix{<:Real}, eps::NoData(Real), del::NoData(Real), bs::NoData(Vector{<:Real})) :: Priv()
+function dp_col_mean(v::Matrix{<:Real}, eps::Static(Real), del::Static(Real), bs::Static(Vector{<:Real})) :: Priv()
 
      # find a scalar b s.t. 90% of rows (i.e. entries of the col vector) of b*v remain unclipped
      bp = select_clipping_param(v, eps/2, bs)
