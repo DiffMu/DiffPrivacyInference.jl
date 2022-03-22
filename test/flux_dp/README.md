@@ -90,10 +90,10 @@ julia> typecheck_from_file("test/flux_dp/flux_dp.jl")
 
 Type:
 {
-  -  Matrix<n: L∞, c: τ_24>[s_15 × s_10](Data[--])
+  -  Matrix<n: LInf, c: τ_24>[s_15 × s_10](Data[--])
       @ (4.0⋅s_22⋅s_73⋅(1 / s_15)⋅sqrt(2.0⋅ceil(s_64)⋅(∑∅ - ln(s_60))), s_73⋅ceil(s_64)⋅(1 / s_15)⋅s_23 + s_60)
   
-  -  Matrix<n: L∞, c: τ_24>[s_15 × s_14](Data[--])
+  -  Matrix<n: LInf, c: τ_24>[s_15 × s_14](Data[--])
       @ (4.0⋅s_22⋅s_73⋅(1 / s_15)⋅sqrt(2.0⋅ceil(s_64)⋅(∑∅ - ln(s_60))), s_73⋅ceil(s_64)⋅(1 / s_15)⋅s_23 + s_60)
   
   -  τ_115[s_22 ©]

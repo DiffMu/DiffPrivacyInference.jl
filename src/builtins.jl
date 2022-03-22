@@ -2,7 +2,7 @@
 @data Norm begin
     L1
     L2
-    L∞
+    LInf
 end
 
 
@@ -349,7 +349,7 @@ function clip!(l::Norm, cg::DMGrads) :: Nothing
     p = @match l begin
         L1 => 1
         L2 => 2
-        L∞ => Inf
+        LInf => Inf
     end
 
     n = norm(cg.grads.grads, p)
@@ -372,7 +372,7 @@ function clip(l::Norm, cg::DMGrads) :: DMGrads
     p = @match l begin
         L1 => 1
         L2 => 2
-        L∞ => Inf
+        LInf => Inf
     end
 
     n = norm(cg.grads.grads, p)
@@ -396,7 +396,7 @@ function clip(l::Norm, cg::AbstractVector)
     p = @match l begin
         L1 => 1
         L2 => 2
-        L∞ => Inf
+        LInf => Inf
     end
 
     n = norm(cg, p)
