@@ -1,0 +1,4 @@
+.stack-work/
+*~
+DiffPrivacyInferenceHs.cabal
+dist-newstyle/cache/**
