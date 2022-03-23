@@ -20,15 +20,15 @@ function build_dylib()
 
     release_dir = joinpath(@__DIR__, "release")
     dylib = dylib_filename()
+    release_dylib_filepath = joinpath(release_dir, dylib)
 
     # if we are in CI we do not build the haskell library
     ci_var = get(ENV, "CI", "false")
     if ci_var != "true"
         run(Cmd(`make install LIB_INSTALL_DIR=$release_dir`, dir=joinpath(@__DIR__, haskellprojname)))
+        @assert isfile(release_dylib_filepath) "$release_dylib_filepath not found. Build may have failed."
     end
 
-    release_dylib_filepath = joinpath(release_dir, dylib)
-    @assert isfile(release_dylib_filepath) "$release_dylib_filepath not found. Build may have failed."
     mv(release_dylib_filepath, joinpath(@__DIR__, dylib))
     rm(release_dir, recursive=true)
 
