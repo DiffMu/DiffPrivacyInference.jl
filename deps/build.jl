@@ -16,6 +16,13 @@ const libname = Sys.iswindows() ? haskelllibname : "lib" * haskelllibname
 # Windows .dlls do not have the "lib" prefix
 
 function build_dylib()
+    # if we are in CI we do not build the haskell library
+    env_var = get(ENV, "CI", "false")
+    if env_var == "true"
+        return
+    end
+
+    # else, continue to build
     clean()
 
     release_dir = joinpath(@__DIR__, "release")
@@ -52,6 +59,13 @@ const dev_$libname = joinpath(homedir(), ".local/lib/$libfile")
 $libname = ""
 
 function check_deps()
+    # ignore if we are in CI
+    env_var = get(ENV, "CI", "false")
+    if env_var == "true"
+        return
+    end
+
+    # else, do check deps
     global release_$libname
     global dev_$libname
     global $libname
