@@ -4,14 +4,22 @@ using Base.Libc.Libdl
 
 # make sure that the haskell dependency library is installed,
 # and set libdiffprivhs variable to the path to the library.
-const deps_file = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
-if !isfile(deps_file)
-    error("DiffPrivacyInference.jl is not installed properly, run Pkg.build(\"DiffPrivacyInference\") and restart Julia.")
+
+const ci_var = get(ENV, "CI", "false")
+if ci_var == "false"
+  error("the ci var is not set!")
+
+  const deps_file = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
+  if !isfile(deps_file)
+      error("DiffPrivacyInference.jl is not installed properly, run Pkg.build(\"DiffPrivacyInference\") and restart Julia.")
+  end
+  include(deps_file)
 end
-include(deps_file)
 
 function __init__()
-    check_deps()
+    if ci_var == "false"
+      check_deps()
+    end
 end
 
 
