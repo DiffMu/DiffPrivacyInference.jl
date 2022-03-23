@@ -16,19 +16,16 @@ const libname = Sys.iswindows() ? haskelllibname : "lib" * haskelllibname
 # Windows .dlls do not have the "lib" prefix
 
 function build_dylib()
-    # if we are in CI we do not build the haskell library
-    env_var = get(ENV, "CI", "false")
-    if env_var == "true"
-        return
-    end
-
-    # else, continue to build
     clean()
 
     release_dir = joinpath(@__DIR__, "release")
     dylib = dylib_filename()
 
-    run(Cmd(`make install LIB_INSTALL_DIR=$release_dir`, dir=joinpath(@__DIR__, haskellprojname)))
+    # if we are in CI we do not build the haskell library
+    ci_var = get(ENV, "CI", "false")
+    if ci_var != "true"
+        run(Cmd(`make install LIB_INSTALL_DIR=$release_dir`, dir=joinpath(@__DIR__, haskellprojname)))
+    end
 
     release_dylib_filepath = joinpath(release_dir, dylib)
     @assert isfile(release_dylib_filepath) "$release_dylib_filepath not found. Build may have failed."
@@ -60,8 +57,8 @@ $libname = ""
 
 function check_deps()
     # ignore if we are in CI
-    env_var = get(ENV, "CI", "false")
-    if env_var == "true"
+    ci_var = get(ENV, "CI", "false")
+    if ci_var == "true"
         return
     end
 
