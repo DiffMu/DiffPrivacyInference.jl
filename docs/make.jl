@@ -20,7 +20,7 @@ makedocs(sitename="DiffPrivacyInference",
                  "full_reference/builtins.md",
                  "full_reference/scoping_rules.md",
                  "full_reference/mutating_functions.md"
-             ]
+             ],
              "Development Notes" => [
                  "development_notes/updating_haskell.md"
              ]
