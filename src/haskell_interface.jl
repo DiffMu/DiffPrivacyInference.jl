@@ -7,8 +7,6 @@ using Base.Libc.Libdl
 
 const ci_var = get(ENV, "CI", "false")
 if ci_var == "false"
-  error("the ci var is not set!")
-
   const deps_file = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
   if !isfile(deps_file)
       error("DiffPrivacyInference.jl is not installed properly, run Pkg.build(\"DiffPrivacyInference\") and restart Julia.")
