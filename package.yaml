@@ -1,0 +1,146 @@
+name:                DiffPrivacyInferenceHs
+version:             0.1.0.0
+github:              "githubuser/DiffPrivacyInferenceHs"
+license:             BSD3
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "2021 Author name here"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+- csrc/wrapper.cpp
+- csrc/wrapper.h
+- ffisrc/Wrapper.hs
+
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/DiffPrivacyInferenceHs#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs:
+    - src
+    - test
+  dependencies:
+    - text
+    - mtl
+    - lens
+    - bifunctors
+    - data-default
+    - hashable
+    - unordered-containers
+    - containers
+    - singletons
+    - newtype
+    - constraints
+    - megaparsec
+    - parsec
+    - megaparsec
+    - parsec3-numbers
+    - pomaps
+    - lattices
+    - void
+    - transformers
+    # For testing
+    - hspec
+    - hspec-core
+    - QuickCheck
+    - HUnit
+  default-extensions:
+    - QuasiQuotes
+    - ConstraintKinds
+    - DataKinds
+    - GADTs
+    - KindSignatures
+    - MultiParamTypeClasses
+    - NoImplicitPrelude
+    - NoMonomorphismRestriction
+    - TypeOperators
+    - UnicodeSyntax
+    - ExistentialQuantification
+    - ScopedTypeVariables
+    - QuantifiedConstraints
+    - KindSignatures
+    - PolyKinds
+    - GeneralizedNewtypeDeriving
+    - DeriveGeneric
+    - StandaloneDeriving 
+    - DerivingVia
+    - FlexibleInstances
+    - FlexibleContexts
+    - FunctionalDependencies
+    - OverloadedStrings
+    - TypeApplications
+    - TypeFamilies
+    - RankNTypes
+    - OverloadedStrings
+    - StandaloneKindSignatures
+    - LambdaCase
+    - DisambiguateRecordFields
+    - DuplicateRecordFields
+    - PatternSynonyms
+    - ImplicitParams
+    - TypeFamilyDependencies
+    - RoleAnnotations
+    - PartialTypeSignatures
+    - DeriveFunctor
+    - DeriveTraversable
+    - DeriveFoldable
+    - ExtendedDefaultRules
+
+verbatim: |
+  foreign-library diffprivhs
+    type:                native-shared
+
+    if os(Windows)
+      options: standalone
+      mod-def-file: ffisrc/DiffMuWrapper.def
+
+    other-modules:       Wrapper
+    build-depends:
+      base >=4.7 && <5
+      , lens == 4.*
+      , deepseq == 1.4.*
+      , DiffPrivacyInferenceHs
+    hs-source-dirs:      ffisrc
+    c-sources:           csrc/wrapper.cpp
+    default-language:    Haskell2010
+
+
+executables:
+  diffmu:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - DiffPrivacyInferenceHs
+    default-extensions:
+    - OverloadedStrings
+    - TypeApplications
+    - DataKinds
+
+tests:
+  diffmu-test:
+    main:                Spec.hs
+    source-dirs:         test-native
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - DiffPrivacyInferenceHs
+    - hspec
+    - QuickCheck
+    - HUnit

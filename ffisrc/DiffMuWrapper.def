@@ -1,0 +1,9 @@
+LIBRARY diffmu-wrapper
+EXPORTS
+  typecheckFromCString_DMTerm_Detailed
+  typecheckFromCString_DMTerm
+  runHaskellTests
+  runSingleHaskellTest
+  runExprParser
+  wrapperInit
+  wrapperExit
