@@ -1,4 +1,8 @@
 docs/build/*
+deps/**/*.so
+deps/**/*.dll
+deps/**/*.dylib
+deps/deps.jl
 
 
 

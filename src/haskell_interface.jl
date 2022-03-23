@@ -1,6 +1,20 @@
 
 using Base.Libc.Libdl
 
+
+# make sure that the haskell dependency library is installed,
+# and set libdiffprivhs variable to the path to the library.
+const deps_file = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
+if !isfile(deps_file)
+    error("DiffPrivacyInference.jl is not installed properly, run Pkg.build(\"DiffPrivacyInference\") and restart Julia.")
+end
+include(deps_file)
+
+function __init__()
+    check_deps()
+end
+
+
 # make Expr matchable
 @as_record Expr
 
@@ -140,7 +154,8 @@ function typecheck_hs_from_string_wrapper(ast::Expr, bShowDetailedInfo::Bool)
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
-    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    # dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    dm = Libdl.dlopen(libdiffprivhs)
 
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
@@ -170,7 +185,8 @@ function test_hs()
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
-    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    # dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    dm = Libdl.dlopen(libdiffprivhs)
 
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
@@ -196,7 +212,8 @@ function test_single_hs()
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
-    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    # dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    dm = Libdl.dlopen(libdiffprivhs)
 
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
@@ -238,7 +255,8 @@ function test_expr_parser(term)
 
     # load the shared library
     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
-    dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    # dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
+    dm = Libdl.dlopen(libdiffprivhs)
 
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)

@@ -1,0 +1,3 @@
+[submodule "deps/DiffPrivacyInferenceHs"]
+	path = deps/DiffPrivacyInferenceHs
+	url = https://github.com/DiffMu/DiffPrivacyInferenceHs
