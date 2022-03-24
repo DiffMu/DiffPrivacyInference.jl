@@ -74,9 +74,11 @@ function check_deps()
         error("\$release_$libname does not exist, Please re-run Pkg.build(\\"$juliapackage\\"), and restart Julia.\n\nAlternatively, if trying to use a development version, make sure that the dynamic library is installed to \$dev_$libname.")
     end
 
-    if Libdl.dlopen_e($libname) == C_NULL
+    lib = Libdl.dlopen($libname)
+    if lib == C_NULL
         error("\$$libname cannot be opened, Please re-run Pkg.build(\\"$juliapackage\\"), and restart Julia.")
     end
+    Libdl.dlclose(lib)
 end
 """
 
