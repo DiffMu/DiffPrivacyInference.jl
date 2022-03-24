@@ -210,7 +210,7 @@ norm_convert(m) = clone(m)
     disc(n::Real) :: Data
 Return `n`, but let the typechecker know that you want it to be measured in the discrete metric.
 """
-disc(n::Real) = n
+disc(n::Real) = float(n)
 
 
 ###########################################
