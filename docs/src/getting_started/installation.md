@@ -3,7 +3,45 @@
 
 ## Using the julia package manager
 
-This is currently not possible. For now, see the next section.
+The easiest way to install this package is using the julia package manager.
+
+### Prerequisites
+Since part of this project is written in Haskell and build with the [haskell tool stack](https://docs.haskellstack.org/en/stable/README/),
+you will also need it for installing this package. Fortunately, this is the only thing you need, as managing and installing the rest of the haskell dependencies
+is done by stack.
+
+For installing stack best follow the [offical instructions](https://docs.haskellstack.org/en/stable/README/#how-to-install).
+
+### Getting this package
+
+Simply execute the following command in the julia shell:
+```julia
+] add https://github.com/DiffMu/DiffPrivacyInference.jl
+```
+This should produce something similar to the following output, while julia installs all required dependencies:
+```julia
+(my-env) pkg> add https://github.com/DiffMu/DiffPrivacyInference.jl
+    Updating git-repo `https://github.com/DiffMu/DiffPrivacyInference.jl`
+    Updating registry at `~/.julia/registries/General.toml`
+   Resolving package versions...
+    Updating `~/my-env/Project.toml`
+  [c8299d45] + DiffPrivacyInference v0.1.0 `https://github.com/DiffMu/DiffPrivacyInference.jl#main`
+    Updating `~/my-env/Manifest.toml`
+  [621f4979] + AbstractFFTs v1.1.0
+  ...
+  (lots of julia packages here)
+  ...
+  [3f19e933] + p7zip_jll
+    Building DiffPrivacyInference → `~/.julia/scratchspaces/44cfe95a-1eb2-52ea-b672-e2afdf69b78f/ced72be8f47015fe6f6ec85b815ac8d979225462/build.log`
+  Progress [>                                        ]  0/1
+```
+This last `Building DiffPrivacyInference`-step might take a long time, since during this step the haskell build (including all dependencies) happens.
+To get some feedback about how far the build is, you can watch the content of the given `build.log` file (e.g. using `less path-to-log/build.log`).
+
+When this is done, you can load the DiffPrivacyInference package in your julia shell:
+```julia
+julia> using DiffPrivacyInference
+```
 
 ## From source
 
