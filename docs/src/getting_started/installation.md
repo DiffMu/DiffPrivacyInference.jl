@@ -35,8 +35,8 @@ This should produce something similar to the following output, while julia insta
     Building DiffPrivacyInference → `~/.julia/scratchspaces/44cfe95a-1eb2-52ea-b672-e2afdf69b78f/ced72be8f47015fe6f6ec85b815ac8d979225462/build.log`
   Progress [>                                        ]  0/1
 ```
-This last `Building DiffPrivacyInference`-step might take a long time, since during this step the haskell build (including all dependencies) happens.
-To get some feedback about how far the build is, you can watch the content of the given `build.log` file (e.g. using `less path-to-log/build.log`).
+This last step might take a long time, since here the haskell build (including all dependencies) happens.
+To get some feedback about progress, you can watch the content of the given `build.log` file (e.g. using `tail path-to-log/build.log`).
 
 When this is done, you can load the DiffPrivacyInference package in your julia shell:
 ```julia
