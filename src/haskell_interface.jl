@@ -125,25 +125,26 @@ Typecheck the file named `file`, calling the haskell bcakend. Includes are resol
 The typechecking result will be printed to the REPL. It will be the inferred type of the last statement in the file.
 """
 function typecheck_from_file(file::AbstractString)
-    ast = Meta.parseall(read(file, String), filename = file)
+    file_content = read(file, String)
+    ast = Meta.parseall(file_content, filename = file)
     println("read file $file")
-    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),false)
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,false)
 end
 function typecheck_from_file_detailed(file::AbstractString)
     ast = Meta.parseall(read(file, String), filename = file)
     println("read file $file")
-    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),true)
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,true)
 end
-function typecheck_hs_from_string(term)
+function typecheck_hs_from_string(term::String)
     ast = Meta.parse("begin $term end")
-    typecheck_hs_from_string_wrapper(ast,false)
+    typecheck_hs_from_string_wrapper(ast,term,false)
 end
-function typecheck_hs_from_string_detailed(term)
+function typecheck_hs_from_string_detailed(term::String)
     ast = Meta.parse("begin $term end")
-    typecheck_hs_from_string_wrapper(ast,true)
+    typecheck_hs_from_string_wrapper(ast,term,true)
 end
 
-function typecheck_hs_from_string_wrapper(ast::Expr, bShowDetailedInfo::Bool)
+function typecheck_hs_from_string_wrapper(ast::Expr, rawsource::String, bShowDetailedInfo::Bool)
     ast = expand_includes(ast)
 
     # NOTE: This is but a way to print the julia expr to a string,
@@ -171,13 +172,11 @@ function typecheck_hs_from_string_wrapper(ast::Expr, bShowDetailedInfo::Bool)
         : Libdl.dlsym(dm, :typecheckFromCString_DMTerm))
 
     # call the library
-
-    # call the library
     ccall(init, Cvoid, ())
 
     c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
 
-    ccall(typecheckFromDMTerm, Cvoid, (Ptr{Cvoid},Cstring,), c_callback_issubtype, str)
+    ccall(typecheckFromDMTerm, Cvoid, (Ptr{Cvoid},Cstring,Cstring,), c_callback_issubtype, str, rawsource)
     ccall(exit, Cvoid, ())
 
     # unload the library
