@@ -185,25 +185,25 @@ unbox_size(x, s::Tuple) = (size(x) == s) ? x : error("Unbox expected size $s but
 
 
 """
-   norm_convert!(m::T) :: T
+   undisc_container!(m::T) :: T
 
 Make a clipped vector/gradient measured using the discrete metric into a vector/gradient measured with the
 clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
 obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
 mechanism (which expects the input to be in L2-norm land).
 """
-norm_convert!(m) = m
+undisc_container!(m) = m
 
 
 """
-   norm_convert(m::T) :: T
+   undisc_container(m::T) :: T
 
 Make a clipped vector/gradient measured using the discrete norm into a vector/gradient measured with the
 clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
 obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
 mechanism (which expects the input to be in L2-norm land).
 """
-norm_convert(m) = clone(m)
+undisc_container(m) = clone(m)
 
 
 """
@@ -212,6 +212,27 @@ Return `n`, but let the typechecker know that you want it to be measured in the 
 """
 disc(n::Real) = float(n)
 
+"""
+    undisc(n::Data) :: Real
+Return `n`, but let the typechecker know that you want it to be measured in the standard real metric.
+"""
+disc(n::Data) = float(n)
+
+
+"""
+    norm_convert!(n::Norm, m)
+
+Tell the typechecker to measure a matrix with a different norm `n`.
+"""
+norm_convert!(n::Norm,m) = m
+
+
+"""
+    norm_convert(n::Norm, m)
+
+Return a copy of `m`, but tell the typechecker to measure a matrix with a different norm `n`.
+"""
+norm_convert(n::Norm,m) = clone(m)
 
 ###########################################
 # private mechanisms
