@@ -30,6 +30,9 @@ function expand_includes(exin)
          if length(args) != 1
             error("include with mapexpr not supported: $exin")
          end
+         if (args[1] == "none")
+            error("filename \"none\" is not permitted.")
+         end
          inast = Meta.parseall(read(args[1], String), filename = args[1])
          @match inast begin
             Expr(:toplevel, args...) => return expand_includes(Expr(:block, args...))
