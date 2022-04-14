@@ -207,10 +207,10 @@ undisc_container(m) = clone(m)
 
 
 """
-    disc(n::Real) :: Data
+    discrete(n::Real) :: Data
 Return `n`, but let the typechecker know that you want it to be measured in the discrete metric.
 """
-disc(n::Real) = float(n)
+discrete(n::Real) = float(n)
 
 """
     undisc(n::Data) :: Real
@@ -235,6 +235,37 @@ Return a copy of `m`, but tell the typechecker to measure a matrix with a differ
 norm_convert(n::Norm,m) = clone(m)
 
 ###########################################
+# custom samplers
+# naive implementations have floating-point related vulnerabilities, we implement the sampling procedure
+# presented in the following paper to mitigate some of them.
+# Secure Random Sampling in Differential Privacy
+# NAOISE HOLOHAN and STEFANO BRAGHIN 2021
+
+struct SecureGaussSampler <: Sampleable{Univariate,Continuous}
+   s :: Real
+   m :: Real
+end
+
+function Base.rand(_::AbstractRNG, smp::SecureGaussSampler)
+   CSRNG = RandomDevice()
+   n = 6
+   g = sum(rand(CSRNG, Normal(0,1)) for _ in 1:2*n) / sqrt(2*n)
+   return smp.m*g + smp.s
+end
+
+struct SecureLaplaceSampler <: Sampleable{Univariate,Continuous}
+   b :: Real
+   m :: Real
+end
+
+function Base.rand(_::AbstractRNG, smp::SecureLaplaceSampler)
+   sgs = SecureGaussSampler(0,1)
+   l = rand(sgs) * rand(sgs) + rand(sgs) * rand(sgs)
+   return smp.m * l + smp.b
+end
+
+
+###########################################
 # private mechanisms
 
 
@@ -246,7 +277,7 @@ Apply the gaussian mechanism to the input, adding gaussian noise with SD of
 `(ϵ, δ)`-differential privacy to all variables the input depends on with sensitivity
 at most `s`. Makes a copy of the input and returns the noised copy.
 """
-gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
+gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(SecureGaussSampler(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
 
 
 """
@@ -258,7 +289,7 @@ Apply the gaussian mechanism to the input gradient, adding gaussian noise with S
 at most `s`. Mutates the gradient, returns `nothing`.
 """
 function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Nothing
-   additive_noise!(Normal(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
+   additive_noise!(SecureGaussSampler(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
    return nothing
 end
 
@@ -271,7 +302,7 @@ Apply the laplacian mechanism to the input, adding laplacian noise with scaling 
 `(ϵ, 0)`-differential privacy to all variables the input depends on with sensitivity
 at most `s`. Makes a copy of the input, then noises and returns the copy.
 """
-laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(Laplace(0, s / ϵ), cf)
+laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(SecureLaplaceSampler(0, s / ϵ), cf)
 
 
 """
@@ -283,7 +314,7 @@ Apply the laplacian mechanism to the input, adding laplacian noise with scaling 
 at most `s`. Mutates the input, returns `nothing`.
 """
 function laplacian_mechanism!(s::Real, ϵ::Real, cf :: DMGrads) :: Nothing
-   additive_noise!(Laplace(0, s / ϵ), cf)
+   additive_noise!(SecureLaplaceSampler(0, s / ϵ), cf)
    return nothing
 end
 
