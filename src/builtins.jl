@@ -353,29 +353,31 @@ function above_threshold(queries :: Vector{F} where F <: Function, epsilon :: Re
    return length(queries)
 end
 
-
-"""
-    exponential_mechanism(r::Number, eps::Number, xs::Vector, u::Function)
-
-Return an element of the input vector `xs` based on the score given by the function `u`,
-mapping from the elements of `xs` to a real number. The probability for element `e` to be
-chosen is proportional to `exp(eps*u(e)/(2*r))`. The mechanism is `(eps,0)`-private in the variables that `u`
-is `r`-sensitive in.
-"""
-function exponential_mechanism(r, eps, xs, u)
-    # compute score for each entry of xs
-    scores = [u(x) for x in xs]
-    
-    # compute probability weight for each entry 
-    p = [exp(eps * score / (2 * r)) for score in scores]
-    
-    # clip to make a probability vector
-    p = clip(L1, p)
-
-    # choose from xs based on the probabilities
-    return xs[rand(Distributions.Categorical(p))]
-end
-
+# the naive implementation of this is insecure, and the secure implementation is complicated.
+# we can support this again once we have time to handle this.
+# see https://arxiv.org/pdf/1912.04222.pdf and #258
+#"""
+#    exponential_mechanism(r::Number, eps::Number, xs::Vector, u::Function)
+#
+#Return an element of the input vector `xs` based on the score given by the function `u`,
+#mapping from the elements of `xs` to a real number. The probability for element `e` to be
+#chosen is proportional to `exp(eps*u(e)/(2*r))`. The mechanism is `(eps,0)`-private in the variables that `u`
+#is `r`-sensitive in.
+#"""
+#function exponential_mechanism(r, eps, xs, u)
+#    # compute score for each entry of xs
+#    scores = [u(x) for x in xs]
+#    
+#    # compute probability weight for each entry 
+#    p = [exp(eps * score / (2 * r)) for score in scores]
+#    
+#    # clip to make a probability vector
+#    p = clip(L1, p)
+#
+#    # choose from xs based on the probabilities
+#    return xs[rand(Distributions.Categorical(p))]
+#end
+#
 
 """
     sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple
