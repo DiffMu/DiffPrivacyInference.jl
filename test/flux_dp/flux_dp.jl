@@ -53,7 +53,7 @@ function train_dp_nobatch_noloop(data::Matrix{<:Data}, labels::Matrix{<:Data}, e
 
       # noise gradient
       clip!(L2,gs2)
-      norm_convert!(gs2)
+      undisc_container!(gs2)
       gaussian_mechanism!(2, eps, del, gs2)
 
       # scale with learning rate and update model
@@ -86,7 +86,7 @@ function train_dp(data::Matrix{<:Data}, labels::Matrix{<:Data}, eps::Static(), d
 
          # clip the gradient
          clip!(L2,gs)
-         norm_convert!(gs)
+         undisc_container!(gs)
 
          # aggregate sum of batch gradients
          G = sum_gradients(gs,G)
