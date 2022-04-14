@@ -276,6 +276,11 @@ Apply the gaussian mechanism to the input, adding gaussian noise with SD of
 `(2 * log(1.25/δ) * s^2) / ϵ^2)`. This introduces
 `(ϵ, δ)`-differential privacy to all variables the input depends on with sensitivity
 at most `s`. Makes a copy of the input and returns the noised copy.
+
+The implementation follows the 2021 paper `Secure Random Sampling in Differential Privacy` by
+NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
+but not all the known ones.
+
 """
 gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(SecureGaussSampler(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
 
@@ -287,6 +292,11 @@ Apply the gaussian mechanism to the input gradient, adding gaussian noise with S
 `(2 * log(1.25/δ) * s^2) / ϵ^2)` to each gradient entry seperately. This introduces
 `(ϵ, δ)`-differential privacy to all variables the gradient depends on with sensitivity
 at most `s`. Mutates the gradient, returns `nothing`.
+
+The implementation follows the 2021 paper `Secure Random Sampling in Differential Privacy` by
+NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
+but not all the known ones.
+
 """
 function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Nothing
    additive_noise!(SecureGaussSampler(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
@@ -301,6 +311,11 @@ Apply the laplacian mechanism to the input, adding laplacian noise with scaling 
 `(s / ϵ)` and location zero to each gradient entry seperately. This introduces
 `(ϵ, 0)`-differential privacy to all variables the input depends on with sensitivity
 at most `s`. Makes a copy of the input, then noises and returns the copy.
+
+The implementation follows the 2021 paper `Secure Random Sampling in Differential Privacy` by
+NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
+but not all the known ones.
+
 """
 laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(SecureLaplaceSampler(0, s / ϵ), cf)
 
@@ -312,6 +327,11 @@ Apply the laplacian mechanism to the input, adding laplacian noise with scaling 
 `(s / ϵ)` and location zero to each gradient entry seperately. This introduces
 `(ϵ, 0)`-differential privacy to all variables the input depends on with sensitivity
 at most `s`. Mutates the input, returns `nothing`.
+
+The implementation follows the 2021 paper `Secure Random Sampling in Differential Privacy` by
+NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
+but not all the known ones.
+
 """
 function laplacian_mechanism!(s::Real, ϵ::Real, cf :: DMGrads) :: Nothing
    additive_noise!(SecureLaplaceSampler(0, s / ϵ), cf)
