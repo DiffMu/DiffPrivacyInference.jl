@@ -19,7 +19,7 @@ export gaussian_mechanism!, laplacian_mechanism!, gaussian_mechanism, laplacian_
 export internal_expect_const, new_box, get_box, map_box!, discrete, undisc, undisc_container, undisc_container!
 export Priv, Static, BlackBox, PrivacyFunction, Data, MetricMatrix, MetricVector, MetricGradient
 
-export typecheck_hs_from_string, typecheck_hs_from_string_detailed, test_hs, test_single_hs, test_expr_parser, typecheck_from_file, typecheck_from_file_detailed
+export typecheck_hs_from_string, typecheck_hs_from_string_detailed, typecheck_hs_from_string_debug, test_hs, test_single_hs, test_expr_parser, typecheck_from_file, typecheck_from_file_detailed, typecheck_from_file_debug
 
 export DMModel, DMGrads
 

@@ -131,23 +131,32 @@ function typecheck_from_file(file::AbstractString)
     file_content = read(file, String)
     ast = Meta.parseall(file_content, filename = file)
     println("read file $file")
-    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,false)
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,false,false)
 end
 function typecheck_from_file_detailed(file::AbstractString)
     ast = Meta.parseall(read(file, String), filename = file)
     println("read file $file")
-    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,true)
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,true,false)
+end
+function typecheck_from_file_debug(file::AbstractString)
+    ast = Meta.parseall(read(file, String), filename = file)
+    println("read file $file")
+    typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,true,true)
 end
 function typecheck_hs_from_string(term::String)
     ast = Meta.parse("begin $term end")
-    typecheck_hs_from_string_wrapper(ast,term,false)
+    typecheck_hs_from_string_wrapper(ast,term,false,false)
 end
 function typecheck_hs_from_string_detailed(term::String)
     ast = Meta.parse("begin $term end")
-    typecheck_hs_from_string_wrapper(ast,term,true)
+    typecheck_hs_from_string_wrapper(ast,term,true,false)
+end
+function typecheck_hs_from_string_debug(term::String)
+    ast = Meta.parse("begin $term end")
+    typecheck_hs_from_string_wrapper(ast,term,true,true)
 end
 
-function typecheck_hs_from_string_wrapper(ast::Expr, rawsource::String, bShowDetailedInfo::Bool)
+function typecheck_hs_from_string_wrapper(ast::Expr, rawsource::String, bShowDetailedInfo::Bool, bShowDebugInfo::Bool)
     ast = expand_includes(ast)
 
     # NOTE: This is but a way to print the julia expr to a string,
@@ -170,9 +179,12 @@ function typecheck_hs_from_string_wrapper(ast::Expr, rawsource::String, bShowDet
     # get function pointers for the relevant functions
     init = Libdl.dlsym(dm, :wrapperInit)
     exit = Libdl.dlsym(dm, :wrapperExit)
-    typecheckFromDMTerm = (bShowDetailedInfo ?
-        Libdl.dlsym(dm, :typecheckFromCString_DMTerm_Detailed)
-        : Libdl.dlsym(dm, :typecheckFromCString_DMTerm))
+    typecheckFromDMTerm =
+        (bShowDebugInfo ?
+          Libdl.dlsym(dm, :typecheckFromCString_DMTerm_Debug)
+        : (bShowDetailedInfo ?
+                Libdl.dlsym(dm, :typecheckFromCString_DMTerm_Detailed)
+              : Libdl.dlsym(dm, :typecheckFromCString_DMTerm)))
 
     # call the library
     ccall(init, Cvoid, ())
