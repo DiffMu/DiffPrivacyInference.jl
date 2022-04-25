@@ -118,7 +118,7 @@ end
 #     # unload the library
 #     Libdl.dlclose(dm)
 
-#     return ()
+#     return
 # end
 
 """
@@ -199,7 +199,7 @@ function typecheck_hs_from_string_wrapper(ast::Expr, rawsource::String, bShowDet
     # unload the library
     Libdl.dlclose(dm)
 
-    return ()
+    return
 end
 
 
@@ -227,7 +227,7 @@ function test_hs()
     # unload the library
     Libdl.dlclose(dm)
 
-    return ()
+    return
 end
 
 function test_single_hs()
@@ -254,7 +254,7 @@ function test_single_hs()
     # unload the library
     Libdl.dlclose(dm)
 
-    return ()
+    return
 end
 
 
@@ -294,6 +294,6 @@ function test_expr_parser(term)
     # unload the library
     Libdl.dlclose(dm)
 
-    return ()
+    return
 end
 
