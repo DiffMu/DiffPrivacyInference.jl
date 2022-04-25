@@ -134,12 +134,14 @@ function typecheck_from_file(file::AbstractString)
     typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,false,false)
 end
 function typecheck_from_file_detailed(file::AbstractString)
-    ast = Meta.parseall(read(file, String), filename = file)
+    file_content = read(file, String)
+    ast = Meta.parseall(file_content, filename = file)
     println("read file $file")
     typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,true,false)
 end
 function typecheck_from_file_debug(file::AbstractString)
-    ast = Meta.parseall(read(file, String), filename = file)
+    file_content = read(file, String)
+    ast = Meta.parseall(file_content, filename = file)
     println("read file $file")
     typecheck_hs_from_string_wrapper(Expr(:block, ast.args...),file_content,true,true)
 end
