@@ -17,8 +17,8 @@ mutually containing each other; there are explicit terms for switching from one 
 a "color"-inference stage in the typechecker, which infers whether statements are meant to be interpreted in the privacy or in the sensitivity fragment of duet.
 
 The typechecking stages are executed in the following order:
- 1. [demutation](@ref demutation) & scope checking
+ 1. [demutation](@ref demutation) & [scope checking](@ref scoping_rules)
  2. color inference
- 3. type inference
+ 3. [type inference](@ref types)
 
 

@@ -1,3 +1,0 @@
-
-# [Demutation system](@id demutation)
-

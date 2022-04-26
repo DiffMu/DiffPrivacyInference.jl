@@ -16,7 +16,7 @@ makedocs(sitename="DiffPrivacyInference",
              ],
              "Full Reference" => [
                  "full_reference/overview.md",
-                 "full_reference/mutating_functions.md",
+                 "full_reference/demutation.md",
                  "full_reference/scoping_rules.md",
                  "full_reference/types.md",
                  "full_reference/constraints.md",
