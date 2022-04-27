@@ -96,7 +96,7 @@ julia> test_hs()
 ```
     
 ### Tips & Tricks
-You may want to use [`Revise.jl`]() so you don't have to restart the REPL everytime you change the code. If you put
+You may want to use [`Revise.jl`](https://timholy.github.io/Revise.jl/stable/) so you don't have to restart the REPL everytime you change the code. If you put
 ```julia
 using Revise
 ```
