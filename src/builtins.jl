@@ -10,7 +10,9 @@ end
 # Annotations
 
 """
-Annotation for functions whose differential privacy we want to infer.
+    Priv() :: DataType
+
+Annotation for functions whose differential privacy we want to infer. This method denotes the function can return any type.
 
 # Examples
 A privacy function with argument `x` whose privacy will be inferred and argument `y` of type
@@ -22,10 +24,45 @@ end
 ```
 """
 Priv() = Any
+
+"""
+    Priv(T::DataType) :: DataType
+
+Annotation for functions whose differential privacy we want to infer and that return a subtype of `T`.
+
+# Examples
+A privacy function with return type `Real` argument `x` of type `Real` whose privacy will be inferred and argument `y` of type
+Integer whose privacy we're not interested in:
+```julia
+function foo(x::Real, y::Static(Integer)) :: Priv(Real)
+   x
+end
+```
+"""
 Priv(T::DataType) = T
 
 """
-Annotation for function arguments whose privacy is of no interest to us.
+    Static() :: DataType
+
+Annotation for function arguments whose privacy is of no interest to us and for which we do not give type annotations.
+Their privacy will most likely be set to infinity to allow tighter bounds on other arguments.
+
+# Examples
+A privacy function with argument `x` whose privacy will be inferred and argument `y` whose privacy we're not interested in:
+```julia
+function foo(x, y::Static()) :: Priv()
+   x
+end
+```
+"""
+Static() = Any
+
+
+"""
+    Static(T::DataType) :: DataType
+
+Annotation for function arguments whose privacy is of no interest to us. Argument `T` denotes the
+type annotation we give for this argument.
 Their privacy will most likely be set to infinity to allow tighter bounds on other arguments.
 
 # Examples
@@ -37,14 +74,15 @@ function foo(x, y::Static(Integer)) :: Priv()
 end
 ```
 """
-Static() = Any
 Static(T::DataType) = T
 Static(T::Type) = T
 
 """
+    BlackBox() :: DataType
+
 Annotation for functions that cannot be typechecked. Their arguments will be assigned infinite
 sensitivity. Note that it is not allowed to mutate any of the arguments in a function like this,
-if you do the typechecking result will be invalid!
+if you do the typechecking result will be invalid! This method allows any return type.
 
 # Examples
 A function calling an imported qualified name, which is not permissible in non-black-boxes:
@@ -53,6 +91,20 @@ loss(X, y, m::DMModel) :: BlackBox() = Flux.crossentropy(m.model(X), y)
 ```
 """
 BlackBox() = Any
+
+"""
+    BlackBox(T::DataType) :: DataType
+
+Annotation for functions with return type `T` that cannot be typechecked. Their arguments will be assigned infinite
+sensitivity. Note that it is not allowed to mutate any of the arguments in a function like this,
+if you do the typechecking result will be invalid! This method allows any return type.
+
+# Examples
+A function returning `Real` and calling an imported qualified name, which is not permissible in non-black-boxes:
+```julia
+loss(X, y, m::DMModel) :: BlackBox(Real) = Flux.crossentropy(m.model(X), y)
+```
+"""
 BlackBox(T::DataType) = T
 
 """
