@@ -1,5 +1,5 @@
 
-# Types
+# [Types](@id types)
 The privacy analysis result is presented to you as a type together with a collection of [Constraints](@ref). You need to be able to read the types to understand it, so here's how.
 
 
