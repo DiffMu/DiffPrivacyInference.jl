@@ -5,7 +5,7 @@ Our typechecker can infer many things about your code, but is does need you to a
 
 ## Function kinds
 ### `Priv()`
-We distinguish between functions that provide differential privacy (so called [privacy functions](@ref)), and ones that do not (so called [sensitivity functions](@ref)). The typechecker cannot know whether you expect a function to be differentially private or not, so if you do you'll have to annotate your function definition using the [`Priv()`](@ref) type function. Its argument is the desired return type of the annotated function, no argument means any return type. For example to declare function `f` to be differentially private and returning something of type [`Matrix`](@ref):
+We distinguish between functions that provide differential privacy (so called [privacy functions](@ref)), and ones that do not (so called [sensitivity functions](@ref)). The typechecker cannot know whether you expect a function to be differentially private or not, so if you do you'll have to annotate your function definition using the [`Priv()`](@ref)/[`Priv(T)`](@ref) type function. Its argument is the desired return type of the annotated function, no argument means any return type. For example to declare function `f` to be differentially private and returning something of type [`Matrix`](@ref):
 ```
 function f(eps, del, x::Matrix) :: Priv(Matrix)
    gaussian_mechanism(1, eps, del, x)
