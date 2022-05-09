@@ -1,5 +1,5 @@
 
-# [Sensitivity functions](@id sensitivity0functions)
+# [Sensitivity functions](@id sensitivity-functions)
 
 The sensitivity of a function is a property central to [additive noise mechanisms](https://en.wikipedia.org/wiki/Additive_noise_mechanisms) for introducing differential privacy. Our typechecker infers the sensitivity of your julia code in order to provide privacy bounds on applications of these mechanisms. There are, therefore, two kinds of functions: so called [sensitivity functions](ref to types docs), which are regular, deterministic functions with a sensitivity assigned to each argument, and the randomized [privacy functions](@ref types) with a (ϵ, δ)-differential privacy assigned to each argument. You can use the builtin privacy mechanisms to make a sensitivity function differentially private. This tutorial is about function sensitivity, head over to the [respective tutorial](@ref privacy-functions).
 
@@ -28,4 +28,4 @@ g(x1,x2) = x1 + f(x2)
 has sensitivity 1 in its first and sensitivity 2 in its second argument.
 
 ## Sensitivity of expressions
-The typechecker will discern between two kinds of expressions by assigning either a sensitivity or a privacy to each variable therein. It can infer the sensitivity of all julia expressions that adhere to the [supported syntax](@ref syntax) and that don't contain any of the [builtin privacy mechanisms](@ref builtins) nor calls to other [privacy functions](@ref privacy-functions). 
+The typechecker will discern between two kinds of expressions by assigning either a sensitivity or a privacy to each variable therein. It can infer the sensitivity of all julia expressions that adhere to the [supported syntax](@ref syntax) and that don't contain any of the [builtin privacy mechanisms](@ref builtins) nor calls to other [privacy functions](@ref privacy-functions). Be aware of the [limitations of the type checker regarding floating point implementations](https://diffmu.github.io/DiffPrivacyInference.jl/dev/tutorial/02_privacy_functions/#Warning:-Floating-point-is-dangerous!)!
