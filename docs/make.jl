@@ -13,13 +13,13 @@ makedocs(sitename="DiffPrivacyInference",
              "Tutorial" => [
                  "tutorial/01_sensitivity_functions.md",
                  "tutorial/02_privacy_functions.md",
-                 "tutorial/03_flux_dp.md"
+                 "tutorial/03_flux_dp.md",
              ],
              "Full Reference" => [
                  "full_reference/overview.md",
                  "full_reference/syntax.md",
                  "full_reference/annotations.md",
-                 "full_reference/builtins.md"
+                 "full_reference/builtins.md",
                  "full_reference/black_boxes.md",
                  "full_reference/demutation.md",
                  "full_reference/scoping_rules.md",

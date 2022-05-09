@@ -16,7 +16,7 @@ We cannot check arbitrary `julia` code, and most julia code does not result in d
 
 ## Forbidden things
 
-There are a few things you are not allowed to do (which the typechecker will tell you if you try). Namely:
+There are a few things you are not allowed to do even though they use supported syntax (which the typechecker will tell you if you try). Namely:
 
 - Your code has to be valid julia code. If it is not, do not expect the typechecker to always tell you so or produce reasonable results.
 - You cannot reassign (or mutate) variables that were declared in a different scope. For example, the following is illegal:
