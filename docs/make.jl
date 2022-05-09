@@ -19,6 +19,8 @@ makedocs(sitename="DiffPrivacyInference",
                  "full_reference/demutation.md",
                  "full_reference/scoping_rules.md",
                  "full_reference/types.md",
+                 "full_reference/measuring_distance.md",
+                 "full_reference/black_boxes.md",
                  "full_reference/constraints.md",
                  "full_reference/annotations.md",
                  "full_reference/builtins.md"

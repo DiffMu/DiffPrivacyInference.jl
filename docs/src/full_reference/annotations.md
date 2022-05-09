@@ -22,7 +22,7 @@ end
 ```
 
 ## Static parameters
-As you can read in the documentation of our [types](@ref), we allow two kinds of numeric function arguments -- static and variable ones. Static arguments are usueful if you want the inferred sensitivity/privacy guarantee of some of your function's arguments to depend on the values of some other of the function arguments. A simple example with an argument annotated using the [`Static()`](@ref) type function:
+As you can read in the documentation of our [types](@ref), we allow two kinds of numeric function arguments -- static and variable ones. Static arguments are usueful if you want the inferred sensitivity/privacy guarantee of some of your function's arguments to depend on the values of some other of the function arguments. A simple example with an argument annotated using the [`Static()`](@ref)/[`Static(T)`](@ref) type function:
 ```
 julia> typecheck_hs_from_string("module L
           function f(x::Integer, y::Integer)
@@ -59,7 +59,7 @@ julia> typecheck_hs_from_string("module L
 In the first example, both arguments have infinite sensitivity, as they are both variable and we cannot bound the distance between `x*y` and `x*y'` if `x` is variable. If we however annotate `x` to be static, the sensitivity in `y` can be expressed as the value of `x`. Note that the `x` argument has sensitivity `0`, as the type `Integer[x ©]` is a singleton type containing only one element, namely an integer number with value `x`. This means you can only input values here that are either actually runtime constants or annotated static themselves. Sensitivity and privacy guarantees for this parameter hence are not valid for all integers, but only for each individual fixed integer. So if the parameter is the data input of your function in whose privacy you are interested, you probably don't want to make it static.
 
 ## Black boxes
-The typechecker cannot infer sensitivity/privacy guarantees for arbitrary code (see [How to write checkable code](@ref)). We still support using some functions whose body we cannot check via the [black box](@ref) construct. These functions must be defined inside the code that is typechecked, and you can tell the checker that it can't infer things about the body by using a [`BlackBox()`] annotation in the definition. Here's an example of a function calling a function from an imported module, which is not admissible in code that is supposed to be checked:
+The typechecker cannot infer sensitivity/privacy guarantees for arbitrary code (see [How to write checkable code](@ref)). We still support using some functions whose body we cannot check via the [black box](@ref) construct. These functions must be defined inside the code that is typechecked, and you can tell the checker that it can't infer things about the body by using a [`BlackBox()`](@ref)/[`BlackBox(T)`](@ref) annotation in the definition. Here's an example of a function calling a function from an imported module, which is not admissible in code that is supposed to be checked:
 ```
 loss(X, y, m::DMModel) :: BlackBox() = Flux.crossentropy(m.model(X), y)
 ```
