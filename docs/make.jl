@@ -12,7 +12,8 @@ makedocs(sitename="DiffPrivacyInference",
              ],
              "Tutorial" => [
                  "tutorial/01_sensitivity_functions.md",
-                 "tutorial/02_privacy_functions.md"
+                 "tutorial/02_privacy_functions.md",
+                 "tutorial/03_flux_dp.md"
              ],
              "Full Reference" => [
                  "full_reference/overview.md",

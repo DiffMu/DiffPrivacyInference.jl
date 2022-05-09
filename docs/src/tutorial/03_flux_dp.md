@@ -1,5 +1,5 @@
 
-# Learning MNIST, verified differentially private
+# [Learning MNIST, verified differentially private](@id fluxdp)
 We provide code for [a toy example](@ref) that trains a simple neural network modelled using the [Flux.jl machine learning library](https://github.com/FluxML/Flux.jl) to recognize handwritten digits. Our typechecker can verify that the function doing the gradient descent for training satisfies given differential privacy bounds. We walk through most of the code here.
 
 ## Noisy gradient descent, implemented in the [`flux_dp.jl`](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/test/flux_dp/flux_dp.jl) file
@@ -94,7 +94,7 @@ So here's what's going on:
   function train_dp(data::Matrix{<:Data}, labels::Matrix{<:Data}, eps::Static(), del::Static(), eta::Static(), k::Static(Integer), b::Static(Integer)) :: Priv()
   ```
 
-- It initializes the network using the previously defined [black box function](@ref) and the builtin [`unbox`](@ref) to tell the typechecker the model type and number of parameters.
+- It initializes the network using the previously defined [black box function](@ref blackbox) and the builtin [`unbox`](@ref) to tell the typechecker the model type and number of parameters.
   ```julia
      n_params = 31810
      model = unbox(init_model(), DMModel, n_params)
@@ -117,7 +117,7 @@ So here's what's going on:
          gs = unbox(unbounded_gradient(model, d, l), DMGrads, n_params) 
   ```
 
-- We want to noise the gradient using the Gaussian Mechanism, which expects a container type that has the standard euclidean `(L2,ℝ)`-metric assigned. However, the metric used to measure `gs` is the discrete `(LInf, 𝔻)`-metric (see the last section of the [black box documentation](@ref) to learn why). Hence, we have to convert `gs` from discrete to real metric using the [`undisc_container`](@ref) builtin. This however only works on containers with entries whose `(L2,ℝ)`-norm is bounded by 1, so we clip the gradient prior to converting.
+- We want to noise the gradient using the Gaussian Mechanism, which expects a container type that has the standard euclidean `(L2,ℝ)`-metric assigned. However, the metric used to measure `gs` is the discrete `(LInf, 𝔻)`-metric (see the last section of the [black box documentation](@ref blackbox) to learn why). Hence, we have to convert `gs` from discrete to real metric using the [`undisc_container`](@ref) builtin. This however only works on containers with entries whose `(L2,ℝ)`-norm is bounded by 1, so we clip the gradient prior to converting.
   ```julia
          clip!(L2,gs)
          undisc_container!(gs)
