@@ -4,6 +4,7 @@ push!(LOAD_PATH,"../src/")
 using Documenter, DiffPrivacyInference
 
 makedocs(sitename="DiffPrivacyInference",
+         modules=DiffPrivacyInference,
          pages = [
              "index.md",
              "Getting Started" => [
