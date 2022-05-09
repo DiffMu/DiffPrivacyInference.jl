@@ -1,8 +1,11 @@
+using MLDatasets: MNIST
 using Flux
 
+dataset = MLDatasets.MNIST()
+
 # get MNIST dataset
-images = Flux.Data.MNIST.images();
-labels = Flux.Data.MNIST.labels();
+images = dataset.features();
+labels = dataset.targets();
 
 # preprocess data into float matrix and one-hot label matrix
 X = transpose(hcat(float.(reshape.(images,:))...))

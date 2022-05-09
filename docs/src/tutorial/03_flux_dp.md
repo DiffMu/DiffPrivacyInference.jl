@@ -1,11 +1,11 @@
 
 # [Learning MNIST, verified differentially private](@id fluxdp)
-We provide code for [a toy example](@ref) that trains a simple neural network modelled using the [Flux.jl machine learning library](https://github.com/FluxML/Flux.jl) to recognize handwritten digits. Our typechecker can verify that the function doing the gradient descent for training satisfies given differential privacy bounds. We walk through most of the code here.
+We provide code for [a toy example](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/example/flux_dp.jl) that trains a simple neural network modelled using the [Flux.jl machine learning library](https://github.com/FluxML/Flux.jl) to recognize handwritten digits. Our typechecker can verify that the function doing the gradient descent for training satisfies given differential privacy bounds. We walk through most of the code here.
 
 ## Noisy gradient descent, implemented in the [`flux_dp.jl`](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/test/flux_dp/flux_dp.jl) file
 This file contains an implementation of noisy gradient descent, guided by the example in section 5.6 of the [duet paper](https://arxiv.org/abs/1909.02481).
 
-The file defines a module to ensure a seperate scope. Further, we `use` the `DiffPrivacyInference` module to have access to builtins within this module.
+The file defines a module to ensure a seperate scope. Further, we `use` the `DiffPrivacyInference` module to have access to our [builtins](@ref) within this module.
 ```julia
 module FluxDP
 using DiffPrivacyInference
@@ -16,8 +16,8 @@ We import the Flux library. Note that including modules means one has to qualify
 import Flux
 ```
 
-Next, we define a function that initializes a small Flux neural network model. It uses stuff imported from the Flux module. As we cannot expect that code to be checkable (see [this paragraph](https://github.com/DiffMu/DiffPrivacyInference.jl#how-to-write-checkable-code) on what checkable code needs to look like), we declare this function a so-called *black box* and signify this with the `BlackBox()` annotation. This means the typechecker will ignore the code inside the function body and assume it hase infinite sensitivity in all it's arguments (of which this specimen has none).
-Note that the Flux model is not returned by the function as-is, but wrapped in our `DMModel` type. It's really just a plain wrapper, but as you cannot access it's content in checkable code, this allows us to control what you do with your model in the part of the program that is relevant for analysis.
+Next, we define a function that initializes a small `Flux` neural network model. It uses stuff imported from the `Flux` module. As we cannot expect that code to be checkable (see the [supported syntax](@ref syntax) on what checkable code needs to look like), we declare this function a so-called [*black box*](@ref blackbox) and signify this with the `BlackBox()` annotation. This means the typechecker will ignore the code inside the function body and assume it hase infinite sensitivity in all it's arguments (of which this specimen has none).
+Note that the `Flux` model is not returned by the function as-is, but wrapped in our [`DMModel`](@ref) type. It's really just a plain wrapper, but as you cannot access it's content in checkable code, this allows us to control what you do with your model in the part of the program that is relevant for analysis.
 ```julia
 function init_model() :: BlackBox()
  DMModel(Flux.Chain(
@@ -27,12 +27,12 @@ function init_model() :: BlackBox()
 end
 ```
 
-The loss function for our training not only uses a function from Flux, but also accesses the Flux model wrapped in the `model` field of the input `DMModel`. Hence it's a black box too.
+The loss function for our training not only uses a function from `Flux`, but also accesses the `Flux` model wrapped in the `model` field of the input `DMModel`. Hence it's a black box too.
 ```
 loss(X, y, m) :: BlackBox() = Flux.crossentropy(m.model(X), y)
 ```
 
-The function computing the gradient from a model and data and label vectors is a black box, too. Note that just like models, gradients have to be wrapped in our `DMGrads` type.
+The function computing the gradient from a model and data and label vectors is a black box, too. Note that just like models, gradients have to be wrapped in our [`DMGrads`](@ref) type.
 ```
 function unbounded_gradient(m::DMModel, data::Vector, label) :: BlackBox()
    gs = Flux.gradient(Flux.params(m.model)) do
@@ -42,7 +42,7 @@ function unbounded_gradient(m::DMModel, data::Vector, label) :: BlackBox()
 end
 ```
 
-Now comes the only function whose body is actually typechecked: the gradient descent training algorithm. There is a lot going on here, so we'll walk through the bits.
+Now comes the only function whose body is actually typechecked: the gradient descent training algorithm. There is a lot going on here, so we'll walk through it step by step in a bit.
 ```julia
 function train_dp(data::Matrix{<:Data}, labels::Matrix{<:Data}, eps::Static(), del::Static(), eta::Static(), k::Static(Integer), b::Static(Integer)) :: Priv()
    # initialize a Flux model. as this is a black box, we have to use `unbox` and provide
