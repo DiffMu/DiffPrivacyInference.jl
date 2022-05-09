@@ -3,7 +3,7 @@
 
 *Demutation* is the first stage of the typechecker. Its goal is to translate the procedural, impure julia code into pure lambda calculus terms,
 while preserving the original computational behaviour. This process is mostly invisible to the user, but it neccessitates various properties
-which have to hold for the julia code which is given to the checker - these are described on this page.
+which have to hold for the julia code which is given to the checker — these are described on this page.
 
 Translating a mutating function into a pure one is based on the simple observation that a function of type
 ```
@@ -83,7 +83,7 @@ function h0(a,b)
 end
 ```
 
-It is possible to mutate local variables, as long as the function arguments are not involved, the function stays pure:
+It is possible to mutate local variables: as long as the function arguments are not involved, the function stays pure:
 ```
 # the type is:
 # h1 :: Pure
@@ -111,9 +111,25 @@ function id'(a)
 end
 ```
 
-
 ### The type `Blackbox`
+There is a seperate mutation type for black box functions. This makes sure that the same function name
+cannot be given both normal function and black box implementations at the same time.
 
+#### Example
+In the following example, since `h2` is defined as black box, the same name cannot be used when giving
+a second implementation.
+```
+# the type is:
+# h2 :: BlackBox
+function h2(a :: Integer) :: BlackBox()
+  2 * a
+end
+
+# ERROR: Global definitions cannot have the same name as black boxes.
+function h2()
+  2
+end
+```
 
 ## Move semantics
 
