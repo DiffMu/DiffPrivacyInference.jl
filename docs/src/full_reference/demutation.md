@@ -111,9 +111,17 @@ function id'(a)
 end
 ```
 
-### The type `Blackbox`
-There is a seperate mutation type for black box functions. This makes sure that the same function name
+### [The type `Blackbox`](@id mut_type_black_box)
+There is a seperate mutation type for [black box functions](@ref black_boxes). This makes sure that the same function name
 cannot be given both normal function and black box implementations at the same time.
+
+The implementation of black boxes is not checked in any way. Users must check that the following rules are followed by themselves!
+
+> **Warning**: For the type checking result to be
+> valid, you have to make sure yourself that the following two properties hold for every black box:
+> 1. *No reference pass through*: Black boxes **must not** return a value which could contain references to either
+>    a function argument or a global variable.
+> 2. *Pureness*: Black boxes **must not** mutate either arguments or global variables.
 
 #### Example
 In the following example, since `h2` is defined as black box, the same name cannot be used when giving
@@ -131,7 +139,77 @@ function h2()
 end
 ```
 
-## Move semantics
+## Restrictions dealing with memory aliasing
+As described in the introduction, the problems with verifying code that has mutating functions
+actually only appear when memory aliasing occurs. That is, when
+ 1. there are multiple variables which reference the same memory location (memory aliasing), and
+ 2. one of them is being mutated.
+Since we want to allow mutation, we have to make sure that variables whose content is going to be mutated
+are never aliased. In other words: There should always be only a single owner of mutable data.
+This reflects in two rules which are described in the following sections.
+
+### Move semantics
+Assignments like `b = a` where the right hand side (RHS) is simply a variable (or a tuple of variables...)
+represent a problem. The solution is to say that in such an assignment the ownership of the
+memory location of the RHS is transferred to the variable on the LHS. This means that
+afterwards the name `a` becomes invalid and can no longer be used. Instead, the new name `b`
+has to be used.
+
+The function `i` in the following example tries to print the value of the variable `a` after its content has been moved to `b`.
+(Printing has to be done using a black box.)
+```julia
+function println_(a) :: BlackBox()
+  println(a)
+  0
+end
+
+function i(a)
+  unbox(println_(a), Integer)  # print value of `a`
+  b = a                        # after this line, both `a` and `b` point to the same memory,
+                               # but the typechecker marks `a` as no longer valid
+  unbox(println_(b), Integer)  # print value of `b`
+  unbox(println_(a), Integer)  # ERROR: Tried to access the variable a.
+                               #        But this variable is not valid anymore,
+                               #        because it was assigned to something else.
+end
+```
+The same rules hold for tuple assignments, where either (or both) the LHS and RHS are tuples.
+
+In case one really wants to have multiple variables with the same content, the only way is to use
+[`clone`](@ref) to make a (deep-)copy of the content. Obviously, mutating one of the copies will not
+change the others.
+
+### Function calls
+The following rules need to be followed for a mutating function call to be accepted by the typechecker:
+ 1. The only term allowed in a mutating argument position is a variable name.
+ 2. As soon as a variable appears in a mutating argument position, it cannot appear in any of the
+    other arguments.
+The first rule disallows mutation of anonymous memory, i.e., makes sure that there is always a name attached
+to the memory location which is mutated by the function. The second rule is required because functions
+assume that all their input variables (or at least those that are being mutated) are not aliased.
+
+### Exceptions
+There are a few types for which the strategy of *no aliasing is allowed to occur* makes little sense: vectors and matrices.
+With these, we explicitly do want to be able to select data using indices, and this means having multiple references to the
+same data. E.g., the following should be (and is) allowed:
+```julia
+function k(a :: Vector{<:Integer})
+  x = a[0]
+  y = a[1]
+  x + y
+end
+```
+This is possible because of the following:
+ 1. It is allowed to index into vectors and matrices, but
+ 2. the content of vectors cannot be mutated.
+ 
+The following is not allowed because of the second rule (note that [`gaussian_mechanism!`](@ref) is mutating in its last argument).
+```
+function l(a :: Vector{<:DMGrads}) :: Priv()
+  x = a[0]
+  gaussian_mechanism!(1,0.5,0,x)  # ERROR
+end
+```
 
 ## Special case: `if` branches
 

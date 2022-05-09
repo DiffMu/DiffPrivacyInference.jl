@@ -1,5 +1,5 @@
 
-# Black Boxes
+# [Black Boxes](@id black_boxes)
 The code that we can infer sensitivity/privacy properties of is limited to the [supported syntax](@ref). In case the program you want to analyze contains pieces of code that are not supported, you can do so by telling the typechecker to assume that those parts of your code have infinitely bad sensitivity properties. This might sound like it's not very useful, but there are situations in which it actually is.
 
 ## Syntax
@@ -38,6 +38,11 @@ But, again, the sensitivity of all arguments except `n_params` will be infinite,
 
 ## Warning: do not mutate!
 The typechecker completely ignores the code in the body of a black-box function. You can do anything you like in there, except one thing: mutating the arguments or global state. You will not recieve any warnings or errors about this during typechecking, so be careful. If you do, the analysis result will be invalid.
+
+## Warning: do not let references to input arguments through!
+There is a second property which is required for correctness of the result, yet which cannot be checked
+automatically for black boxes: You have to make sure that the return value of the function does not
+contain references to the input arguments, or global variables. See [here](@ref mut_type_black_box) for some details.
 
 
 ## The interesting special case
