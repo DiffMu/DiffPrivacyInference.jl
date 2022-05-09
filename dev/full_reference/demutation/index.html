@@ -55,11 +55,29 @@ end</code></pre><p>The same rules hold for tuple assignments, where either (or b
 end</code></pre><p>This is possible because of the following:</p><ol><li>It is allowed to index into vectors and matrices, but</li><li>the content of vectors cannot be mutated.</li></ol><p>The following is not allowed because of the second rule (note that <a href="../builtins/#DiffPrivacyInference.gaussian_mechanism!-Tuple{Real, Real, Real, DMGrads}"><code>gaussian_mechanism!</code></a> is mutating in its last argument).</p><pre><code class="nohighlight hljs">function l(a :: Vector{&lt;:DMGrads}) :: Priv()
   x = a[0]
   gaussian_mechanism!(1,0.5,0,x)  # ERROR
-end</code></pre><h2 id="Special-case:-if-branches"><a class="docs-heading-anchor" href="#Special-case:-if-branches">Special case: <code>if</code> branches</a><a id="Special-case:-if-branches-1"></a><a class="docs-heading-anchor-permalink" href="#Special-case:-if-branches" title="Permalink"></a></h2><h2 id="Special-case:-for-loops"><a class="docs-heading-anchor" href="#Special-case:-for-loops">Special case: <code>for</code> loops</a><a id="Special-case:-for-loops-1"></a><a class="docs-heading-anchor-permalink" href="#Special-case:-for-loops" title="Permalink"></a></h2><pre><code class="nohighlight hljs">function fib(n)
+end</code></pre><h2 id="Special-case:-if-branches"><a class="docs-heading-anchor" href="#Special-case:-if-branches">Special case: <code>if</code> branches</a><a id="Special-case:-if-branches-1"></a><a class="docs-heading-anchor-permalink" href="#Special-case:-if-branches" title="Permalink"></a></h2><p>Branches in the control flow make tracking of abstract memory locations more difficult. Instead of keeping track of a single assignment of variable names to memory locations, we have to keep track of a set of possible memory locations, depending on the execution branch taken.</p><p>But what we cannot allow is the mutation of variables which contain multiple possible memory locations.</p><pre><code class="language-julia hljs">function f(a,b,c,x)
+  if x
+    c = a
+  else
+    c = b
+  end
+  gaussian_mechanism!(1,0.5,0,c)
+    # ERROR: Encountered a value spanning multiple possible memory locations
+    #        where a single location value was expected.
+    #
+    #        The encountered memory type is [SingleMem a#,SingleMem b#₁]
+end</code></pre><p>The message says that we expected the variable <code>c</code> to not have multiple possible locations, but it was inferred that it could either reference the content of <code>a</code> or the content of <code>b</code>.</p><h2 id="Special-case:-for-loops"><a class="docs-heading-anchor" href="#Special-case:-for-loops">Special case: <code>for</code> loops</a><a id="Special-case:-for-loops-1"></a><a class="docs-heading-anchor-permalink" href="#Special-case:-for-loops" title="Permalink"></a></h2><p>Similarly we have to restrict what kind of reassignments are allowed in loops. The rule is the following:</p><ol><li>If a variable, after a single iteration through the loop body, references a different memory location, than this memory location has to be a new one that was allocated in the body.</li></ol><p>This means that the following implementation of a function computing the n-th fibonacci number is not allowed:</p><pre><code class="language-julia hljs">function fib(n)
+  a = 0
+  b = 1
+  for i in 1:n               # ERROR: Found a loop body which moves variables around.
+    (a,b) = (b, a + b)       #        The following variables are changed and
+  end                        #        contain memory locations from before: [b#₂]
+  a
+end</code></pre><p>The problem is that the variable <code>b</code> is moved into <code>a</code>, so this can be solved by using <a href="../builtins/#DiffPrivacyInference.clone-Tuple{DMGrads}"><code>clone</code></a>:</p><pre><code class="language-julia hljs">function fib(n)
   a = 0
   b = 1
   for i in 1:n
-    (a,b) = (b, a + b)
+    (a,b) = (clone(b), a + b)
   end
   a
-end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../black_boxes/">« Black Boxes</a><a class="docs-footer-nextpage" href="../scoping_rules/">Scoping rules »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.17 on <span class="colophon-date" title="Monday 9 May 2022 19:04">Monday 9 May 2022</span>. Using Julia version 1.7.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../black_boxes/">« Black Boxes</a><a class="docs-footer-nextpage" href="../scoping_rules/">Scoping rules »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.17 on <span class="colophon-date" title="Monday 9 May 2022 19:14">Monday 9 May 2022</span>. Using Julia version 1.7.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
