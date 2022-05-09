@@ -212,17 +212,54 @@ end
 ```
 
 ## Special case: `if` branches
+Branches in the control flow make tracking of abstract memory locations more difficult.
+Instead of keeping track of a single assignment of variable names to memory locations, we
+have to keep track of a set of possible memory locations, depending on the execution branch taken.
+
+But what we cannot allow is the mutation of variables which contain multiple possible memory locations.
+```julia
+function f(a,b,c,x)
+  if x
+    c = a
+  else
+    c = b
+  end
+  gaussian_mechanism!(1,0.5,0,c)
+    # ERROR: Encountered a value spanning multiple possible memory locations
+    #        where a single location value was expected.
+    #
+    #        The encountered memory type is [SingleMem a#,SingleMem b#₁]
+end
+```
+The message says that we expected the variable `c` to not have multiple possible locations,
+but it was inferred that it could either reference the content of `a` or the content of `b`.
 
 ## Special case: `for` loops
+Similarly we have to restrict what kind of reassignments are allowed in loops.
+The rule is the following:
+ 1. If a variable, after a single iteration through the loop body, references a different memory location,
+    than this memory location has to be a new one that was allocated in the body.
 
+This means that the following implementation of a function computing the n-th fibonacci number
+is not allowed:
+```julia
+function fib(n)
+  a = 0
+  b = 1
+  for i in 1:n               # ERROR: Found a loop body which moves variables around.
+    (a,b) = (b, a + b)       #        The following variables are changed and
+  end                        #        contain memory locations from before: [b#₂]
+  a
+end
 ```
+The problem is that the variable `b` is moved into `a`, so this can be solved by using [`clone`](@ref):
+```julia
 function fib(n)
   a = 0
   b = 1
   for i in 1:n
-    (a,b) = (b, a + b)
+    (a,b) = (clone(b), a + b)
   end
   a
 end
 ```
-
