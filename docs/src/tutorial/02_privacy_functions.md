@@ -6,7 +6,7 @@
 ## (``\varepsilon``, ``\delta``)-Differential Privacy
 For metric spaces ``M,N``, a map ``f:M\rightarrow N`` is [*(``\varepsilon``, ``\delta``)-differentially private*](https://en.wikipedia.org/wiki/Differential_privacy) if for all ``x,y \in M`` with ``d_M(x,y) = 1`` and any set ``S\subseteq N`` we have
 ```math
-Pr(f(x) \in S) \leq e^{\varepsilon} \cdot Pr[f(y) \in S] + \delta
+Pr[f(x) \in S] \leq e^{\varepsilon} \cdot Pr[f(y) \in S] + \delta
 ```
 Note that `f` being a probablilistic function is necessary for this definition to hold. Intuitively, the output distributions of an (``\varepsilon``, ``\delta``)-differentially private function given neighboring inputs are hard to distinguish.
 
@@ -50,7 +50,7 @@ Type:
 
 
 ## Nice properties of privacy functions
-There are nice theorems about properties of differentially private functions in the [Privacybook](https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdfhttps://www.researchgate.net/publication/225124717_Calibrating_Noise_to_Sensitivity_in_Private_Data_Analysis). We are expecially interested in two of them.
+There are nice theorems about properties of differentially private functions in the [Privacybook](https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf). We are expecially interested in two of them.
 
 ### Robustness to Post-Processing
 Proposition 2.1 claims that no matter what we do with the output of an (``\varepsilon``, ``\delta``)-differentially private function, it stays (``\varepsilon``, ``\delta``)-differentially private. Our typechecker knows this:
