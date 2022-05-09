@@ -3,7 +3,7 @@
 We cannot check arbitrary `julia` code, and most julia code does not result in differentially private functions anyways. Instead we restrict to a subset of the language which is suited for our static analysis. Here's a list of language features we support:
 
 - Function definitions using `function`, one-line definitions and anonymous functions, as well as function application.
-- Multiple dispatch on `Number, Integer, Real, Matrix{T}, Tuple{T}` and our [special types](@ref Annotations). Finer types are not allowed.
+- Multiple dispatch on `Integer, Real, Vector{<:T}, Matrix{<:T}, Tuple{<:T}` and our [special types](@ref Annotations). Finer types are not allowed.
 - Some arithmetics on numbers, vectors and matrices, as well as row access and indexing on matrix using `m[i,:]` and `m[i,j]` and vector indexing using `v[i]`
 - Type annotations on function variables, like in `f(x::Integer) = x + x`
 - Variable and tuple assignments like `x = 1` or `(a,b,c) = t`
