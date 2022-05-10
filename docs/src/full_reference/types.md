@@ -6,25 +6,25 @@ The privacy analysis result is presented to you as a type together with a collec
 ## Overview
 Here's a list of all possible result types. See the below sections for more elaborate explanations.
 
-| DP type          | Description |
-| :--------------- | :---------- |
-| `Any`            | Any type, like in julia|
-| `Bool`           | Booleans, like in julia |
-| `Integer`        | Integers, like in julia |
-| `Real`           | Reals, like in julia       |
-| `Data`           | Reals, but measured with the discrete metric |
-| `τ[s ©]`         | static number of type `τ` with value `s` |
-| `τ[s]`           | number of type `τ` where it is unknown whether it's static or not |
-| `(τ₁ @ s₁, ...) -> τ`          | sensitivity function mapping types `τ₁,...` to  `τ` with sensitivities `s₁,...`|
-| `(τ₁ @ (e₁,d₁), ...) ->* τ`    | privacy function mapping types `τ₁,...` to  `τ` with privacies `(e₁,d₁),...`|
-| `BlackBox[τ₁,...]`             | Black box function with julia type signature `[τ₁,...]`|
-| `Tuple{τ₁,...}`                | Tuple, like in julia |
-| `Matrix<n: N, c: C>[s × t]{τ}` | `s×t`-Matrix with elements of type `τ`, measured in norm `N`, `C`-norm of each row bounded by 1 |
-| `Vector<n: N, c: C>[s]{τ}`     | Row vector with `s` elements of type `τ`, measured in norm `N`, its `C`-norm bounded by 1 |
-| `DMGrads<n: N, c: C>[s]{τ}`    | `Zygote.jl` gradient with `s` elements of type `τ`, measured in norm `N`, its `C`-norm bounded by 1 |
-| `DMContainer<kind: K, n: N, c: C>[s]{τ}` | One of the above three container types (namely `K`) with `s` elements of type `τ`, measured in norm `N`, its `C`-norm bounded by 1 |
-| `DMModel{τ}`                   | `Flux.jl` model with parameter type `τ`|
-| `τ₁ ∧ τ₂`                      | Infimum type of `τ₁` and `τ₂` w.r.t. subtyping, i.e. the "largest" type `τ` s.t. `τ₁ ⊑ τ` and `τ₂ ⊑ τ` |
+| DP type          | Description | Function argument annotations | Function annotations |
+| :--------------- | :---------- | :---------------------------- | :------------------- |
+| `Any`            | Any type, like in julia | `Any` | |
+| `Bool`           | Booleans, like in julia | `Bool` | |
+| `Integer`        | Integers, like in julia | `Integer` | |
+| `Real`           | Reals, like in julia    | `Real` | |
+| `Data`           | Reals, but measured with the discrete metric | `Data` | |
+| `τ[s ©]`         | static number of type `τ` with value `s`     | `Static(τ)` | |
+| `τ[s]`           | number of type `τ` where it is unknown whether it's static or not | | |
+| `(τ₁ @ s₁, ...) -> τ`          | sensitivity function mapping types `τ₁,...` to  `τ` with sensitivities `s₁,...`| `Function` | none |
+| `(τ₁ @ (e₁,d₁), ...) ->* τ`    | privacy function mapping types `τ₁,...` to  `τ` with privacies `(e₁,d₁),...`| `PrivacyFunction` | `Priv()` |
+| `BlackBox[τ₁,...]`             | Black box function with julia type signature `[τ₁,...]` |  | `BlackBox()` |
+| `Tuple{τ₁,...}`                | Tuple, like in julia | `Tuple{τ₁,...}` | |
+| `Matrix<n: N, c: C>[s × t]{τ}` | `s×t`-Matrix with elements of type `τ`, measured in norm `N`, `C`-norm of each row bounded by 1 | `Matrix{τ}` or `MetricMatrix(N,τ)` | |
+| `Vector<n: N, c: C>[s]{τ}`     | Row vector with `s` elements of type `τ`, measured in norm `N`, its `C`-norm bounded by 1 | `Vector{τ}` or `MetricVector(N,τ)` | |
+| `DMGrads<n: N, c: C>[s]{τ}`    | `Zygote.jl` gradient with `s` elements of type `τ`, measured in norm `N`, its `C`-norm bounded by 1 | `DMGrads` or `MetricGradient(N,τ)` | |
+| `DMContainer<kind: K, n: N, c: C>[s]{τ}` | One of the above three container types (namely `K`) with `s` elements of type `τ`, measured in norm `N`, its `C`-norm bounded by 1 | | |
+| `DMModel{τ}`                   | `Flux.jl` model with parameter type `τ`| `DMModel` | |
+| `τ₁ ∧ τ₂`                      | Infimum type of `τ₁` and `τ₂` w.r.t. subtyping, i.e. the "largest" type `τ` s.t. `τ₁ ⊑ τ` and `τ₂ ⊑ τ` | | |
 
 
 ## Functions
