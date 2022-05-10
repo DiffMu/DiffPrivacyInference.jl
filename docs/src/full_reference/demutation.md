@@ -26,7 +26,7 @@ Two concepts which are required to be able to write code which passes demutation
  2. *Move semantics* for most types ensures that no memory aliasing happens.
 
 
-## Mutation types
+## [Mutation types](@id mutation_type)
 Every variable is automatically assigned a mutation type, which tracks whether it is a mutating function or not. These types cannot be changed by assigning a different value to
 a variable: When a reassignment happens, it is required that the new value has the same mutation type as the old value.
 
