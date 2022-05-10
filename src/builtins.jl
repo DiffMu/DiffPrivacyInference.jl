@@ -268,7 +268,7 @@ discrete(n::Real) = float(n)
     undisc(n::Data) :: Real
 Return `n`, but let the typechecker know that you want it to be measured in the standard real metric.
 """
-disc(n::Data) = float(n)
+undisc(n::Data) = float(n)
 
 
 """

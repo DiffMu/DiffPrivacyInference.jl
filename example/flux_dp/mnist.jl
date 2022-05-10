@@ -1,11 +1,8 @@
-using MLDatasets: MNIST
 using Flux
 
-dataset = MLDatasets.MNIST()
-
 # get MNIST dataset
-images = dataset.features();
-labels = dataset.targets();
+images = Flux.Data.MNIST.images();
+labels = Flux.Data.MNIST.labels();
 
 # preprocess data into float matrix and one-hot label matrix
 X = transpose(hcat(float.(reshape.(images,:))...))
@@ -25,7 +22,6 @@ n_test = size(X_test)[1]
 include("flux_dp.jl")
 
 m = FluxDP.train_dp(X_train,y_train,0.2,0.2,0.2,1000,2000)
-#m = FluxDP.train_dp_nobatch_noloop(X_train,y_train,0.2,0.2,0.2,2)
 
 # compute some stats
 loss(x,y) = Flux.crossentropy(m.model(x), y)
@@ -33,7 +29,7 @@ avg_loss() = sum(loss(d,l) for (d,l) in zip(eachrow(X_test),eachrow(y_test))) / 
 correct((d,l),) = (Flux.onecold(m.model(d)) == Flux.onecold(l))
 accuracy() = sum([correct((X_test[i,:], y_test[i,:])) for i in 1:n_test]) / n_test
 
-println(avg_loss())
-println(accuracy())
+println("average loss: ", avg_loss())
+println("accuracy: ",accuracy())
 
 m

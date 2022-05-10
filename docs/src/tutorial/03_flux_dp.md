@@ -184,7 +184,7 @@ constr₈₃ : 1 ≤ b
 
 It says that given the constraints in the list hold for the variables occuring in the type, the function is `(4.0⋅(1 / n₁)⋅b⋅eps⋅√(2.0⋅(0 - ln(s₂₈))⋅⌈k⌉), (1 / n₁)⋅b⋅del⋅⌈k⌉ + s₂₈)`-private in its first and second arguments (the data and labels matrices, whose dimensions are denoted `[n₁ × n₄]` and `[n₁ × n₅]`), and zero-private in the following (the `eps` and `del` parameters, the `eta` parameter, and the number of epochs `k` and batch size `b`).
 
-## Learning MNIST, implemented in [`mnist.jl`](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/test/flux_dp/mnist.jl)
+## Learning MNIST, implemented in [`mnist.jl`](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/example/flux_dp/mnist.jl)
 To use the above algorithm, we need to call the `train_dp` function. The inferred differential privacy is a property of the algorithm, but we cannot typecheck the code that actually calls the function with some actual data that's loaded from somewhere. This has to happen in a seperate file where you can use the checked function, but bear the responsibility of using it correcly.
 
 First, we load the MNIST dataset, containing loads of images of handwritten digits and the corresponding labels.
@@ -219,17 +219,21 @@ include("flux_dp.jl")
 m = FluxDP.train_dp(X_train,y_train,0.2,0.2,0.2,1000,2000)
 ```
 
-To run the whole thing, simply include the file `mnist.jl` in your REPL. Let's see what it can learn!
+## Run the trianing yourself!
+To run the whole thing, simply include the file `mnist.jl` in your REPL. Let's see what it can learn! Training can take a while.
 ```
 julia> # prints mean error and accuracy
 julia > result = include("test/flux_dp/mnist.jl")
-0.39895068482227536
-0.8880833333333333
+average loss: 0.407527023015877
+accuracy: 0.8861666666666667
 DMModel(Chain(Dense(784, 40, relu), Dense(40, 10), softmax))
 
-julia> Flux.onecold(result.model(X_test[1000,:]))
+julia> Flux.onecold(result.model(X_test[1000,:])) # model prediction for test example 1000
 7
 
-julia> Flux.onecold(y_test[1000,:])
+julia> Flux.onecold(y_test[1000,:]) # correct label for test example 1000
 7
 ```
+
+### A note on performance
+Training a neural network using this differentially private implementation of stochastic gradient descent is much slower than training using the non-private version. The non-private version uses a trick, exploiting that the average of a batch's gradients is the gradient of the batch average, hence only needing to compute a single gradient per batch. For the differentially private version, however, we need to clip each batch member's gradient individually, so we need to compute each one individually.
