@@ -1,6 +1,17 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: The color inference preprocessing step.
+
+Preprocessing step to make Lets into Bind (and add Ret if necessary)
+infers the color (whether its a priv or a sens term) recursively and, upon
+encountering SLet/TLet, makes them into Bind if they are supposed to be.
+they are supposed to be if the term that is assigned is a privacy term.
+it is then required for the tail term to be a privacy term too, which is why
+the main function takes the required color as input. it inserts Ret if the term
+cannot be interpreted as a privacy term otherwise.
+-}
 module DiffMu.Typecheck.Preprocess.Colors where
 
 import DiffMu.Prelude
@@ -16,15 +27,6 @@ import Data.Foldable
 import qualified Data.HashSet as H
  
 import Debug.Trace
-
------------------------------------------------------------------------------------
--- preprocessing step to make Lets into Bind (and add Ret if necessary)
--- infers the color (whether its a priv or a sens term) recursively and, upon
--- encountering SLet/TLet, makes them into Bind if they are supposed to be.
--- they are supposed to be if the term that is assigned is a privacy term.
--- it is then required for the tial term to be a privacy term too, which is why
--- the main function takes the required color as input. it inserts Ret if the term
--- cannot be interpreted as a privacy term otherwise.
 
 ------------------------------------------------
 -- the state for our computation:
@@ -92,7 +94,7 @@ handleSensTerm_Loc term = do
     tterm <- transformLets_Loc (Just SensitivityK) term
     cterm <- getColor
     case cterm of
-        PrivacyK -> throwUnlocatedError (TermColorError SensitivityK (showPretty (getLocated term)))
+        PrivacyK -> throwLocatedError (TermColorError SensitivityK (showPretty (getLocated term))) (getLocation term)
         SensitivityK -> return tterm
 
 -- handle a term that is required to be a privacy term
@@ -102,7 +104,7 @@ handlePrivTerm_Loc term = do
     cterm <- getColor
     case cterm of
         PrivacyK -> return tterm
-        SensitivityK -> throwUnlocatedError (TermColorError PrivacyK (showPretty (getLocated tterm)))
+        SensitivityK -> throwLocatedError (TermColorError PrivacyK (showPretty (getLocated tterm))) (getLocation term)
 
 -- handle a term that can be whatever
 -- handleAnyTerm :: DMTerm -> ColorTC DMTerm
@@ -170,7 +172,7 @@ transformLets reqc (Located l_term (term)) = do
 --        return (Reorder σ tt)
 
    Lam args ret body -> do
-       pushFunctionArgs args
+       pushFunctionArgsRel args
        tbody <- handleSensTerm_Loc body
        return (Located l_term (Lam args ret tbody))
 
@@ -197,10 +199,12 @@ transformLets reqc (Located l_term (term)) = do
        ttail <- handleAnyTerm_Loc tail
        return (Located l_term (FLet name tf ttail))
 
-   Loop n cs (x1, x2) body -> do
-       tn <- handleSensTerm_Loc n
+   Loop (i1,i2,i3) cs (x1, x2) body -> do
+       ti1 <- handleSensTerm_Loc i1
+       ti2 <- handleSensTerm_Loc i2
+       ti3 <- handleSensTerm_Loc i3
        tbody  <- handleAnyTerm_Loc body
-       return (Located l_term (Loop tn cs (x1, x2) tbody))
+       return (Located l_term (Loop (ti1,ti2,ti3) cs (x1, x2) tbody))
 
    Apply f xs -> do
        txs <- mapM handleSensTerm_Loc xs
@@ -218,10 +222,10 @@ transformLets reqc (Located l_term (term)) = do
    Var _ -> retRequired reqc (Located l_term (term))
    Arg _ _ _ -> retRequired reqc (Located l_term (term))
 
-   TLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure TLet: " <> show term))
-   SLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure SLet: " <> show term))
-   FLet _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> show term))
-   Ret _ -> throwUnlocatedError (InternalError ("Parser spit out a return term: " <> show term))
+   TLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure TLet: " <> showPretty term))
+   SLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure SLet: " <> showPretty term))
+   FLet _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> showPretty term))
+   Ret _ -> throwUnlocatedError (InternalError ("Parser spit out a return term: " <> showPretty term))
 
    _ -> case reqc of
              Just PrivacyK -> do

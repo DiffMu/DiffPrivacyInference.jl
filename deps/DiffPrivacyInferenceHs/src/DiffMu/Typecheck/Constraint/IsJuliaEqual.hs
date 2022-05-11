@@ -1,5 +1,8 @@
 
 
+{- |
+Description: Multiple different variants of type equivalences related to their representation as julia types.
+-}
 module DiffMu.Typecheck.Constraint.IsJuliaEqual where
 
 import DiffMu.Prelude
@@ -9,6 +12,7 @@ import DiffMu.Core.Context
 import DiffMu.Core.TC
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
+import DiffMu.Typecheck.Constraint.Definitions
 
 import Debug.Trace
 
@@ -23,15 +27,6 @@ import Prelude as P
 -- we have a constraint which checks this by unifying after making variables non-const
 -- if possible.
 
-
--- defining the constraint
-newtype IsJuliaEqual a = IsJuliaEqual a deriving Show
-
-instance TCConstraint IsJuliaEqual where
-  constr = IsJuliaEqual
-  runConstr (IsJuliaEqual c) = c
-
-
 makeNonConst_JuliaVersion ::  DMTypeOf k -> DMTypeOf k
 makeNonConst_JuliaVersion (TVar a) = TVar a
 makeNonConst_JuliaVersion (Num a _) = (Num a NonConst)
@@ -41,7 +36,7 @@ makeNonConst_JuliaVersion (Numeric a) = Numeric (makeNonConst_JuliaVersion a)
 -- everything else is not changed
 makeNonConst_JuliaVersion x = x
 
-solveJuliaEqual :: (IsT MonadDMTC t) => Symbol -> DMMain -> DMMain -> t ()
+solveJuliaEqual :: (IsT MonadDMTC t) => IxSymbol -> DMMain -> DMMain -> t ()
 solveJuliaEqual name (NoFun a) (NoFun b) = do
   -- we compute the free variables in the type which are of NumKind
   -- these are the once which block this constraint, since they have
@@ -71,27 +66,14 @@ solveJuliaEqual name (_ :∧: _) (_) = return ()
 solveJuliaEqual name _ _ = failConstraint name
 
 
-
 -- solving it
 instance Solve MonadDMTC IsJuliaEqual (DMMain, DMMain) where
   solve_ Dict _ name (IsJuliaEqual (a,b)) = solveJuliaEqual name a b
-
-instance FixedVars TVarOf (IsJuliaEqual (DMMain, DMMain)) where
-  fixedVars _ = mempty
 
 
 -------------------------------------------------------------------
 -- set the a type to non-const, in case it's numeric or a tuple.
 --
-
-newtype IsNonConst a = IsNonConst a deriving Show
-
-instance TCConstraint IsNonConst where
-  constr = IsNonConst
-  runConstr (IsNonConst c) = c
-
-instance Typeable k => FixedVars TVarOf (IsNonConst (DMTypeOf k, DMTypeOf k)) where
-  fixedVars (IsNonConst _) = []
 
 instance Typeable k => Solve MonadDMTC IsNonConst (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsNonConst (τ, τ_nonconst)) = do
@@ -115,16 +97,6 @@ instance Typeable k => Solve MonadDMTC IsNonConst (DMTypeOf k, DMTypeOf k) where
 -- things behave like subtyping.
 --
 
-newtype UnifyWithConstSubtype a = UnifyWithConstSubtype a deriving Show
-
-instance TCConstraint UnifyWithConstSubtype where
-  constr = UnifyWithConstSubtype
-  runConstr (UnifyWithConstSubtype c) = c
-
-instance Typeable k => FixedVars TVarOf (UnifyWithConstSubtype (DMTypeOf k, DMTypeOf k)) where
-  fixedVars (UnifyWithConstSubtype _) = []
-
-
 instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (UnifyWithConstSubtype (a, b)) =
     let case0 = testEquality (typeRep @k) (typeRep @ConstnessKind)
@@ -144,26 +116,6 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
             -- c0 ⊑! c1
             addConstraintFromName name (Solvable (IsLessEqual (c0,c1)))
             dischargeConstraint name
-
-{-
-          --
-          -- "if a[--] <= x, then x needs to be a[n]"
-          NonConst dto -> unify a b >> dischargeConstraint name
-          --
-          --
-          -- "if a[n] <= x, then we do not know about x, it could be const or non-const"
-          Const sk dto -> case b of
-            -- if rhs is a variable, we keep our constraint
-            TVar so -> pure ()
-
-            -- if const/nonconst, we can unify all components
-            Const sk' dto' -> unify sk sk' >> unify dto dto' >> dischargeConstraint name
-            NonConst dto' -> unify dto dto' >> dischargeConstraint name
-
-            -- rest
-            DMAny -> internalError "This case distinction was not fully thought out."
-            (Num DMData NonConst) -> unifyFromName name a b >> dischargeConstraint name
-            -}
 
           ----------
           -- induction step
@@ -207,17 +159,6 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
               -- c0 ⊑! c1
               addConstraintFromName name (Solvable (IsLessEqual (c0,c1)))
               dischargeConstraint name
-            {-
-            --------
-            --
-            -- interesting cases
-            --
-            -- "if x <= a[n], then x needs to be equal to a"
-            Const sk dto -> unifyFromName name a b >> dischargeConstraint name
-            --
-            -- "if x <= a[--], then we do not know about x"
-            NonConst dto -> pure ()
-            -}
 
             --------
             --
@@ -257,11 +198,11 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
             TVar so' -> pure ()
 
             -- the rest are induction base cases, we directly unifyFromName name lhs with rhs
-            -- { DMAny DMInt DMReal (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
+            -- { DMAny DMInt (IRNum DMReal) (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
             b -> unifyFromName name a b >> dischargeConstraint name
 
           -- the rest are induction base cases, we directly unifyFromName name lhs with rhs
-          -- { DMAny DMInt DMReal (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
+          -- { DMAny DMInt (IRNum DMReal) (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
           a -> unifyFromName name a b >> dischargeConstraint name
 
 

@@ -1,31 +1,46 @@
 
+{- |
+Description: Kinded and unkinded name contexts.
+
+These are contexts without any "type information" (except the kinding in the kinded case),
+i.e., only a list of names. Used for type, and the various term variables.
+-}
 module DiffMu.Abstract.Data.NameCtx where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Class.Term
 
--- import DiffMu.Abstract.Class.Term
--- import DiffMu.Abstract.MonadTC
--- import DiffMu.Abstract.MonadicPolynomial
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 
+import qualified Prelude as P
+
+---------------------------------------------------------------------
+-- Utility
+getAndInc :: (DictKey k) => H.HashMap k Int -> k -> (Int, H.HashMap k Int)
+getAndInc d k = case H.lookup k d of
+  Just v -> (v, H.insert k (v P.+ 1) d)
+  Nothing -> (0, H.insert k (1) d)
+
 ---------------------------------------------------------------------
 -- A simple (non-kinded) context for names
 data NameCtx = NameCtx
-  { names :: [Symbol]
-  , currentCtr :: Int
+  { names :: [IxSymbol]
+  , currentCtr :: H.HashMap Symbol Int
   }
   deriving (Generic)
-instance Default NameCtx
+instance Default NameCtx where
+  def = NameCtx [] H.empty
+
 instance Show NameCtx where
   show (NameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
 
-newName :: Text -> NameCtx -> (Symbol, NameCtx)
-newName (hint) (NameCtx names ctr) =
-  let name = Symbol (hint <> "_" <> T.pack (show ctr))
-  in (name , NameCtx (name : names) (ctr +! 1))
+newName :: NamePriority -> Text -> NameCtx -> (IxSymbol, NameCtx)
+newName np (hint) (NameCtx names ctrmap) =
+  let (ctr, ctrmap') = getAndInc ctrmap (Symbol hint)
+      name = IxSymbol (Symbol hint, ctr, np)
+  in (name , NameCtx (name : names) (ctrmap'))
 
 
 
@@ -52,18 +67,19 @@ instance KShow v => Show (SingSomeK v) where
 data KindedNameCtx (v :: j -> *) = KindedNameCtx
   {
     namesK :: [SingSomeK v]
-  , currentCtrK :: Int
+  , currentCtrK :: H.HashMap (Symbol) Int
   }
 instance Default (KindedNameCtx v) where
-  def = KindedNameCtx [] 0
+  def = KindedNameCtx [] H.empty
 
 instance KShow v => Show (KindedNameCtx v) where
   show (KindedNameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
 
-newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v, Typeable k, Typeable v) => Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
-newKindedName (hint) (KindedNameCtx names ctr) =
-  let name = (fromSymbol (Symbol (hint <> "_" <> T.pack (show ctr))))
-  in (name , KindedNameCtx (SingSomeK (name) : names) (ctr +! 1))
+newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v, Typeable k, Typeable v) => NamePriority -> Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
+newKindedName np (hint) (KindedNameCtx names ctrmap) =
+  let (ctr, ctrmap') = getAndInc ctrmap (Symbol hint)
+      name = (fromSymbol (Symbol hint) ctr np) -- (hint <> "_" <> T.pack (show ctr))))
+  in (name , KindedNameCtx (SingSomeK (name) : names) (ctrmap'))
 
 -- makeSing :: forall j (v :: j -> *). (forall k. (Show (Demote (KindOf k)))) => SomeK v -> SingSomeK v
 -- makeSing (SomeK v) = SingSomeK v

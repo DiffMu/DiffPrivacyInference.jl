@@ -1,4 +1,15 @@
 
+{- |
+Description: A pipeline of all preprocessing steps.
+
+The pipeline is as follows:
+ 1. `checkTopLevel`
+ 2. `demutate`
+ 3. `unblock`
+ 4. `collectAllFLets`
+ 5. `processLS`
+ 6. `processColors`
+-}
 module DiffMu.Typecheck.Preprocess.All where
 
 import DiffMu.Prelude
@@ -27,11 +38,11 @@ preprocessAll term = do
   -- top level processing
   (tlinfo) <- liftLightTC def def (checkTopLevel term)
   info $ "-----------------------------------"
-  info $ "Toplevel information:\n" <> show tlinfo
+  info $ "Toplevel information:\n" <> showT tlinfo
   info $ "term prior to preprocessing:\n" <> showPretty term
 
   -- -- mutation processing
-  term'' <- liftLightTC (MFull def def def def def def tlinfo) (\_ -> ()) (demutate term)
+  term'' <- liftLightTC (MFull def def def def def def def tlinfo) (\_ -> ()) (demutate term)
   -- term'' <- liftLightTC () (\_ -> ()) (nondemutate term')
 
   info $ "-----------------------------------"

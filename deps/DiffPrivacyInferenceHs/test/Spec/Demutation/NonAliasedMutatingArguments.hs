@@ -12,8 +12,8 @@ testScoping_NonAliasedMutatingArguments pp = do
 testNAMA01 pp = do
   let exa = " function test()         \n\
             \   function g!(a,b)      \n\
-            \     norm_convert!(a)    \n\
-            \     norm_convert!(b)    \n\
+            \     undisc_container!(a)    \n\
+            \     undisc_container!(b)    \n\
             \     return nothing      \n\
             \   end                   \n\
             \   function f!(a)        \n\
@@ -25,7 +25,7 @@ testNAMA01 pp = do
   let exb = " function test()              \n\
             \   z = 1                      \n\
             \   function g!(a,b)           \n\
-            \     norm_convert!(a)         \n\
+            \     undisc_container!(a)         \n\
             \     (x,y) = b                \n\
             \     scale_gradient!(x,a)     \n\
             \     return                   \n\
@@ -42,7 +42,7 @@ testNAMA01 pp = do
   let exc = " function test()              \n\
             \   z = 1                      \n\
             \   function g!(a,b)           \n\
-            \     norm_convert!(a)         \n\
+            \     undisc_container!(a)         \n\
             \     (x,y) = b                \n\
             \     scale_gradient!(x,a)     \n\
             \     return                   \n\

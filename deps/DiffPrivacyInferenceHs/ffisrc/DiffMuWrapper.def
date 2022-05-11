@@ -1,4 +1,4 @@
-LIBRARY diffmu-wrapper
+LIBRARY diffprivhs
 EXPORTS
   typecheckFromCString_DMTerm_Detailed
   typecheckFromCString_DMTerm

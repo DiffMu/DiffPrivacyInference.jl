@@ -37,20 +37,3 @@ class (CMonoid m, HasInverse m) => Abelian m
 instance (CMonoid m, HasInverse m) => Abelian m
 
 
-
--- class Group a => Abelian a where
---   (+) :: a -> a -> a
-  -- (+) x y = x <> y
-
--- class Abelian r => Ring r where
---   one :: r
---   (*) :: r -> r -> r
-
-
-
--- instance P.Num a => Semigroup a where
---   (<>) a b = a P.+ b
-
-
-
-

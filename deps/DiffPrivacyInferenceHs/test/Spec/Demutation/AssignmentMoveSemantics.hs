@@ -19,7 +19,7 @@ testScoping_AssignmentMoveSemantics pp = do
 testAMS01 pp = do
   let exa = " function f(a,b)      \n\
            \   x = a              \n\
-           \   norm_convert!(a)   \n\
+           \   undisc_container!(a)   \n\
            \ end                  "
 
 
@@ -40,7 +40,7 @@ testAMS01 pp = do
            \   clone(a)           \n\
            \ end                  "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([intc (Fin 3) :@ oneId] :->: intc (Fin 3)) :@ Just [JTAny]])
 
 
@@ -114,19 +114,19 @@ testAMS03 pp = do
             \    x                           \n\
             \ end                            "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
-      intnc = NoFun(Numeric (Num DMInt NonConst))
-      intnc' = (Numeric (Num DMInt NonConst))
-      intc' c = Numeric (Num DMInt (Const (constCoeff c)))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+      intnc' = (Numeric (Num (IRNum DMInt) NonConst))
+      intc' c = Numeric (Num (IRNum DMInt) (Const (constCoeff c)))
       bool = NoFun DMBool
 
       tyc = Fun([([intnc :@ zeroId, intnc :@ zeroId] :->: (NoFun $ intc' (Fin 1))) :@ Just [JTAny, JTAny]])
 
 
-  parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationMovedVariableAccessError "")
-  parseEvalFail pp "01b errors (switching is not allowed)" exb (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationLoopError "")
+  parseEvalFail pp "01b errors (switching is not allowed)" exb (DemutationLoopError "")
   parseEvalUnify pp "01c succeeds (double switching is allowed)" exc (pure tyc)
-  parseEvalFail pp "01d errors (moving in if-branches is not allowed)" exd (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01d errors (moving in if-branches is not allowed)" exd (DemutationLoopError "")
 
 
 testAMS04 pp = do
@@ -137,6 +137,17 @@ testAMS04 pp = do
             \    y = a             \n\
             \  else                \n\
             \    y = a             \n\
+            \  end                 \n\
+            \  internal_mutate!(y) \n\
+            \  return              \n\
+            \end                   "
+
+  let exb_pass = " function test(a,b,c) \n\
+            \  y = 0               \n\
+            \  if c                \n\
+            \    y = a             \n\
+            \  else                \n\
+            \    y = b             \n\
             \  end                 \n\
             \  clone(y)            \n\
             \end                   "
@@ -149,7 +160,8 @@ testAMS04 pp = do
             \  else                \n\
             \    y = b             \n\
             \  end                 \n\
-            \  clone(y)            \n\
+            \  internal_mutate!(y) \n\
+            \  return              \n\
             \end                   "
 
 
@@ -164,13 +176,15 @@ testAMS04 pp = do
             \  0                   \n\
             \ end                  "
 
-      intnc = NoFun(Numeric (Num DMInt NonConst))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
       bool = NoFun(DMBool)
-      intnc' = (Numeric (Num DMInt NonConst))
+      intnc' = (Numeric (Num (IRNum DMInt) NonConst))
 
-      tya = Fun([([intnc :@ (constCoeff $ Fin 2), intnc :@ (zeroId), bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])
+      tya = Fun([([intnc :@ (constCoeff $ Fin 4), intnc :@ (zeroId), bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])
+      tyb_pass = Fun([([intnc :@ (constCoeff $ Fin 1), intnc :@ (constCoeff $ Fin 1), bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])
 
   parseEvalUnify pp "same move in the branches is allowed" exa (pure tya)
-  parseEvalFail pp "different moves in the branches is not allowed" exb (DemutationError "")
+  parseEvalUnify pp "different moves in the branches is allowed if only used in clone" exb_pass (pure tyb_pass)
+  parseEvalFail pp "different moves in the branches is not allowed if used in function call" exb (DemutationError "")
   parseEvalFail pp "mutation after different moves in the branches is not allowed" exc (DemutationError "")
   return ()

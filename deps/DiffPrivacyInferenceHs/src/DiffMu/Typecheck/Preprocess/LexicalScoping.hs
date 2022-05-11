@@ -1,6 +1,12 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: preprocessing step to make function argument names unique
+
+After this step there is no overlap between locally defined variables and
+those which are function arguments.
+-}
 module DiffMu.Typecheck.Preprocess.LexicalScoping where
 
 import DiffMu.Prelude
@@ -16,8 +22,6 @@ import Data.Foldable
 
 import Debug.Trace
 
------------------------------------------------------------------------------------
--- preprocessing step to make function argument names unique
 
 data LSFull = LSFull
   {
@@ -35,10 +39,10 @@ newTeVar t = newTeVarOfLS t
 
 -- generate unique new variables
 newTeVarOfLS :: (MonadState LSFull m) => TeVar -> m (TeVar)
-newTeVarOfLS hintVar = termVarsOfLS %%= (first (\x -> GenTeVar x (Just hintVar)) . (newName (hint hintVar)))
+newTeVarOfLS hintVar = termVarsOfLS %%= (first (\x -> GenTeVar x (Just hintVar)) . (newName GeneratedNamePriority (hint hintVar)))
   where
-    hint (GenTeVar (Symbol x) _)   = x <> "_genls"
-    hint (UserTeVar (x))         = T.pack (show x) <> "_uls"
+    hint (GenTeVar (IxSymbol (Symbol x,_,_)) _)   = x <> "_genls"
+    hint (UserTeVar (x))                 = T.pack (show x) <> "_uls"
 
 -- transform the dmterm to one where function argument names are unique
 -- by generating new names for them and substituting all occurances in the body
@@ -85,5 +89,5 @@ substituteNames names (Located l term) = let
    SLetBase k x body tail -> Located l <$> (SLetBase k (subIf x) <$> subSame body <*> subSame tail)
    TLetBase k ns body tail       -> Located l <$> (TLetBase k (map subIf ns) <$> subSame body <*> subSame tail)
    MCreate t1 t2 (x1, x2) t3     -> Located l <$> (MCreate <$> subSame t1 <*> subSame t2 <*> return (subIf x1, subIf x2) <*> subSame t3)
-   Loop t1 cs (x1, x2) body      -> Located l <$> (Loop <$> subSame t1 <*> return (map subIf cs) <*> return (subIf x1, subIf x2) <*> subSame body)
+   Loop (i1,i2,i3) cs (x1, x2) body      -> Located l <$> (Loop <$> ((,,) <$> subSame i1 <*> subSame i2 <*> subSame i3) <*> return (map subIf cs) <*> return (subIf x1, subIf x2) <*> subSame body)
    _ -> recDMTermMSameExtension_Loc (substituteNames names) (Located l term)

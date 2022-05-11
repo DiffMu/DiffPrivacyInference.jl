@@ -2,6 +2,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Julia scope implementation used by typechecker.
+-}
 module DiffMu.Core.Scope where
 
 import DiffMu.Prelude

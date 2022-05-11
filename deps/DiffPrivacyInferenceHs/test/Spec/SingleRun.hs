@@ -9,10 +9,10 @@ import Spec.Base
   --     let test :: TC _
   --         test = do
   --           a <- newVar
-  --           b <- supremum a DMReal
+  --           b <- supremum a (IRNum DMReal)
   --           return (a,b)
   --     let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
-  --         check (TVar a, DMReal) = pure (Right ())
+  --         check (TVar a, (IRNum DMReal)) = pure (Right ())
   --         check x                = pure (Left x)
   --     (tcl $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
@@ -42,7 +42,7 @@ testSingleRun pp = describe "DPGD" $ do
           \           l = labels[i,:] \n\
           \           gs = unbounded_gradient(model, d, l) \n\
           \  \n\
-          \           gs = norm_convert(clip(L2,gs)) \n\
+          \           gs = undisc_container(clip(L2,gs)) \n\
           \           gs = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs)) \n\
           \           model = subtract_gradient(model, scale_gradient(eta * dim, gs)) \n\
           \     #      aloss += loss(d,l,model)/(n*dim) \n\

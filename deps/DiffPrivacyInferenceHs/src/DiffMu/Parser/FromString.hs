@@ -1,5 +1,8 @@
 
-module DiffMu.Parser.Expr.FromString where
+{- |
+Description: The first two parsing steps: `String` -> `JTree`, `JTree` -> `JExpr`.
+-}
+module DiffMu.Parser.FromString where
 
 import DiffMu.Prelude
 import DiffMu.Core
@@ -11,7 +14,9 @@ import Text.Megaparsec.Debug
 import Text.Megaparsec.Char.Lexer
 
 import Data.Either
+import Data.HashMap.Strict as H
 
+import qualified Prelude as P
 import qualified Data.Text as T
 import Debug.Trace(trace, traceM)
 
@@ -21,7 +26,7 @@ import Debug.Trace(trace, traceM)
 -- it also parses numbers properly.
 
 data JTree =
-     JLineNumber String Int
+     JLineNumber (Maybe String) Int
    | JHole
    | JTrue
    | JFalse
@@ -49,7 +54,12 @@ data JTree =
    | JUnsupported String
    deriving Show
 
-type Parser = Parsec Void String
+type TreeParseState = (DiffMu.Prelude.State [(Maybe String,Int)])
+type Parser = ParsecT Void String TreeParseState
+
+-- map a line number to the line number of the next expression, to enable
+-- multi-line error messages.
+type LocMap = H.HashMap (Maybe String,Int) Int
 
 
 pTLineNumber :: Parser JTree
@@ -57,9 +67,13 @@ pTLineNumber = let pLocation = do
                                 filename <- some (noneOf @[] " :")
                                 char ':'
                                 n <- decimal
-                                return (filename, n)
+                                case filename of
+                                     "none" -> return (Nothing, n)
+                                     _ -> return (Just filename, n)
               in do
-                   (filename, n) <- (char ':') >> (between (string "(#= ") (string " =#)") pLocation)
+                   (filename, n) <- wskip ((char ':') >> (between (string "(#= ") (string " =#)") pLocation))
+                   locas <- get -- collect line numbers in state
+                   put ((filename,n) : locas)
                    return (JLineNumber filename n)
 
 with :: String -> Parser a -> Parser a
@@ -84,11 +98,7 @@ pSymbolString =    (try (char ':' *> pIdentifier)
 -- any string that is well-paranthesised
 pAny :: Parser String
 pAny = let noParen = (some (noneOf @[] "()"))
-       in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
-
-pAnymo :: Parser String
-pAnymo = let noParen = (some (noneOf @[] "()"))
-       in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
+       in (join <$> some (noParen <|> between (oneOf @[] "(") (oneOf @[] ")") pAny))
 
 pWithCtor :: String -> ([JTree] -> JTree) -> Parser JTree
 pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
@@ -128,13 +138,21 @@ pTree =     try pTLineNumber
         <|> JUnsupported <$> pAny
 
 
-parseJTreeFromString :: String -> Either DMException JTree
+parseJTreeFromString :: String -> Either DMException (JTree, LocMap, [String])
 parseJTreeFromString input =
-  -- let res = runParser pTree "jl-hs-communication" (trace ("Parsing input:\n------------\n" <> input <> "\n---------------") input)
-  let res = runParser pTree "jl-hs-communication" input
+  let res = runState (runParserT pTree "jl-hs-communication" input) []
   in case res of
-    Left e  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
-    Right a -> Right a
+    (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> T.pack input <> "\n---------------------------\n" <> T.pack (errorBundlePretty e))
+    (Right a, locas) -> do
+        -- make a map from each line number to the line number of the next expression.
+        let addElem ((f1,l1):(f2,l2):as) = case f1 == f2 of
+                                                True  -> ((f1,l1),l2) : (addElem ((f2,l2):as))
+                                                False -> ((f1,l1),l1 P.+ 1) : (addElem ((f2,l2):as)) --  last node of included file
+            addElem [(f,a)] = [((f,a), a P.+ 1)] -- last node
+            addElem [] = []
+            locmap = H.fromList (addElem (reverse locas))
+            filenames = [s | Just s <- (nub (P.map fst locas))]
+        Right (a, locmap, filenames)
 
 
 --------------------------------------------------------------------------------------------
@@ -147,14 +165,13 @@ parseJTreeFromString input =
 -- the result gets put into a JExpr so it can be used for proper assignment nesting.
 
 
--- parse state is (filename, line number, are we inside a function)
--- it's also used for the next step, we don't need th
-type JEParseState = (StateT (String,Int) (Except DMException))
+-- parse state is (filename, line number, next line number, map from line number to next line number)
+type JEParseState = (StateT (Maybe String,Int,Int,LocMap) (Except DMException))
 
 jParseError :: String -> JEParseState a
 jParseError message = do
-                       (file,line) <- get
-                       throwOriginalError (ParseError message file line)
+                       (file,line,nextline,locs) <- get
+                       throwOriginalError (ParseError message file line nextline)
 
 data JExpr =
      JEInteger Float
@@ -164,7 +181,7 @@ data JExpr =
    | JETrue
    | JEFalse
    | JEColon
-   | JELineNumber String Int
+   | JELineNumber (Maybe String) Int Int
    | JEUnsupported String
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
@@ -188,6 +205,17 @@ data JExpr =
    deriving Show
 
 
+badTypeMessage t = "Got " <> show t <> " where a julia type or one of the builtin types/type functions was expected.\n\nThe builtin types are:\n"
+                          <> "- Data\n- PrivacyFunction\n- DMGrads\n- DMModel\n"
+                          <> "\n"
+                          <> "Builtin type functions are:\n"
+                          <> "- Priv()\n- BlackBox()\n- Static()\n- MetricGradient()\n- MetricVector()\n- MetricMatrix()\n"
+                          <> "(For adding type annotations, apply above type functions to that type, e.g. `Priv(Integer)`.\n"
+                          <> "See documentation of the respective function for usage examples).\n"
+                          <> "\n"
+                          <> "Supported julia types are:\n"
+                          <> "- Integer\n- Real\n- Matrix\n- Vector\n- Function\n- Bool\n- Any\n"
+                          
 pJuliaType :: JTree -> JEParseState JuliaType
 pJuliaType (JSym name) = case name of
     "Any"             -> pure JTAny
@@ -201,12 +229,12 @@ pJuliaType (JSym name) = case name of
     "Matrix"          -> pure (JTMatrix JTAny)
     "DMModel"         -> pure JTModel
     "DMGrads"         -> pure JTGrads
-    _                 -> jParseError ("Unsupported julia type " <> show name)
+    _                 -> jParseError (badTypeMessage name)
 pJuliaType (JCurly (name : args)) = pJuliaCurly (name:args)
 pJuliaType (JCall [JSym "MetricMatrix", t, n]) = JTMetricMatrix <$> pJuliaType t <*> pNorm n
 pJuliaType (JCall [JSym "MetricVector", t, n]) = JTMetricVector <$> pJuliaType t <*> pNorm n
 pJuliaType (JCall [JSym "MetricGradient", t, n]) = JTMetricGradient <$> pJuliaType t <*> pNorm n
-pJuliaType t = jParseError ("Expected a julia type, got " <> show t)
+pJuliaType t = jParseError (badTypeMessage t)
 
 pNorm (JSym "L1") = pure L1
 pNorm (JSym "L2") = pure L2
@@ -214,21 +242,21 @@ pNorm (JSym "LInf") = pure LInf
 pNorm t = jParseError ("Expected a Norm (L1, L2 or LInf), got " <> show t)
 
 pJuliaSubtype (JSubtype [t]) = pJuliaType t
-pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t)
-pJuliaSubtype t = jParseError ("Expected a subtype statement, but found " <> show t)
+pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t <> ", expected `<:T` for some supported type `T`")
+pJuliaSubtype t = jParseError ("Expected a subtype statement (i.e. `<: T` for some type `T`), but found " <> show t)
 
-pJuliaCurly [] = jParseError ("Invalid empty type")
+pJuliaCurly [] = jParseError ("Parametrized types with empty parameter list are not supported.")
 pJuliaCurly (name : args) = case name of
     JSym "Tuple"  -> (JTTuple <$> (mapM pJuliaType args))
     JSym "Matrix" -> case args of
         []  -> pure (JTMatrix JTAny)
         [a] -> (JTMatrix <$> (pJuliaSubtype a))
-        _   -> jParseError ("Too many type parameters for matrix type in Matrix{" <> show name <> "}")
+        as  -> jParseError ("Too many type parameters for matrix type in Matrix{" <> show as <> "}")
     JSym "Vector" -> case args of
         []  -> pure(JTVector JTAny)
         [a] -> (JTVector <$> (pJuliaSubtype a))
-        _   -> jParseError ("Too many type parameters for vector type in Vector{" <> show name <> "}")
-    _             -> jParseError ("Unsupported parametrised julia type" <> show name)
+        as  -> jParseError ("Too many type parameters for vector type in Vector{" <> show as <> "}")
+    _             -> jParseError ("Unsupported parametrised julia type" <> show name <> ". Only Matrix, Vector and Tuple types are supported.")
 
 
 
@@ -243,7 +271,7 @@ pArgs args = let pArg arg = case arg of
                      JTypeAssign [s, JCall [JSym "Static", t]] -> JENotRelevant <$> pTreeToJExpr s <*> pJuliaType t
                      JTypeAssign [s, t] -> JETypeAnnotation <$> pTreeToJExpr s <*> pJuliaType t
                      JHole -> pure JEHole
-                     _ -> jParseError ("Invalid function argument " <> show arg)
+                     _ -> jParseError ("Invalid function argument " <> show arg <> ", expected a symbol, optionally with a type assignment, or a hole (_).")
              in mapM pArg args
 
 pFLet :: JTree -> JTree -> JEParseState JExpr
@@ -254,7 +282,7 @@ pFLet call body = case call of
         JCall [JSym "Priv"] -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pure JTAny <*> pTreeToJExpr body)
         JCall [JSym "Priv", annt] -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pJuliaType annt <*> pTreeToJExpr body)
         _ -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELam <$> pArgs args <*> pJuliaType ann <*> pTreeToJExpr body)
-    _ -> error ("invalid shape of function definition " <> show call)
+    _ -> jParseError ("Invalid shape of function definition: " <> show call)
 
 pAss :: JTree -> JTree -> JEParseState JExpr
 pAss asg asm = case asg of
@@ -263,15 +291,16 @@ pAss asg asm = case asg of
     JCall _ -> pFLet asg asm
     JTup ts -> (JETupAssignment <$> mapM pTreeToJExpr ts <*> pTreeToJExpr asm)
     JTypeAssign [(JCall _), (JCall [JSym "BlackBox"])] -> pFLet asg asm
-    JTypeAssign _ -> jParseError ("Type annotations on variable assignments not yet supported in assignment of " <> show asg)
-    _ -> jParseError ("Unsupported assignment " <> show asg)
+    JTypeAssign _ -> jParseError ("Type annotations on variable assignments not supported in assignment of " <> show asg)
+    _ -> jParseError ("Unsupported assignment " <> show asg <> ". Expected a symbol, optionally with a type annotation, or a tuple of symbols.")
 
 
 pIter :: [JTree] -> JEParseState JExpr
 pIter as = case as of
     [start, end] -> JEIter <$> pTreeToJExpr start <*> (pure $ JEInteger 1) <*> pTreeToJExpr end
     [start, step, end] -> JEIter <$> pTreeToJExpr start <*> pTreeToJExpr step <*> pTreeToJExpr end
-    _ -> jParseError ("Unsupported iteration statement " <> show (JCall (JColon : as)))
+    _ -> jParseError ("Unsupported iteration statement " <> show (JCall (JColon : as))
+                   <> ".\nOnly range iteration is supported, i.e. iterators must be of the form a:b or a:s:b.")
 
 
 pUnbox :: [JTree] -> JEParseState JExpr
@@ -281,8 +310,12 @@ pUnbox a = jParseError $ "Invalid call of `unbox`. Expected a call of a black bo
 pTreeToJExpr :: JTree -> JEParseState JExpr
 pTreeToJExpr tree = case tree of
      JLineNumber f l -> do -- put line number in the state for exquisit error messages
-                                 put (f, l)
-                                 return (JELineNumber f l)
+                                 (_,_,_,locs) <- get
+                                 nl <- case H.lookup (f, l) locs of
+                                            Just nl -> return nl
+                                            Nothing -> error $ "this should not happen"
+                                 put (f, l, nl, locs)
+                                 return (JELineNumber f l nl)
      JSym s          -> pure (JESymbol ((Symbol . T.pack) s))
      JInteger i      -> pure $ JEInteger i
      JReal r         -> pure (JEReal r)
@@ -326,10 +359,10 @@ pTreeToJExpr tree = case tree of
          v -> jParseError ("You tried to load a module except DiffPrivacyInference with `using`. Please use standalone imports instead.: " <> show v)
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
-         [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
-         _ -> jParseError ("unsupported loop statement " <> show tree)
-     JCurly _        -> jParseError ("Did not expect a julia type but got " <> show tree)
-     JSubtype _        -> jParseError ("Did not expect a julia type but got " <> show tree)
+         [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range (i.e. of the form a:b or a:s:b)! Not like " <> show iter)
+         _ -> error ("unsupported loop statement " <> show tree)
+     JCurly _        -> jParseError ("Did not expect a julia type here but got " <> show tree)
+     JSubtype _        -> jParseError ("Did not expect a julia type here but got " <> show tree)
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
      JModule _ -> jParseError ("You can have only one module that contains all the code you want to typecheck.")
 
@@ -337,15 +370,14 @@ pTreeToJExpr tree = case tree of
 pModuleToJExpr :: JTree -> JEParseState JExpr
 pModuleToJExpr (JBlock [_,m]) = pModuleToJExpr m
 pModuleToJExpr (JModule [_,_,m]) = pTreeToJExpr m
-pModuleToJExpr t = jParseError ("All typechecked code must be within a module! Instead got " <> show t)
+pModuleToJExpr t = jParseError ("All typechecked code must be within a module!")
 
 
 
-
-parseJExprFromJTree :: JTree -> Either DMException JExpr
-parseJExprFromJTree tree =
-  let x = runStateT (pModuleToJExpr tree) ("unknown", 0)
+parseJExprFromJTree :: (JTree, LocMap, [String]) -> Either DMException (JExpr, [String])
+parseJExprFromJTree (tree, locs, filenames) =
+  let x = runStateT (pModuleToJExpr tree) (Nothing, 0, 0, locs)
       y = case runExcept x of
         Left err -> Left err
-        Right (term, _) -> Right term
+        Right (term, _) -> Right (term, filenames)
   in y

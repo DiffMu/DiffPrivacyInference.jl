@@ -4,10 +4,8 @@ cradle:
       component: 'DiffPrivacyInferenceHs:lib'
     - path: './test'
       component: 'DiffPrivacyInferenceHs:lib'
-    - path: './app'
-      component: 'DiffPrivacyInferenceHs:exe:diffmu'
     - path: './ffisrc'
       component: 'DiffPrivacyInferenceHs:lib'
     - path: './test-native'
-      component: 'DiffPrivacyInferenceHs:test:diffmu-test'
+      component: 'DiffPrivacyInferenceHs:test:diffprivhs-test'
 

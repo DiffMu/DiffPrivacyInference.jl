@@ -8,7 +8,7 @@ import Spec.Base
 testUnification = do
   describe "unify" $ do
     it "unifies Int = Int" $ do
-      (tc $ unify () (DMInt) (DMInt)) `shouldReturn` ((Right DMInt))
+      (tc $ unify () ((IRNum DMInt)) ((IRNum DMInt))) `shouldReturn` ((Right (IRNum DMInt)))
 
     it "creates a constraint when unification is not yet possible (:∧:)" $ do
       let test = do

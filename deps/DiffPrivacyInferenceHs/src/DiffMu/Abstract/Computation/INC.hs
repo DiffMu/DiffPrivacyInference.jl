@@ -1,4 +1,14 @@
 
+{- |
+Description: Incremental nondeterministic computations.
+
+An INC is a set of computations on a given datatype, which
+sometimes give only incremental updates, do not progress at all, or return failures.
+The computations can have monadic effects. The goal is to find an execution path which succeeds.
+The provided function `evalINC` evalutates such a set of state-updating
+functions on a given input state as far as possible, reverting the monadic
+state if failure was detected.
+-}
 module DiffMu.Abstract.Computation.INC where
 
 import DiffMu.Prelude
@@ -22,8 +32,8 @@ newtype INC m e a = INC [(a -> m (INCRes e a))]
 
 evalINC :: forall s m e a. (MonadLog m, MonadState s m, Show a, Show e) => INC m e a -> a -> m (INCRes e a)
 evalINC (steps) start = withLogLocation "INC" $ do
-  info $ "Beginning incremental computation on:\n  " <> show start
-  let logsteps (INC steps) = debug $ "I have " <> show (length steps) <> " candidates."
+  info $ "Beginning incremental computation on:\n  " <> showT start
+  let logsteps (INC steps) = debug $ "I have " <> showT (length steps) <> " candidates."
   logsteps steps
 
   state₀ <- get
@@ -37,7 +47,7 @@ evalINC (steps) start = withLogLocation "INC" $ do
   results <- f steps []
 
   debug "Got the following results after first application:"
-  debug $ show (snd <$> results)
+  debug $ showT (snd <$> results)
 
   let finished = [(s,a) | (s, Finished a) <- results]
   let partial  = [(s,a) | (s, Partial a) <- results]

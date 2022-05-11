@@ -16,6 +16,7 @@ testTypecheckingExamples pp = do
   testBlackBox pp
   testSLoop pp
   testSample pp
+  testConvert pp
   testMMap pp
   testRet pp
   testCount pp
@@ -28,8 +29,8 @@ testSens :: (String -> IO String) -> SpecWith ()
 testSens pp = do
   describe "checkSens" $ do
 
-    parseEvalSimple pp"3 + 7 * 9" (pure $ NoFun (Numeric (Num DMInt (Const (constCoeff (Fin 66))))))
-    parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (Num DMReal (Const (constCoeff (Fin 6.6000004))))))
+    parseEvalSimple pp"3 + 7 * 9" (pure $ NoFun (Numeric (Num (IRNum DMInt) (Const (constCoeff (Fin 66))))))
+    parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (Num (IRNum DMReal) (Const (constCoeff (Fin 6.6000004))))))
 
     let test = "function test(a)\n"
             <> "  clone(a)\n"
@@ -52,7 +53,7 @@ testAnnotation pp = do
         three = "function three(x :: MetricVector(Data,L1)) :: MetricVector(Data, LInf) \n\
              \   1*x \n\
              \ end"
-        oneint = NoFun(Numeric (Num DMInt (Const oneId)))
+        oneint = NoFun(Numeric (Num (IRNum DMInt) (Const oneId)))
         ty = Fun([([oneint :@ zeroId] :->: oneint) :@ Just [JTInt]])
     parseEvalUnify pp "good type" one (pure ty)
     parseEvalFail pp "bad type" two (UnsatisfiableConstraint (""))
@@ -81,19 +82,19 @@ testOps pp = describe "Ops" $ do
         ex_vec_no = "function foo(x::Vector{<:Integer}, y::Vector{<:Integer}, z::Vector{<:Integer}) \n\
                  \ 2.0*x + y - z \n\
                  \ end"
-        int = NoFun(Numeric (Num DMInt NonConst))
-        real = NoFun(Numeric (Num DMReal NonConst))
+        int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+        real = NoFun(Numeric (Num (IRNum DMReal) NonConst))
         ty_num = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 11)), int :@ (constCoeff (Fin 5.5)), int :@ inftyS] :->: real) :@ Just [JTInt, JTInt, JTInt, JTInt]])
         ty_mat :: TC DMMain = do
             n <- newVar
             m <- newVar
-            let mat1 = NoFun (DMMat L1 U n m (NoFun (Numeric (Num DMInt NonConst))))
-            let mat2 = NoFun (DMMat L1 U n m (NoFun (Numeric (Num DMReal NonConst))))
+            let mat1 = NoFun (DMMat L1 U n m (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
+            let mat2 = NoFun (DMMat L1 U n m (NoFun (Numeric (Num (IRNum DMReal) NonConst))))
             return (Fun [([mat1 :@ constCoeff (Fin 2), mat1 :@ constCoeff (Fin 1), mat1 :@ constCoeff (Fin 1)] :->: mat2) :@ Just [JTMatrix JTInt, JTMatrix JTInt, JTMatrix JTInt]])
         ty_vec :: TC DMMain = do
             n <- newVar
-            let vec1 = NoFun (DMVec L1 U n (NoFun (Numeric (Num DMInt NonConst))))
-            let vec2 = NoFun (DMVec L1 U n (NoFun (Numeric (Num DMReal NonConst))))
+            let vec1 = NoFun (DMVec L1 U n (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
+            let vec2 = NoFun (DMVec L1 U n (NoFun (Numeric (Num (IRNum DMReal) NonConst))))
             return (Fun [([vec1 :@ constCoeff (Fin 2), vec1 :@ constCoeff (Fin 1), vec1 :@ constCoeff (Fin 1)] :->: vec2) :@ Just [JTVector JTInt, JTVector JTInt, JTVector JTInt]])
     parseEval pp "numeric ops sensitivity" ex_num (pure ty_num)
     parseEvalUnify pp "matrix ops sensitivity" ex_mat (ty_mat)
@@ -122,25 +123,25 @@ testPriv pp = describe "privacies" $ do
                \    scale_gradient!(100, x) \n\
                \    return \n\
                \ end"
-        int = NoFun(Numeric (Num DMInt NonConst))
-        real = Num DMReal NonConst 
+        int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+        real = Num (IRNum DMReal) NonConst 
         ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
         ty_i :: TC DMMain = do
             c <- newVar
             n <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num DMInt NonConst))))
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
             let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTMetricGradient JTInt L2]]))
         ty_iv :: TC DMMain = do
             c <- newVar
             n <- newVar
-            let gradin = NoFun (DMVec L2 c n (NoFun (Numeric (Num DMInt NonConst))))
+            let gradin = NoFun (DMVec L2 c n (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
             let gradout = NoFun (DMVec LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTMetricVector JTInt L2]]))
         ty_l :: TC DMMain = do
             c <- newVar
             n <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num DMInt NonConst))))
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
             let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTMetricGradient JTInt L2]]))
     parseEval pp "return" ret (pure ty_r)
@@ -157,8 +158,8 @@ testBlackBox pp = describe "black box" $ do
              \    z = unbox(bb(y), Integer)     \n\
              \    x / z  \n\
              \ end"
-        int = NoFun(Numeric (Num DMInt NonConst))
-        real = NoFun(Numeric (Num DMReal NonConst))
+        int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+        real = NoFun(Numeric (Num (IRNum DMReal) NonConst))
         ty = Fun([([int :@ inftyS, real :@ inftyS] :->: real) :@ Just [JTInt, JTAny]])
     parseEvalUnify pp "numeric" bb (pure ty)
 
@@ -196,10 +197,10 @@ testSLoop pp = describe "Sensitivity loop" $ do
                  \   end \n\
                  \   x \n\
                  \end"
-        intc_nc c = NoFun(Numeric (Num DMInt c))
-        int = NoFun(Numeric (Num DMInt NonConst))
+        intc_nc c = NoFun(Numeric (Num (IRNum DMInt) c))
+        int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
         ty_s  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
-        ty_v  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
+        ty_v  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ inftyS] :->: int) :@ Just [JTInt, JTInt]])
         ty_v2 = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
     parseEvalUnify pp "static" sloop (ty_s)
     parseEvalUnify pp "overwriting" mloop (ty_s)
@@ -213,30 +214,41 @@ testSample pp = describe "Sample" $ do
               \  D, L = sample(b, data, data) \n\
               \  gs = unbox(foo(D[1,:]), Vector{<:Data}, length(D[1,:])) \n\
               \  clip!(L2,gs) \n\
-              \  norm_convert!(gs) \n\
+              \  undisc_container!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: LInf, c: τ_39>[s_14 × s_24](NoFun(Num(Data[--])))) @ (0.4⋅s_22⋅(1 / s_14),0.3⋅s_22⋅(1 / s_14)),NoFun(Num(Int[s_22 ©])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[s_24](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: LInf, c: C>[n × m](NoFun(Num(Data)))) @ (0.4⋅(1 / n)⋅m₃,0.3⋅(1 / n)⋅m₃),NoFun(Num(IR Integer[m₃ ©])) @ (0,0),NoFun(Num(IR Integer)) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[m](NoFun(Num(IR Real))))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
-testExponential pp = describe "Exponential mechanism" $ do
-    let ex = "function foo(x,v)::Priv() \n\
-              \  function bar(y) \n\
-              \    x+y \n\
-              \  end \n\
-              \  exponential_mechanism(2,0.1,v,bar) \n\
-              \end"
-        ty = " Fun([([NoFun(Num(τ_15[--])) @ (0.1,∑∅),NoFun(Vector<n: τ_9, c: τ_10>[s_5](NoFun(Num(τ_16[--])))) @ (∞,∞)] ->* NoFun(Num(τ_16[--]))) @ Just [Any,Any]])"
-        cs = "constr_8 : [final,worst,global,exact,special] IsSupremum (τ_15,τ_16) :=: Real"
+
+testConvert pp = describe "Convert" $ do
+    let ex = "function foo(x::MetricMatrix(Data,L2)) \n\
+      \    x = norm_convert(L1,x) \n\
+      \    x \n\
+      \ end"
+        ty = "Fun([([NoFun(Matrix<n: L2, c: C>[s₂ × n](NoFun(Num(Data)))) @ √(n)] -> NoFun(Matrix<n: L1, c: C>[s₂ × n](NoFun(Num(Data))))) @ Just [MetricMatrix(Data,L2)]])"
+        cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
+
+-- see #258
+-- testExponential pp = describe "Exponential mechanism" $ do
+--     let ex = "function foo(x,v)::Priv() \n\
+--               \  function bar(y) \n\
+--               \    x+y \n\
+--               \  end \n\
+--               \  exponential_mechanism(2,0.1,v,bar) \n\
+--               \end"
+--         ty = " Fun([([NoFun(Num(τ_15[--])) @ (0.1,0),NoFun(Vector<n: τ_9, c: τ_10>[s_5](NoFun(Num(τ_16[--])))) @ (∞,∞)] ->* NoFun(Num(τ_16[--]))) @ Just [Any,Any]])"
+--         cs = "constr_8 : [final,worst,global,exact,special] IsSupremum (τ_15,τ_16) :=: Real"
+--     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
 testAboveThresh pp = describe "Above threshold" $ do
     let ex = "function test(qs, d) :: Priv() \n\
               \  above_threshold(qs, 1, d, 100) \n\
               \ end"
-        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(Real[--]))) @ Nothing]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(Int[--]))) @ Just [Any,Any]])"
+        ty = "Fun([([NoFun(Vector<n: N, c: C>[s₁](Fun([([τ₁ @ 1] -> NoFun(Num(IR Real))) @ Nothing]))) @ (∞,∞),τ₁ @ (1,0)] ->* NoFun(Num(IR Integer))) @ Just [Any,Any]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -245,7 +257,7 @@ testRet pp = describe "Color" $ do
               \    (theta, mu) = (100,x) \n\
               \    theta + mu \n\
               \ end"
-        int = NoFun(Numeric (Num DMInt NonConst))
+        int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
         ty = Fun([([int :@ inftyP] :->*: int) :@ Just [JTInt]])
     parseEval pp "Ret" ex (pure ty)
                  
@@ -260,7 +272,7 @@ testCount pp = describe "Count" $ do
             c <- newVar
             n <- newVar
             let vec = NoFun (DMVec L1 c n (NoFun (Numeric (Num DMData NonConst))))
-            return (Fun ([([vec :@ oneId] :->: (NoFun (Numeric (Num DMInt NonConst)))) :@ Just [JTAny]]))
+            return (Fun ([([vec :@ oneId] :->: (NoFun (Numeric (Num (IRNum DMInt) NonConst)))) :@ Just [JTAny]]))
   parseEvalUnify pp "" ex ty
 
 
@@ -280,9 +292,9 @@ testMMap pp = describe "Matrix map" $ do
             c <- newVar
             n <- newVar
             nr <- newVar
-            let gradin = NoFun (DMVec nr c n (NoFun (Numeric (Num DMInt NonConst))))
-            let gradout = NoFun (DMVec nr U n (NoFun (Numeric (Num DMInt NonConst))))
-            return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (Num DMInt NonConst)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
+            let gradin = NoFun (DMVec nr c n (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
+            let gradout = NoFun (DMVec nr U n (NoFun (Numeric (Num (IRNum DMInt) NonConst))))
+            return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (Num (IRNum DMInt) NonConst)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
     parseEvalUnify pp "good" ex ty
 
   
@@ -340,7 +352,7 @@ testPrivFunc pp = describe "PrivacyFunction annotations" $ do
                    \function baz() :: Priv() \n\
                    \   foo(bar)\n\
                    \end"
-        cint =  NoFun (Numeric (Num DMInt (Const (constCoeff (Fin 1)))))
+        cint =  NoFun (Numeric (Num (IRNum DMInt) (Const (constCoeff (Fin 1)))))
         ty_good = Fun([([] :->*: cint) :@ Just []])
     parseEval pp "proper usage" ex_good (pure ty_good)
     parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (""))
@@ -371,14 +383,14 @@ testDPGD pp = describe "DPGD" $ do
           \           d = data[i,:] \n\
           \           l = labels[i,:] \n\
           \           gs = unbox(unbounded_gradient(model, d, l), length(model)) \n\
-          \           gsc = norm_convert(clip(L2,gs)) \n\
+          \           gsc = undisc_container(clip(L2,gs)) \n\
           \           gsg = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
           \           model = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
           \    end \n\
           \    model \n\
           \ end"
 
-      ty = "Fun([([NoFun(Matrix<n: τ_16, c: τ_17>[s_16 × s_28](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Matrix<n: τ_81, c: τ_82>[s_33 × s_34](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Num(τ_101[s_19])) @ (0,0),NoFun(Num(τ_103[s_20])) @ (0,0),NoFun(Num(τ_129[s_47])) @ (∞,∞)] ->* NoFun(Params[s_44](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any]])"
+      ty = "Fun([([NoFun(Matrix<n: τ_16, c: τ_17>[s_16 × s_28](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Matrix<n: τ_81, c: τ_82>[s_33 × s_34](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Num(τ_101[s_19])) @ (0,0),NoFun(Num(τ_103[s_20])) @ (0,0),NoFun(Num(τ_129[s_47])) @ (∞,∞)] ->* NoFun(Params[s_44](Num(IR Real[--])))) @ Just [Any,Any,Any,Any,Any]])"
 
       cs = "constr_16 : [final,worst,global,exact,special] IsLess (s_20,1),\
           \\nconstr_38 : [final,worst,global,exact,special] IsLess (0,s_43),\

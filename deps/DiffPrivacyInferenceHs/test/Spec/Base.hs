@@ -17,18 +17,20 @@ import DiffMu.Core.Definitions as All
 import DiffMu.Core.Symbolic as All
 import DiffMu.Core.Context as All
 import DiffMu.Core.Scope as All
+import DiffMu.Core.Unification as All
 import DiffMu.Typecheck.Operations as All
 import DiffMu.Typecheck.Subtyping as All
 import DiffMu.Typecheck.Typecheck as All
+import DiffMu.Typecheck.Constraint.Definitions as All
 import DiffMu.Typecheck.Constraint.IsJuliaEqual as All
 import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.All
 import DiffMu.Runner as All
-import DiffMu.Parser.Expr.FromString as All
-import DiffMu.Parser.Expr.FromString
-import DiffMu.Parser.Expr.JExprToDMTerm
+import DiffMu.Parser.FromString as All
+import DiffMu.Parser.FromString
+import DiffMu.Parser.JExprToDMTerm
 
 import DiffMu.Typecheck.JuliaType as All
 
@@ -42,10 +44,11 @@ import Debug.Trace as All
 import Test.Hspec as All
 import Test.Hspec.Core.Runner as All
 
+import qualified Data.HashMap.Strict as H
 
 tc :: TC a -> IO (Either (DMException) a)
 tc r = do
-  x <- executeTC (DontShowLog) r
+  x <- executeTC (DontShowLog) r (RawSource H.empty)
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e
@@ -56,7 +59,7 @@ tc r = do
 
 tcl :: TC a -> IO (Either (DMException) a)
 tcl r = do
-  x <- executeTC (DoShowLog Force []) r
+  x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping, Location_MonadicGraph]) r (RawSource H.empty)
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e
@@ -72,7 +75,7 @@ tcb :: Bool -> TC a -> IO (Either (DMException) a)
 tcb True = tcl
 tcb False = tc
 
-sn :: (Show a, Normalize TC a) => TC a -> TC a
+sn :: (ShowPretty a, Normalize TC a) => TC a -> TC a
 sn x = do
   -- x1 <- x
   -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
@@ -102,7 +105,7 @@ sn x = do
 
 
 
-sn_EW :: (Show a, Normalize TC a) => TC a -> TC a
+sn_EW :: (ShowPretty a, Normalize TC a) => TC a -> TC a
 sn_EW x = x >>= solveAndNormalize ExactNormalization [SolveExact,SolveAssumeWorst]
   -- do
   -- x' <- x
@@ -175,7 +178,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
     let term'' :: TC DMMain
         term'' = case res of
                    Left err -> error $ "Error while parsing DMTerm from string: " <> show err
-                   Right res''  ->
+                   Right (res'',_)  ->
                      do
                             (res) <- parseDMTermFromJExpr res'' >>= (liftNewLightTC . preprocessAll)
                             -- res <- preprocessDMTerm res'

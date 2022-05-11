@@ -33,7 +33,7 @@ testScope01 pp = do
            -- b1 = 6 * 2 = 12
            -- result = 1 + 6 + 12 = 19
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 19)) :@ Just []])
 
   parseEval pp "01 works" ex (pure ty)
@@ -55,7 +55,7 @@ testScope02 pp = do
            -- y = g{100}(3) = 3 + 100 = 103
            -- g{103}(3) = 3 + 103 = 106
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 103)) :@ Just []])
 
   parseEval pp "02 works" ex (pure ty)
@@ -80,7 +80,7 @@ testScope03 pp = do
            -- y = h{g{100}}(1) = g{100}(2) = 2*100 = 200
            -- g{200}(3) = 3*200 = 600
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 300)) :@ Just []])
 
   parseEval pp "03 works" ex (pure ty)
@@ -132,7 +132,7 @@ testScope04 pp = do
            \ end"
 
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 286)) :@ Just []])
 
   parseEvalFail pp "04 (bad)" ex_bad (DemutationVariableAccessTypeError "")
@@ -155,7 +155,7 @@ testScope05 pp = do
            \     foo4(123)(1)       \n\
            \  end"
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty1 = Fun([([] :->: intc (Fin 124)) :@ Just []])
       ty2 = Fun([([] :->: intc (Fin 2)) :@ Just []])
 
@@ -184,7 +184,7 @@ testScope06 pp = do
             \    f(x,y)                   \n\
             \  end                        "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
   parseEval pp "06 works" ex1 (pure ty1)

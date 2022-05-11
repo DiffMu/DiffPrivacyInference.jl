@@ -14,6 +14,6 @@ testCheck_Rules = do
       --       -- let (tres'',_) = runState (extractDelayed def tres) def
       --       -- tres''
       --       tres
-      (tc $ sn $ f) `shouldReturn` (Right $ NoFun (Numeric (Num DMReal (Const (oneId)))))
+      (tc $ sn $ f) `shouldReturn` (Right $ NoFun (Numeric (Num (IRNum DMReal) (Const (oneId)))))
 
 

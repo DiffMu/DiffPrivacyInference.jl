@@ -1,4 +1,11 @@
 
+
+{- |
+Description: Solver for the `IsChoice` and `IsFunctionArgument` constraints.
+
+These encode the julia multiple dispatch functionality, and to solve them
+we have to call back into the julia runtime for its subtype resolving.
+-}
 module DiffMu.Typecheck.Constraint.IsFunctionArgument where
 
 import DiffMu.Prelude
@@ -11,8 +18,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.JuliaType
 import Algebra.PartialOrd
-import DiffMu.Typecheck.Constraint.CheapConstraints
-import DiffMu.Typecheck.Constraint.IsJuliaEqual
+import DiffMu.Typecheck.Constraint.Definitions
 
 import Debug.Trace
 
@@ -37,14 +43,8 @@ import qualified Data.HashMap.Strict as H
 -- the arguments the callee is applied to to a type variable that will be determined upon resultion of the
 -- constraint.
 
-newtype IsFunctionArgument a = IsFunctionArgument a deriving Show
-
-instance TCConstraint IsFunctionArgument where
-  constr = IsFunctionArgument
-  runConstr (IsFunctionArgument c) = c
-
 -- first is expected argument type, second is given argument type
-solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf MainKind, DMTypeOf MainKind) -> t ()
+solveIsFunctionArgument :: IsT MonadDMTC t => IxSymbol -> (DMTypeOf MainKind, DMTypeOf MainKind) -> t ()
 
 -- if the expected argument and given argument are both functions / collections of functions, we add an
 -- IsChoice constraint 
@@ -65,7 +65,7 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
       return ()
 
     -- if there were functions without annotation, error out
-    xs -> internalError $ "Encountered functions without a required julia type annotation as the argument to a function:\n" <> show xs
+    xs -> internalError $ "Encountered functions without a required julia type annotation as the argument to a function:\n" <> showPretty xs
 
 -- the callee does not expect any specific type, so we can just unify.
 solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> dischargeConstraint name >> pure ()
@@ -93,7 +93,20 @@ solveIsFunctionArgument name (_, _) = return ()
 -- with certain arguments inside) must be present in the argument function.
 
 -- map Julia signature to method and the list of function calls that went to this method.
-type ChoiceHash = HashMap [JuliaType] (DMTypeOf FunKind, [DMTypeOf FunKind])
+type ChoiceHash = (HashMap [JuliaType] (DMTypeOf FunKind, [DMTypeOf FunKind]))
+
+
+instance ShowPretty (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
+    showPretty (IsChoice (a,b)) = let showHash = let
+                                                     showF b = newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
+                                                     showC (sign, (m, cs)) = "- julia signature " <> showPretty sign
+                                                                             <> ": " <> showF [m]
+                                                     ll = map showC (H.toList a)
+                                                 in intercalateS "\n" ll
+                                  in "Function types " <> newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
+                                     <> " are required to exist among the following choices:"
+                                     <> newlineIndentIfLong showHash
+
 
 -- hash has the existing methods, list has the required methods.
 instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind]) where
@@ -101,7 +114,7 @@ instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind]) where
 
 -- see if the constraint can be resolved. might update the IsCHoice constraint, do nothing, or discharge.
 -- might produce new IsFunctionArgument constraints for the arguments.
-solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMTypeOf FunKind]) -> t ()
+solveIsChoice :: forall t. IsT MonadDMTC t => IxSymbol -> (ChoiceHash, [DMTypeOf FunKind]) -> t ()
 solveIsChoice name (provided, required) = do
    -- remove all choices from the "required" list that have a unique match in the "provided" hashmap.
    -- when a choice is resolved, the corresponding counter in the hashmap is incremented by one.
@@ -110,7 +123,7 @@ solveIsChoice name (provided, required) = do
           case curReq of
              [] -> return (curProv, [])
              (τs : restReq) -> do -- go through all required methods
-                 debug $ "[IFA]: called on " <> show τs
+                 debug $ "[IFA]: called on " <> showT τs
                  case τs of
                       TVar _ -> do -- it was a tvar
                               (resP, resR) <- (matchArgs curProv restReq) -- can't resolve TVar choice, keep it and recurse.
@@ -123,8 +136,8 @@ solveIsChoice name (provided, required) = do
                          -- if we don't know all types we cannot do this, as eg for two methods
                          -- (Int, Int) => T
                          -- (Real, Number) => T
-                         -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
-                         -- is a DMReal, the first one does not match even though it's less general.
+                         -- and arg types (TVar, (IRNum DMInt)), both methods are in newchoices, but if we later realize the TVar
+                         -- is a (IRNum DMReal), the first one does not match even though it's less general.
                          -- filter Fun arguments, as the all have the same type "Function" in julia/
                          let candidates' = case hasFreeVars of
                                -- if no tvars are in the args
@@ -132,8 +145,8 @@ solveIsChoice name (provided, required) = do
                                -- else we do not change them
                                False -> candidates
 
-                         debug $ "[IFA]: candidates before: " <> show candidates
-                         debug $ "[IFA]: candidates after:  " <> show candidates'
+                         debug $ "[IFA]: candidates before: " <> showT candidates
+                         debug $ "[IFA]: candidates after:  " <> showT candidates'
 
                          case and ((length candidates' == length curProv),(length candidates' > 1)) of
                             -- no choices were discarded, the constraint could not be simplified.
@@ -163,7 +176,7 @@ solveIsChoice name (provided, required) = do
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
                 debug $ "[IFA]: Done, newdict is:"
-                debug $ show newdict
+                debug $ showT newdict
                 mapM (resolveChoiceHash name) (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
@@ -176,7 +189,7 @@ solveIsChoice name (provided, required) = do
    return ()
 
 
-resolveChoiceHash :: forall t. IsT MonadDMTC t => Symbol -> ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
+resolveChoiceHash :: forall t. IsT MonadDMTC t => IxSymbol -> ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
 resolveChoiceHash name (sign, (method, [])) = pure () -- no matches were found for this method.
 resolveChoiceHash name (sign, (method, matches)) = do
    let resolveAnn :: (DMTypeOf FunKind) -> t (DMMain, [DMMain])
@@ -196,7 +209,7 @@ resolveChoiceHash name (sign, (method, matches)) = do
                                      msg <- inheritanceMessageFromName name
                                      throwError (WithContext (NoChoiceFoundError $ "Found application of a privacy function "
                                                                   <> show method <> " where a senstivity value was expected") (DMPersistentMessage msg))
-                                 _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, method)
+                                 _ -> impossible $ "reached impossible case in resolving choices: " <> showT (match, method)
 
    methsigs <- mapM resolveAnn matches -- set sensitivities of all matches and get their dmtype signatures
    let argtypes = transpose (map snd methsigs) -- get per-argument list instead of per-match list
@@ -259,19 +272,19 @@ getMatchCandidates τsτ provided = do
                         let argsNoJFun = [(τa, ann) | (τa :@ ann) <- args, noJuliaFunction τa]
                         -- ... and get the free typevars of the rest.
                         let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
-                        debug $ "[IFA]: `getMatchCandidates` on " <> show τsτ
-                        debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
-                        debug $ "[IFA]: => free vars is: " <> show free
+                        debug $ "[IFA]: `getMatchCandidates` on " <> showT τsτ
+                        debug $ "[IFA]: (via " <> showT argsNoJFun <> ")"
+                        debug $ "[IFA]: => free vars is: " <> showT free
                         return (cand, free)
       (args :->*: _) -> do -- same as for the above case.
                         let cand = (H.filterWithKey (\s c -> choiceCouldMatch (fstAnn <$> args) s) provided)
                         let argsNoJFun = [(τa, ann) | (τa :@ ann) <- args, noJuliaFunction τa]
                         let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
-                        debug $ "[IFA]: `getMatchCandidates` on " <> show τsτ
-                        debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
-                        debug $ "[IFA]: => free vars is: " <> show free
+                        debug $ "[IFA]: `getMatchCandidates` on " <> showT τsτ
+                        debug $ "[IFA]: (via " <> showT argsNoJFun <> ")"
+                        debug $ "[IFA]: => free vars is: " <> showT free
                         return (cand, free)
-      _ -> throwUnlocatedError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
+      _ -> throwUnlocatedError (ImpossibleError ("Invalid type for Choice: " <> showPretty τsτ))
 
    if H.null candidates
       then throwUnlocatedError (NoChoiceFoundError $ "No matching choice for " <> show τsτ <> " found in " <> show provided)
@@ -295,30 +308,6 @@ noJuliaFunction :: DMTypeOf MainKind -> Bool
 noJuliaFunction τ = (juliatypes τ /= [JTFunction])
 
 
-
-
-------------------------------------------------------------------------------------------------------
---compute fixed vars of the constraints
-
--- get the typevar which appears on the right hand side of the topmost arrow.
-getFunctionReturnVar :: DMTypeOf k -> [SomeK TVarOf]
-getFunctionReturnVar (Fun fs) = mconcat (getFunctionReturnVar . fstAnn <$> fs)
-getFunctionReturnVar (as :->: (TVar a)) = [SomeK a]
-getFunctionReturnVar (as :->*: (TVar a)) = [SomeK a]
-getFunctionReturnVar _ = mempty
-
-getNoFunVars :: DMMain -> [SomeK TVarOf]
-getNoFunVars (NoFun a) = freeVars a
-getNoFunVars _ = mempty
-
-instance FixedVars TVarOf (IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind)) where
-  -- TODO: Is this calculation of fixed vars correct?
-  fixedVars (IsFunctionArgument (existingFuns, wantedFuns)) = getFunctionReturnVar wantedFuns <> getNoFunVars existingFuns <> getNoFunVars wantedFuns
-
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind) where
-  solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
+      solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
 
-
-instance FixedVars TVarOf (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
-  -- TODO: Is this calculation of fixed vars correct?
-  fixedVars (IsChoice (_, wantedFuns)) = mconcat (getFunctionReturnVar <$> wantedFuns)

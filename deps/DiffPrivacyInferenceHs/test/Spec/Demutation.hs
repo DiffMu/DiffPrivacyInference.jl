@@ -38,9 +38,9 @@ testDemutation_SemiSSA pp = do
             \ end                    "
 
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
-      intnc = NoFun(Numeric (Num DMInt NonConst))
-      intnc' = (Numeric (Num DMInt NonConst))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+      intnc' = (Numeric (Num (IRNum DMInt) NonConst))
 
       tya = Fun([([intnc :@ (constCoeff $ Fin 4)] :->: intnc) :@ Just [JTAny]])
       tyb = Fun([([intnc :@ (constCoeff $ Fin 8), intnc :@ (constCoeff $ Fin 4), intnc :@ zeroId] :->: (NoFun $ DMTup [intnc',intnc'])) :@ Just [JTAny, JTAny, JTAny]])
@@ -73,9 +73,9 @@ testDemutation_SemiSSA_Phi pp = do
             \ end                      "
 
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
-      intnc = NoFun(Numeric (Num DMInt NonConst))
-      intnc' = (Numeric (Num DMInt NonConst))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+      intnc' = (Numeric (Num (IRNum DMInt) NonConst))
       bool = NoFun DMBool
 
       tya = Fun([([intnc :@ (constCoeff $ Fin 3), intnc :@ zeroId, bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])

@@ -2,6 +2,7 @@
 module Spec.Subtyping where
 
 import Spec.Base
+import DiffMu.Typecheck.Constraint.IsJuliaEqual
 
 (⊑!) :: forall k t. (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
 (⊑!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
@@ -30,13 +31,13 @@ testSubtyping = do
 
 
   describe "subtyping of BaseNumKind/NumKind" $ do
-    testsub False DMInt DMReal (Right Nothing)
-    testsub False DMReal DMInt (Left (UnsatisfiableConstraint "[test]"))
+    testsub False (IRNum DMInt) (IRNum DMReal) (Right Nothing)
+    testsub False (IRNum DMReal) (IRNum DMInt) (Left (UnsatisfiableConstraint "[test]"))
 
   describe "subtyping of tuples" $ do
-    let nci1 = (Numeric (Num DMInt (Const oneId)))
-        nci2 = (Numeric (Num DMInt (Const (constCoeff (Fin 2)))))
-        nnr  = Numeric (Num DMReal NonConst)
+    let nci1 = (Numeric (Num (IRNum DMInt) (Const oneId)))
+        nci2 = (Numeric (Num (IRNum DMInt) (Const (constCoeff (Fin 2)))))
+        nnr  = Numeric (Num (IRNum DMReal) NonConst)
 
     testsub False (NoFun nci1) (NoFun nnr) (Right Nothing)
     testsub False (DMTup [nci1,nci2]) (DMTup [nci1,nnr]) (Right Nothing)
@@ -50,21 +51,21 @@ testSubtyping_MaxMinCases = do
     it "resolves 'a ≤ Int'." $ do
       let test0 = do
             a <- newVar
-            a ⊑! DMInt
+            a ⊑! (IRNum DMInt)
             return (a)
-      (tc $ (sn_EW test0)) `shouldReturn` (Right DMInt)
+      (tc $ (sn_EW test0)) `shouldReturn` (Right (IRNum DMInt))
 
     it "resolves 'Real ≤ a'." $ do
       let test0 = do
             a <- newVar
-            DMReal ⊑! a
+            (IRNum DMReal) ⊑! a
             return (a)
-      (tc $ (sn_EW test0)) `shouldReturn` (Right DMReal)
+      (tc $ (sn_EW test0)) `shouldReturn` (Right (IRNum DMReal))
 
     it "does NOT resolve 'Int ≤ a'." $ do
       let test0 = do
             a <- newVar
-            DMInt ⊑! a
+            (DMInt) ⊑! a
             return a
       let isTVar (TVar x) = pure (Right ())
           isTVar a        = pure (Left a)
@@ -73,14 +74,14 @@ testSubtyping_MaxMinCases = do
     it "does NOT resolve 'a ≤ Real'." $ do
       let test0 = do
             a <- newVar
-            a ⊑! DMReal
+            a ⊑! (DMReal)
             return a
       let isTVar (TVar x) = pure (Right ())
           isTVar a        = pure (Left a)
       (tc $ (sn_EW test0) >>= isTVar) `shouldReturn` (Right (Right ()))
 
     it "resolves 'a ≤ Int[2]' inside NoFun" $ do
-      let ty = NoFun (Numeric (Num DMInt (Const (constCoeff (Fin 2)))))
+      let ty = NoFun (Numeric (Num (IRNum DMInt) (Const (constCoeff (Fin 2)))))
       let test0 = do
             a <- newVar
             a ⊑! ty
@@ -88,16 +89,18 @@ testSubtyping_MaxMinCases = do
       (tc $ sn_EW test0) `shouldReturn` (Right ty)
 
     it "partially resolves 'a ≤ (Int[2],Real[--])'" $ do
-      let ty1 = (Numeric (Num DMInt (Const (constCoeff (Fin 2)))))
-          ty2 = (Numeric (Num DMReal NonConst))
+      let ty1 = (Numeric (Num (IRNum DMInt) (Const (constCoeff (Fin 2)))))
+          ty2 = (Numeric (Num (IRNum DMReal) NonConst))
           ty = DMTup [ty1 , ty2]
       let test0 = do
             a <- newVar
             a ⊑! ty
             return a
       let correct :: (DMType) -> TC _
-          correct ((DMTup [Numeric (Num DMInt (Const s)), Numeric (Num (TVar _) (TVar _))])) = pure $ Right s
-          correct r                                                     = pure $ Left r
+          correct ((DMTup [Numeric (Num (IRNum DMInt) (Const s)), Numeric (Num (IRNum (TVar _)) (TVar _))])) = pure $ Right s
+          correct r                                                     = do
+            ctrs <- getAllConstraints
+            pure $ Left $ "value: " <> showPretty r <> "\n" <> "ctrs: \n" <> showPretty ctrs 
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right (constCoeff (Fin 2))))
 
     it "partially resolves 'a[--] ≤ b' inside NoFun" $ do
@@ -132,12 +135,12 @@ testSubtyping_Cycles = do
             c <- newVar
             d <- newVar
             e <- newVar
-            a <- supremum DMReal e -- use supremum here bc the constraint Real <= a would be resolved by a special case
+            a <- supremum (IRNum DMReal) e -- use supremum here bc the constraint Real <= a would be resolved by a special case
             a ⊑! b
             b ⊑! c
             c ⊑! d
             return (a,b)
-      (tc $ (sn test01 >>= (\(a,b) -> return (and [(a == DMReal), (a == b)])))) `shouldReturn` (Right True)
+      (tc $ (sn test01 >>= (\(a,b) -> return (and [(a == (IRNum DMReal)), (a == b)])))) `shouldReturn` (Right True)
 
     it "contracts a cycle that has bottom in it" $ do
       let test02 = do
@@ -145,12 +148,12 @@ testSubtyping_Cycles = do
             b <- newVar
             c <- newVar
             e <- newVar
-            d <- infimum DMInt e -- use inf here bc the constraint d <= Int would be resolved by a special case
+            d <- infimum (IRNum DMInt) e -- use inf here bc the constraint d <= Int would be resolved by a special case
             a ⊑! b
             b ⊑! c
             c ⊑! d
             return (a,b)
-      (tc $ (sn test02 >>= (\(a,b) -> return (and [(a == DMInt), (a == b)])))) `shouldReturn` (Right True)
+      (tc $ (sn test02 >>= (\(a,b) -> return (and [(a == (IRNum DMInt)), (a == b)])))) `shouldReturn` (Right True)
 -}
     it "contracts a larger cycle with more stuff" $ do
       let test1 = do
@@ -294,6 +297,12 @@ testSubtyping_ContractEdge = do
             (y :: DMMain) <- newVar
             addConstraintNoMessage (Solvable (IsJuliaEqual (y, b)))
 
+            -- 2022-04-11
+            -- we actually have to make x fixed as well, because else we get a unification from (a <= x)
+            -- and after that also of (a <= b)
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, x)))
+
+
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
 
@@ -311,6 +320,12 @@ testSubtyping_ContractEdge = do
             -- a is fixed
             (x :: DMMain) <- newVar
             addConstraintNoMessage (Solvable (IsJuliaEqual (x, a)))
+
+
+            -- 2022-04-19
+            -- we actually have to make y fixed as well, because else we get a unification from (y <= b)
+            -- and after that also of (a <= b)
+            addConstraintNoMessage (Solvable (IsJuliaEqual (x, y)))
 
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
@@ -371,8 +386,8 @@ testSubtyping_ContractEdge = do
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
 
     it "does contract diamond even if lower/upper end are bound from below/above" $ do
-      let int = NoFun (Numeric (Num DMInt NonConst))
-          real = NoFun (Numeric (Num DMReal NonConst))
+      let int = NoFun (Numeric (Num (IRNum DMInt) NonConst))
+          real = NoFun (Numeric (Num (IRNum DMReal) NonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
@@ -393,13 +408,13 @@ testSubtyping_ContractEdge = do
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d, isGood a)
-            where isGood (NoFun (Numeric (Num (TVar x) NonConst))) = True
+            where isGood (NoFun (Numeric (Num (IRNum (TVar x)) NonConst))) = True
                   isGood _ = False
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True,True))
 
     it "does NOT contract diamond if inner vertices end are bound from outside" $ do
-      let int = NoFun (Numeric (Num DMInt NonConst))
-          real = NoFun (Numeric (Num DMReal NonConst))
+      let int = NoFun (Numeric (Num (IRNum DMInt) NonConst))
+          real = NoFun (Numeric (Num (IRNum DMReal) NonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
@@ -415,20 +430,21 @@ testSubtyping_ContractEdge = do
             (d ≤! b) ()
 
 
-            -- the additional constraint
-            x <- newVar
-            (x ≤! a) ()
+            -- the additional constraints on `a` and `b`
+            x :: DMMain <- newVar
+            addConstraintNoMessage (Solvable (IsNonConst (a, x))) 
+            addConstraintNoMessage (Solvable (IsNonConst (b, x))) 
 
             return (d,a,b,c)
       let checkres (d,a,b,c) | let f = [a,b,c,d]
                                    ix = [0,1,2,3]
                                in and [(f !! i /= f !! j) | i <- ix, j <- ix, i /= j] = Right ()
           checkres x = Left x
-      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
+      (tcl $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
 
     it "does NOT contract diamond if any vertices appear in other constraints" $ do
-      let int = NoFun (Numeric (Num DMInt NonConst))
-          real = NoFun (Numeric (Num DMReal NonConst))
+      let int = NoFun (Numeric (Num (IRNum DMInt) NonConst))
+          real = NoFun (Numeric (Num (IRNum DMReal) NonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
