@@ -1,22 +1,25 @@
-# Verified Differential Privacy for Julia
+
 [![Build Status](https://travis-ci.com/DiffMu/DiffPrivacyInference.jl.svg?branch=main)](https://travis-ci.com/DiffMu/DiffPrivacyInference.jl)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://DiffMu.github.io/DiffPrivacyInference.jl/dev)
 
-The goal of this project is to create a type checker which can automatically analyze [Julia](https://julialang.org/) programs with respect to [differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) guarantees.
- 
-This is a work in progress. We are implementing a type inference algorithm for Julia code based on the [Duet type system](https://arxiv.org/abs/1909.02481) and the corresponding [haskell implementation](https://github.com/uvm-plaid/duet).
+The goal of this project is to create a type checker which can automatically analyze [Julia](https://julialang.org/) programs for [(ε, δ)-differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) guarantees.
 
-Currently, we can do the following:
-- Parse a subset of Julia code into a representation suitable for type checking. We support arithmetics on Real, Integer and Matrix types, conditionals, procedural variable and function declarations, loops over integer ranges, tuples, limited indexing of Vectors and Matrices, limited use of mutable data structures, and multiple dispatch. We also support a very limited usage of constructs from the [Flux.jl](https://github.com/FluxML/Flux.jl) machine learning framework and provide a way to still use functions whose privacy guarantees we are not able to infer.
-- Infer the [sensitivity](https://en.wikipedia.org/wiki/Differential_privacy#Sensitivity) or [(ε, δ)-differential privacy](https://arxiv.org/abs/1203.3453) w.r.t. the inputs of the functions in the parsing results.
+This software is capable of inferring the ε and δ parameters of (ε, δ)-differentially private programs written in julia, as long as they use only [supported syntax](https://diffmu.github.io/DiffPrivacyInference.jl/dev/full_reference/syntax/) and our builtin [primitive privacy mechanisms](https://diffmu.github.io/DiffPrivacyInference.jl/dev/tutorial/02_privacy_functions/). Its main purpose is enabling the implementaion of novel private mechanisms, using primitives whose privacy guarantees are known from literature, without having to make manual proofs about their properties.
 
-We are currently working on providing more convenient user experience and documentation.
+We provide a verifiable implementation of [Differentially Private Stochastic Gradient Descent](https://arxiv.org/abs/1607.00133) using the [Flux.jl](https://github.com/FluxML/Flux.jl) machine learning framework. Head to the [tutorial](https://diffmu.github.io/DiffPrivacyInference.jl/dev/tutorial/03_flux_dp/) for a walkthrough, and check out the [code](https://github.com/DiffMu/DiffPrivacyInference.jl/tree/main/example/flux_dp)!
+
+Our type inference algorithm for Julia code is based on the [Duet type system](https://arxiv.org/abs/1909.02481) and the corresponding [haskell implementation](https://github.com/uvm-plaid/duet).
+
+If you have any questions, feel free to get in touch :)
 
 ## Installation
 
-We have moved most of the typecheker implementation to haskell, callable from the `julia` REPL via an FFI. For now, please head to the repository of the [haskell part of the project](https://github.com/DiffMu/DiffPrivacyInferenceHs) for installation instructions of the current development state. Once the typechecker is in a usable state, we will provide a simple installation procedure using the `julia` package manager.
+To use this package, you will need to have [the Haskell Tool Stack](https://docs.haskellstack.org/en/stable/README/#how-to-install) installed on your system, as the main part of the typechecker is implemented in haskell. Once this is done, install the julia package from the REPL:
+```julia
+] add https://github.com/DiffMu/DiffPrivacyInference.jl
+```
 
-
+To install from source, head to the [installation instructions](https://diffmu.github.io/DiffPrivacyInference.jl/dev/getting_started/installation/) in our documentation.
 
 ## Getting started
 
