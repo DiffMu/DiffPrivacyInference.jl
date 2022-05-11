@@ -172,8 +172,7 @@ MetricVector(T, L::Norm) = Vector{<:T}
     MetricGradient(T, N<:Norm)
 
 Annotate gradients with the desired metric you want them to be measured in by the typechecker.
-Just maps to DMGrads, so you cannot dispatch on it.
-See the documentation on [measuring distance](@ref) for more info.
+Just maps to DMGrads, so you cannot dispatch on it. See the documentation on [measuring distance](@ref) for more info.
 
 # Examples
 A function with a gradient argument with specified metric and unspecified output metric:
@@ -260,9 +259,49 @@ clone(g::DMGrads) :: DMGrads = DMGrads(Zygote.Grads(IdDict(g.grads.grads), g.gra
 clone(g::AbstractVecOrMat) = deepcopy(g)
 
 
+
+"""
+    unbox(x, T)
+
+Annotate a value that results from a call to a [black box function](@ref black-boxes)
+with the return container type `T`. Every call to black box functions needs to be
+wrapped in an `unbox` statement. If the returned type does not match the annotation,
+a runtime error will be raised.
+
+# Examples
+```julia
+loss(X, y) :: BlackBox(Real) = Flux.crossentropy(X, y)
+function compute_loss(X,y)
+   l = unbox(loss(X,y), Real)
+   l
+end
+```
+"""
+unbox(x, t) = error("Cannot unbox value of type $t, please consult the documentation of black box functions for help.")
 unbox(x::T where T<:Real, ::Type{Real}) = !(x isa Integer) ? x : error("Unbox encountered Integer where Real was expected.")
 unbox(x::T where T<:Integer, ::Type{Integer}) = x
-unbox(x::DMModel, ::Type{DMModel}, l) = unbox_size(x, (l,)) 
+
+"""
+    unbox(x, T, s)
+
+Annotate a value that results from a call to a [black box function](@ref black-boxes)
+with the return container type `T` and size `s`. Every call to black box functions needs to be
+wrapped in an `unbox` statement. If the returned type does not match the annotation,
+a runtime error will be raised.
+
+# Examples
+```julia
+product(x, y) :: BlackBox() = x * y'
+function compute_product(x,y)
+   dx = length(x)
+   dy = length(y)
+   l = unbox(product(x,y), Matrix{<:Real}, (dx,dy))
+   l
+end
+```
+"""
+unbox(x, t, s) = error("Cannot unbox value of type $t, please consult the documentation of black box functions for help.")
+unbox(x::DMModel, ::Type{DMModel}, l) = unbox_size(x, (l,))
 unbox(x::DMGrads, ::Type{DMGrads}, l) = unbox_size(x, (l,))
 unbox(x::T where T<:Vector{<:Real}, ::Type{Vector{<:Real}}, l) = !(x isa Vector{<:Integer}) ? unbox_size(x,(l,)) : error("Unbox encountered Integer vector where Real vector was expected.")
 unbox(x::T where T<:Vector{<:Integer}, ::Type{Vector{<:Integer}}, l) = unbox_size(x,(l,))
@@ -280,6 +319,18 @@ Make a clipped vector/gradient measured using the discrete metric into a vector/
 clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
 obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
 mechanism (which expects the input to be in L2-norm land).
+See the documentation on [measuring distance](@ref) for more info.
+
+# Example
+Clip and noise a gradient, mutating the input.
+```julia
+function noise_grad!(g::MetricGradient(Data, LInf), eps, del) :: Priv()
+    clip!(L2,g)
+    undisc_container!(g)
+    gaussian_mechanism!(2, eps, del, g)
+    return
+end
+```
 """
 undisc_container!(m) = m
 
@@ -291,19 +342,34 @@ Make a clipped vector/gradient measured using the discrete norm into a vector/gr
 clipping norm instead. Does not change the value of the argument. It can be used to enable using a gradient
 obtained from a black box computation (hence being in discrete-norm land) to be put into e.g. the gaussian
 mechanism (which expects the input to be in L2-norm land).
+See the documentation on [measuring distance](@ref) for more info.
+
+# Example
+Clip and noise a gradient, not mutating the input.
+```julia
+function noise_grad(g::MetricGradient(Data, LInf), eps, del) :: Priv()
+      cg = clip(L2,g)
+      ug = undisc_container(cg)
+      gaussian_mechanism(2, eps, del, ug)
+end
+```
 """
 undisc_container(m) = clone(m)
 
 
 """
     discrete(n::Real) :: Data
+
 Return `n`, but let the typechecker know that you want it to be measured in the discrete metric.
+See the documentation on [measuring distance](@ref) for more info.
 """
 discrete(n::Real) = float(n)
 
 """
     undisc(n::Data) :: Real
+
 Return `n`, but let the typechecker know that you want it to be measured in the standard real metric.
+See the documentation on [measuring distance](@ref) for more info.
 """
 undisc(n::Data) = float(n)
 
@@ -312,6 +378,7 @@ undisc(n::Data) = float(n)
     norm_convert!(n::Norm, m)
 
 Tell the typechecker to measure a matrix with a different norm `n`.
+See the documentation on [measuring distance](@ref) for more info.
 """
 norm_convert!(n::Norm,m) = m
 
@@ -320,6 +387,7 @@ norm_convert!(n::Norm,m) = m
     norm_convert(n::Norm, m)
 
 Return a copy of `m`, but tell the typechecker to measure a matrix with a different norm `n`.
+See the documentation on [measuring distance](@ref) for more info.
 """
 norm_convert(n::Norm,m) = clone(m)
 
@@ -370,6 +438,17 @@ The implementation follows the 2021 paper `Secure Random Sampling in Differentia
 NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
 but not all the known ones.
 
+# Example
+Clip and noise a gradient, not mutating the input.
+```julia
+function noise_grad(g::MetricGradient(Data, LInf), eps, del) :: Priv()
+      cg = clip(L2,g)
+      ug = undisc_container(cg)
+      gaussian_mechanism(2, eps, del, ug)
+end
+```
+See the [flux-dp example](@ref fluxdp) for a full-blown implementation of private gradient
+descent using this mechanism.
 """
 gaussian_mechanism(s::Real, ϵ::Real, δ::Real, cf) = additive_noise(SecureGaussSampler(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
 
@@ -386,6 +465,18 @@ The implementation follows the 2021 paper `Secure Random Sampling in Differentia
 NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
 but not all the known ones.
 
+# Example
+Clip and noise a gradient, mutating the input.
+```julia
+function noise_grad!(g::MetricGradient(Data, LInf), eps, del) :: Priv()
+    clip!(L2,g)
+    undisc_container!(g)
+    gaussian_mechanism!(2, eps, del, g)
+    return
+end
+```
+See the [flux-dp example](@ref fluxdp) for a full-blown implementation of private gradient
+descent using this mechanism.
 """
 function gaussian_mechanism!(s::Real, ϵ::Real, δ::Real, cf::DMGrads) :: Nothing
    additive_noise!(SecureGaussSampler(0, (2 * log(1.25/0.1) * 2/500^2) / 0.1^2), cf)
@@ -405,6 +496,16 @@ The implementation follows the 2021 paper `Secure Random Sampling in Differentia
 NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
 but not all the known ones.
 
+
+# Example
+Clip and noise a matrix, not mutating the input.
+```julia
+function noise_grad!(g::MetricMatrix(Data, LInf), eps) :: Priv()
+    cg = clip(L2,g)
+    ug = undisc_container(cg)
+    laplacian_mechanism(2, eps, ug)
+end
+```
 """
 laplacian_mechanism(s::Real, ϵ::Real, cf) = additive_noise(SecureLaplaceSampler(0, s / ϵ), cf)
 
@@ -421,6 +522,16 @@ The implementation follows the 2021 paper `Secure Random Sampling in Differentia
 NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vulnerabilities,
 but not all the known ones.
 
+# Example
+Clip and noise a matrix, mutating the input.
+```julia
+function noise_grad!(g::MetricMatrix(Data, LInf), eps) :: Priv()
+    clip!(L2,g)
+    undisc_container!(g)
+    laplacian_mechanism!(2, eps, g)
+    return
+end
+```
 """
 function laplacian_mechanism!(s::Real, ϵ::Real, cf :: DMGrads) :: Nothing
    additive_noise!(SecureLaplaceSampler(0, s / ϵ), cf)
