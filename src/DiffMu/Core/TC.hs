@@ -3,78 +3,38 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 
+{- |
+Description: Definition of the TC monad in which typechecking happens.
+
+Defines the TC monad, ie.:
+ - all class instances for Types, Sensitivity, Privacy terms.
+ - all substitution, normalization, constraints, logging functionality for TC
+-}
 module DiffMu.Core.TC where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 import {-# SOURCE #-} DiffMu.Core.Unification
+import DiffMu.Typecheck.Constraint.Definitions
 
+import Data.List (partition)
 import qualified Data.HashMap.Strict as H
 import qualified Prelude as P
+import qualified Data.Text as T
 
 import Debug.Trace
 import DiffMu.Core.Symbolic (normalizeSensSpecial)
 
 default (Text)
 
---------------------------------------------------------------------------------
--- TC.hs
---
--- | Defines the TC monad, ie.:
--- | - all class instances for Types, Sensitivity, Privacy terms.
--- | - all substitution, normalization, constraints, logging functionality for TC
--- 
---------------------------------------------------------------------------------
 
-
-
-
-
-
--- Helper function for using a monadic function to update the state of a "by a lens accessible"
--- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
--- This might be because using it is not always well behaved, the following note applies.
---
--- NOTE: Warning, this function destroys information if the function `f` which does the update
--- has monadic effects in m which affect the part of the state which is accessed by the lens.
-(%=~) :: MonadState s m => (forall f. Functor f => LensLike f s s a a) -> (a -> m a) -> m ()
-(%=~) lens f = do
-  curVal <- use lens
-  newVal <- f curVal
-  lens .= newVal
-  return ()
-
-infixr 4 %=~
-
-inftyS :: Sensitivity
-inftyS = constCoeff Infty
-
-inftyP :: Privacy
-inftyP = (constCoeff Infty, constCoeff Infty)
-
-instance (Substitute v x a, Substitute v x b, Substitute v x c, Substitute v x d, Substitute v x e) => Substitute v x (a, b, c, d, e) where
-  substitute σs (a, b, c, d, e) = (,,,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c <*> substitute σs d <*> substitute σs e
-
-instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v x (a, b, c) where
-  substitute σs (a, b, c) = (,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c
-
-instance (Substitute v x a, Substitute v x b) => Substitute v x (a :@ b) where
-  substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
-
-instance (Substitute v x a, Substitute v x b) => Substitute v x (a :=: b) where
-  substitute σs (a :=: b) = (:=:) <$> substitute σs a <*> substitute σs b
-
-instance Substitute v x a => Substitute v x [a] where
-  substitute σs xs = mapM (substitute σs) xs
-
-instance Substitute v x a => Substitute v x (Maybe a) where
-  substitute σs (Just a) = Just <$> substitute σs a
-  substitute σs (Nothing) = pure Nothing
+--------------------------------------------------------------------------------------------------
+-- Substitution
+--------------------------------------------------------------------------------------------------
 
 instance Substitute TVarOf DMTypeOf Int where
   substitute σs jt = pure jt
@@ -111,17 +71,18 @@ instance Substitute TVarOf DMTypeOf (Annotation a) where
 instance Substitute TVarOf DMTypeOf (AnnotationKind) where
   substitute σs = pure
 
-  
-removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
-removeVars σs vs = do
-  let f :: SomeK (TVarOf) -> t (Maybe (SomeK TVarOf))
-      f (SomeK var) = do
-        replacement <- σs var
-        case (replacement) of
-          TVar rep | rep == var -> return (Just (SomeK var))
-          _ -> return Nothing
-  newvs <- mapM f vs
-  return [v | (Just v) <- newvs]
+instance Substitute SVarOf SensitivityOf Text where
+  substitute _ x = pure x
+
+instance Substitute TVarOf DMTypeOf Text where
+  substitute _ x = pure x
+
+instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
+  substitute (σs :: forall k. (IsKind k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
+    where f :: (IsKind l) => SymVar l -> t (SensitivityOf l)
+          f (HonestVar a) = σs (a)
+          -- f (Id a) = pure (coerce a)
+          f b = pure $ var (b)
 
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs DMAny = pure DMAny
@@ -137,6 +98,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs DMData = pure DMData
+  substitute σs (IRNum τ) = IRNum <$> substitute σs τ
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c
@@ -172,6 +134,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs (DMData) = pure DMData
+  substitute σs (IRNum τ) = IRNum <$> substitute σs τ
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c
@@ -189,15 +152,26 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (BlackBox n) = pure (BlackBox n)
 
 
-instance Term TVarOf DMTypeOf where
-  var x = TVar x
-  isVar (TVar x) = Just x
-  isVar _        = Nothing
+
+
+--------------------------------------------------------------------------------------------------
+-- Free variables
+--------------------------------------------------------------------------------------------------
+
+
+instance FreeVars TVarOf Int where
+  freeVars _ = mempty
+
+instance FreeVars TVarOf (Solvable (GoodConstraint) (GoodConstraintContent) MonadDMTC) where
+  freeVars (Solvable (c :: c a)) = freeVars @_ @TVarOf (runConstr c)
 
 instance DMExtra a => FreeVars TVarOf (WithRelev a) where
   freeVars (WithRelev _ a) = freeVars a
 
 instance FreeVars TVarOf Symbol where
+   freeVars a = []
+
+instance FreeVars TVarOf IxSymbol where
    freeVars a = []
 
 instance FreeVars TVarOf TeVar where
@@ -247,6 +221,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars Gradient = []
   freeVars (Matrix τ) = freeVars τ
   freeVars (Clip τ) = freeVars τ
+  freeVars (IRNum τ) = freeVars τ
   freeVars (Numeric τ) = freeVars τ
   freeVars (Const t) = freeVars t
   freeVars (NonConst) = []
@@ -275,61 +250,11 @@ instance Substitute SVarOf SensitivityOf SolvingMode where
 instance Substitute TVarOf DMTypeOf SolvingMode where
   substitute _ x = pure x
 
--- Given a list of "multi substitutions", i.e. substitutions of the form
--- [a := ListK [a1, a2, a3], b := ListK [b1, b2, b3], ...] and type τ,
--- it returns (Just [τ1, τ2, τ3]) where
---   τ1 = τ[a := a1, b := b1, ...]
---   τ2 = τ[a := a2, b := b2, ...]
--- And it returns Nothing if none of the substitutions could be applied.
---
--- NOTE: The given lists of replacements must all have the same length,
---       otherwise an error will be thrown.
-duplicateTerm :: forall a v x t. (MonadInternalError t, MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, KHashable v, KShow a, KShow v) => [SomeK (Sub v (ListK a))] -> x -> t (Maybe [x])
-duplicateTerm subs τ = do
-  let vars = [SomeK v | (SomeK (v := _)) <- subs]
-  -- first we check if the term we want to duplicate actually contains any
-  -- of the variables which we duplicate
-  let (free :: [SomeK (VarFam a)]) = freeVars τ
-  let noVarInFree = length (vars `intersect` free) == 0
+instance FreeVars TVarOf Text where
+  freeVars _ = []
 
-  case noVarInFree of
-    -- if it does not contain variables to duplicate we simply return it
-    True -> return Nothing
-
-    -- else we replace the given variables by new ones
-    False -> do
-      -- `f` takes a term x and replaces all occurences of `vars` by the i'th substitutions
-      let f :: x -> Int -> t x
-          f t i = do
-            -- we extract the i'th substitutions from subs
-            let varSubs = [(SomeK v , SomeK (xs !! i)) | SomeK (v := ListK xs) <- subs]
-            -- we have to wrap this list of substitutions into a `Subs` container, since this is
-            -- the format which is expected by the `↷` function which executes the actual substitution
-            let varSubs' = Subs (H.fromList varSubs)
-            varSubs' ↷ t
-
-      -- we get the length of the substitions
-      let sub_lengths = [length xs | SomeK (_ := ListK xs) <- subs]
-      case sub_lengths of
-        [] -> return Nothing
-        (n:ns) -> case and ((== n) <$> ns) of
-          False -> internalError $ "Encountered a 'duplication substitution' whose entries had different lengths:\n" <> show subs
-          True -> do
-            -- we execute the function f on τ, while taking the subs number {0, ..., n-1}
-            τs <- mapM (f τ) [0..n-1]
-            return (Just τs)
-
-
-instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
-  substitute (σs :: forall k. (IsKind k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
-    where f :: (IsKind l) => SymVar l -> t (SensitivityOf l)
-          f (HonestVar a) = σs (a)
-          -- f (Id a) = pure (coerce a)
-          f b = pure $ var (b)
-
-instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
-  substitute σs (x,y) = (,) <$> substitute σs x <*> substitute σs y
-
+instance FreeVars SVarOf Text where
+  freeVars _ = []
 
 
 instance FreeVars SVarOf (SymVal) where
@@ -358,6 +283,19 @@ instance Typeable k => FreeVars SVarOf (SensitivityOf k) where
       g (x, _) = freeVars x
 
 
+
+--------------------------------------------------------------------------------------------------
+-- term instances
+--------------------------------------------------------------------------------------------------
+
+type TSubs = Subs DMTypeOf
+type SSubs = Subs SensitivityOf
+
+instance Term TVarOf DMTypeOf where
+  var x = TVar x
+  isVar (TVar x) = Just x
+  isVar _        = Nothing
+
 -- TODO: implement isVar and freeVars
 instance Term SVarOf SensitivityOf where
   var (v) = var (HonestVar v)
@@ -365,18 +303,37 @@ instance Term SVarOf SensitivityOf where
     Just (HonestVar v) -> Just v
     _ -> Nothing
 
-type TSubs = Subs DMTypeOf
-type SSubs = Subs SensitivityOf
+--------------------------------------------------------------------------------------------------
+-- variable helper functions
+--------------------------------------------------------------------------------------------------
+  
+removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
+removeVars σs vs = do
+  let f :: SomeK (TVarOf) -> t (Maybe (SomeK TVarOf))
+      f (SomeK var) = do
+        replacement <- σs var
+        case (replacement) of
+          TVar rep | rep == var -> return (Just (SomeK var))
+          _ -> return Nothing
+  newvs <- mapM f vs
+  return [v | (Just v) <- newvs]
+
+
+filterWithSomeVars :: FreeVars TVarOf x => [SomeK TVarOf] -> [x] -> [x]
+filterWithSomeVars wanted ctrs =
+  let f x = freeVars @_ @TVarOf x
+  in [x | x <- ctrs , length (intersect (f x) wanted) > 0]
 
 
 
 
 
+--------------------------------------------------------------------------------------------------
+-- main MonadDMTC class
+--------------------------------------------------------------------------------------------------
 
-
-
-class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
-instance (FixedVars TVarOf x) => GoodConstraint x where
+class GoodConstraint (x :: *) where
+instance GoodConstraint x where
 
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
@@ -389,8 +346,6 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadDMError (WithContext DMException) (t),
        MonadInternalError t,
        MonadUnificationError t,
-       -- MonadConstraint' Symbol (TC) (t),
-       -- MonadConstraint Symbol (MonadDMTC) (t),
        MonadConstraint (MonadDMTC) (t),
        MonadNormalize t,
        ContentConstraintOnSolvable t ~ GoodConstraintContent,
@@ -398,42 +353,46 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        LiftTC t
       ) => MonadDMTC (t :: * -> *) where
 
-data Tag = DM
 
 
-data AnnNameCtx ks = AnnNameCtx
-  {
-    _annnames :: NameCtx,
-    _anncontent :: ks
-  }
-  deriving (Generic, Functor)
--- data DMSolvable where
---   DMSolvable :: (forall e t. MonadDMTC t => Solve (t) c a) => c a -> DMSolvable
 
--- instance Show DMSolvable where
---   show a = "some constraint"
+--------------------------------------------------------------------------------------------------
+-- Watched (change tracking system)
+--------------------------------------------------------------------------------------------------
 
--- instance MonadDMTC t => Normalize (t) DMSolvable where
---   -- normalize (DMSolvable c) = DMSolvable <$> normalize c
+---------
+-- normalization levels
+--
+-- the system tracks for which solving modes the content is already normal,
+-- such that normalization for that mode does not have to be executed again.
 
 data NormalizationLevel = NormalForMode [SolvingMode]
--- SolvingMode | NotNormal
   deriving (Eq)
-
-data Watched a = Watched NormalizationLevel a
 
 -- this is the action of Changed on NormalizationLevel
 updateNormalizationLevel :: Changed -> NormalizationLevel -> NormalizationLevel
 updateNormalizationLevel NotChanged a = a
 updateNormalizationLevel IsChanged _ = NormalForMode []
 
+instance Semigroup NormalizationLevel where
+  NormalForMode a <> NormalForMode b = NormalForMode (a `intersect` b)
+
+---------
+-- definition of `Watched`
+
+data Watched a = Watched NormalizationLevel a
+
+---------
+-- instances
+
 instance Show a => Show (Watched a) where
-  -- show (Watched NotNormal a) = "*" <> show a
   show (Watched (NormalForMode m) a) = show m <> " " <> show a
 
 instance ShowPretty a => ShowPretty (Watched a) where
-  -- show (Watched NotNormal a) = "*" <> show a
   showPretty (Watched (NormalForMode m) a) = showPretty a
+
+instance ShowLocated a => ShowLocated (Watched a) where
+  showLocated (Watched (NormalForMode m) a) = showLocated a
 
 instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
   normalize nt (Watched c a) =
@@ -442,12 +401,39 @@ instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
        newc <- getChanged
        return (Watched (updateNormalizationLevel newc c) a')
 
+instance (SemigroupM t a) => SemigroupM t (Watched a) where
+  (⋆) (Watched x a) (Watched y b) = Watched (x <> y) <$> a ⋆ b
+
+instance (MonoidM t a) => MonoidM t (Watched a) where
+  neutral = Watched (NormalForMode [SolveExact , SolveAssumeWorst , SolveGlobal]) <$> neutral
+
+instance (CheckNeutral t a) => CheckNeutral t (Watched a) where
+  checkNeutral a = pure False
+
+
+--------------------------------------------------------------------------------------------------
+-- Constraints with message
+--------------------------------------------------------------------------------------------------
+
+instance Monad t => (SemigroupM t (Solvable eC eC2 a)) where
+  (⋆) (Solvable a) (Solvable b) = error "Trying to combine two constraints with the same name."
+instance Monad t => (MonoidM t (Solvable eC eC2 a)) where
+  neutral = error "Trying to get neutral of solvable"
+instance Monad t => (CheckNeutral t (Solvable eC eC2 a)) where
+  checkNeutral a = pure False
+
 data ConstraintWithMessage m = ConstraintWithMessage (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) m
   deriving (Functor,Show)
 
 instance ShowPretty m => ShowPretty (ConstraintWithMessage m) where
   showPretty (ConstraintWithMessage c m) = showPretty c <> "\n"
                                           <> indent (showPretty m)
+
+instance ShowLocated m => ShowLocated (ConstraintWithMessage m) where
+  showLocated (ConstraintWithMessage c m) = do
+    c' <- showLocated c
+    m' <- (showLocated m)
+    return $ c' <> "\n" <> indent m'
 
 instance (MonadDMTC t, Normalize t m) => Normalize t (ConstraintWithMessage m) where
   normalize e (ConstraintWithMessage x m) = ConstraintWithMessage <$> (normalize e x) <*> normalize e m
@@ -466,6 +452,10 @@ instance (CheckNeutral t m) => CheckNeutral t (ConstraintWithMessage m) where
     return (and [nx , nm])
 
 
+--------------------------------------------------------------------------------------------------
+-- Constraint context
+--------------------------------------------------------------------------------------------------
+
 data CtxStack v a = CtxStack
   {
     _topctx :: Ctx v a,
@@ -473,7 +463,16 @@ data CtxStack v a = CtxStack
   }
 deriving instance Functor (CtxStack v)
 
-type ConstraintCtx m = AnnNameCtx (CtxStack Symbol (ConstraintWithMessage m))
+getValueCtxStack :: DictKey v => v -> CtxStack v a -> Maybe a
+getValueCtxStack v (CtxStack top others) = f v (top:others)
+  where
+    f :: DictKey v => v -> [Ctx v a] -> Maybe a 
+    f v [] = Nothing
+    f v (x:xs) = case getValue v x of
+                  Just a -> Just a
+                  Nothing -> f v xs
+
+type ConstraintCtx m = AnnNameCtx (CtxStack IxSymbol (ConstraintWithMessage m))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
@@ -495,10 +494,25 @@ instance (Show v, Show a, DictKey v) => Show (CtxStack v a) where
 
 
 instance (ShowPretty v, ShowPretty a, DictKey v) => ShowPretty (CtxStack v a) where
-      showPretty (CtxStack top other) = "   - top:\n" <> showPretty top <> "\n"
-                              <> "   - others:\n" <> showPretty other
+      showPretty (CtxStack top other) = showPretty top <> showPretty other
 
--- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
+
+instance (ShowLocated v, ShowLocated a, DictKey v) => ShowLocated (CtxStack v a) where
+      showLocated (CtxStack top other) = do
+        top' <- showLocated top
+        other' <- showLocated other
+        return $ top' <> other'
+
+--------------------------------------------------------------------------------------------------
+-- annotated name context
+--------------------------------------------------------------------------------------------------
+
+data AnnNameCtx ks = AnnNameCtx
+  {
+    _annnames :: NameCtx,
+    _anncontent :: ks
+  }
+  deriving (Generic, Functor)
 
 instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
   normalize nt (AnnNameCtx names ks) =
@@ -513,35 +527,25 @@ instance Show ks => Show (AnnNameCtx ks) where
 instance ShowPretty ks => ShowPretty (AnnNameCtx ks) where
   showPretty (AnnNameCtx _ kinds) = showPretty kinds
 
+
+instance ShowLocated ks => ShowLocated (AnnNameCtx ks) where
+  showLocated (AnnNameCtx _ kinds) = showLocated kinds
+
 instance Default ks => Default (AnnNameCtx ks)
 
-newAnnName :: DictLike Symbol k ks => Text -> k -> AnnNameCtx ks -> (Symbol, AnnNameCtx ks)
-newAnnName hint k (AnnNameCtx names kinds) =
-  let (name, names') = newName hint names
+newAnnName :: DictLike IxSymbol k ks => NamePriority -> Text -> k -> AnnNameCtx ks -> (IxSymbol, AnnNameCtx ks)
+newAnnName np hint k (AnnNameCtx names kinds) =
+  let (name, names') = newName np hint names
       kinds' = setValue name k kinds
   in (name, AnnNameCtx names' kinds')
 
--- data Meta0Ctx extra = Meta0Ctx
---   {
---     _sensSubs :: Subs SVar Sensitivity,
---     _typeSubs :: Subs TVar DMType,
---     _constraints :: ConstraintCtx, -- MonCom (Solvable'' TCT) Symbol,
---   }
---   deriving (Generic)
 
--- data Watching = IsWatching | NotWatching
---   deriving (Show)
-
--- instance Default Watching where
---   def = NotWatching
+--------------------------------------------------------------------------------------------------
+-- Casting between privacy and sensitivity contexts
+--------------------------------------------------------------------------------------------------
 
 class Cast a b where
   cast :: MonadDMTC t => a -> t b
-
--- type DMExtra = Cast (Either Sensitivity Privacy)
-
--- class DMExtra e where
---   castExtra :: MonadDMTC t => Either Sensitivity Privacy -> t e
 
 instance Cast (Either Sensitivity Privacy) Sensitivity where
   cast (Left e) = return e
@@ -566,8 +570,8 @@ instance Typeable x => Cast (Either (Annotation SensitivityK) (Annotation Privac
       _    -> impossible "Found an AnnotatedKind which was neither SensitivityK nor PrivacyK."
 
 instance Typeable x => Cast (Either (WithRelev SensitivityK) (WithRelev PrivacyK)) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @ (Either (DMTypeOf MainKind :@ Annotation SensitivityK) (DMTypeOf MainKind :@ Annotation PrivacyK)) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf MainKind :@ Annotation SensitivityK) (DMTypeOf MainKind :@ Annotation PrivacyK))  (Right x)
+  cast (Left (WithRelev i x))  = WithRelev i <$> cast @(Either (DMTypeOf MainKind :@ Annotation SensitivityK) (DMTypeOf MainKind :@ Annotation PrivacyK)) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf MainKind :@ Annotation SensitivityK) (DMTypeOf MainKind :@ Annotation PrivacyK)) (Right x)
 
 
 
@@ -580,37 +584,69 @@ instance (Cast a b) => Cast (Maybe a) (Maybe b) where
   cast (Just a) = Just <$> cast a
 
 
-instance (MonadDMTC t) => Normalize t (WithRelev e) where
-  normalize nt (WithRelev i x) = WithRelev i <$> normalize nt x
-
-instance Monad t => Normalize t (TeVar) where
-  normalize nt v = pure v
-
-
-
-type TypeCtx extra = Ctx TeVar (WithRelev extra)
-type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
-
+--------------------------------------------------------------------------------------------------
+-- solving events
+--------------------------------------------------------------------------------------------------
 
 data SolvingEvent =
-  Event_ConstraintDischarged Symbol
-  | Event_ConstraintUpdated Symbol String
-  | Event_ConstraintCreated Symbol String
+  Event_ConstraintDischarged IxSymbol
+  | Event_ConstraintMarkedFailed IxSymbol
+  | Event_ConstraintUpdated IxSymbol String
+  | Event_ConstraintCreated IxSymbol String
   | Event_SubstitutionAdded String
   | Event_ConstraintSetCreated
-  | Event_ConstraintSetMerged [Symbol]
+  | Event_ConstraintSetMerged [IxSymbol]
 
 instance Show SolvingEvent where
   show (Event_ConstraintCreated name constr) = "CREATE " <> show name <> " : " <> constr
   show (Event_ConstraintUpdated name constr) = "UPDATE " <> show name <> " : " <> constr
   show (Event_ConstraintDischarged name)     = "DISCHARGE " <> show name
+  show (Event_ConstraintMarkedFailed name)   = "MARK FAIL " <> show name
   show (Event_SubstitutionAdded sub)         = "SUB " <> sub
   show (Event_ConstraintSetCreated)          = "CREATE CONSTR_SET"
-  show (Event_ConstraintSetMerged constrs)    = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
+  show (Event_ConstraintSetMerged constrs)   = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
 
 
-data Watcher = Watcher Changed
-  deriving (Generic)
+
+--------------------------------------------------------------------------------------------------
+-- User-choosable variables
+--------------------------------------------------------------------------------------------------
+
+newtype UserVars = UserVars [(Sensitivity, Text, JuliaType, SourceLocExt)]
+
+instance Default UserVars where
+    def = UserVars []
+
+instance MonadDMTC t => Normalize t UserVars where
+    normalize nt (UserVars vs) = UserVars <$> normalize nt vs
+
+instance ShowPretty UserVars where
+ showPretty (UserVars vs) = let
+        isNumber :: SymTerm MainSensKind -> Bool
+        isNumber a@(SingleKinded (LinCom (MonCom as))) = case H.toList as of
+           [(MonCom aterm, av)] -> case H.toList aterm of
+                                       [] -> True
+                                       _ -> False
+           [] -> True
+           _ -> False
+
+        showIfVar (name, cond, typ, loc) = case isNumber name of
+           True -> ""
+           False -> " - Variable " <> showPretty name <> " can be chosen with type " <> showPretty typ <> " to be " <> cond <> ". Appeared in the privacy loop in " <> showPretty loc <> "\n"
+    in case vs of
+         [] -> ""
+         vs -> let s = (foldl (<>) "" (map showIfVar vs)) in
+                   case s of
+                        "" -> ""
+                        s -> "where\n" <> s
+
+--------------------------------------------------------------------------------------------------
+-- The TCT monad transformer and TC monad
+--------------------------------------------------------------------------------------------------
+
+-----------------------
+-- Definition
+
 
 data MetaCtx m = MetaCtx
   {
@@ -620,20 +656,25 @@ data MetaCtx m = MetaCtx
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx m,
-    -- cached state
-    _fixedTVars :: Ctx (SingSomeK TVarOf) [Symbol]
+    _failedConstraints :: Ctx IxSymbol (ConstraintWithMessage m),
+    _userVars :: UserVars
   }
   deriving (Generic, Functor)
+
+data Watcher = Watcher Changed
+  deriving (Generic)
 
 data TCState m = TCState
   {
     _watcher :: Watcher,
     _logger :: DMLogger,
     _solvingEvents :: [SolvingEvent],
-    _persistingCounter :: Int,
-    _currentConstraintMessage :: Maybe m
+    _persistingCounter :: Int
   }
   deriving (Generic, Functor)
+
+type TypeCtx extra = Ctx TeVar (WithRelev extra)
+type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 data Full m = Full
   {
@@ -643,14 +684,16 @@ data Full m = Full
   }
   deriving (Generic, Functor)
 
-newtype TCT m a = TCT {runTCT :: ((StateT (Full (DMPersistentMessage (TCT m))) (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) (m)))) a)}
-  deriving (Functor, Applicative, Monad, MonadState (Full (DMPersistentMessage (TCT m))), MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)))
+newtype TCT m a = TCT {runTCT :: ((StateT (Full (DMPersistentMessage (TCT m))) (ExceptT (LocatedDMException (TCT m)) (ReaderT RawSource (WriterT (DMMessages (TCT m)) (m))))) a)}
+  deriving (Functor, Applicative, Monad, MonadState (Full (DMPersistentMessage (TCT m))), MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)), MonadReader RawSource)
 
 class LiftTC t where
   liftTC :: TC a -> t a
 
 type TC = TCT Identity
 
+-----------------------
+-- Lenses
 
 $(makeLenses ''AnnNameCtx)
 $(makeLenses ''CtxStack)
@@ -658,7 +701,117 @@ $(makeLenses ''MetaCtx)
 $(makeLenses ''Full)
 $(makeLenses ''TCState)
 
+-----------------------
+-- Defaults
 
+instance Default (CtxStack v a) where
+  def = CtxStack def []
+instance Default (Watcher) where
+instance Default (TCState m) where
+instance Default (MetaCtx m) where
+instance Default (Full m) where
+  def = Full def def (Left def)
+
+-----------------------
+-- Printing
+
+instance Show m => Show (MetaCtx m) where
+  show (MetaCtx s t n sσ tσ cs failedCs (UserVars uvs)) =
+       "- sens vars: " <> show s <> "\n"
+    <> "- type vars: " <> show t <> "\n"
+    <> "- name vars: " <> show n <> "\n"
+    <> "- sens subs:   " <> show sσ <> "\n"
+    <> "- type subs:   " <> show tσ <> "\n"
+    <> "- user-chosen vars: " <> show uvs <> "\n"
+    <> "- constraints:\n" <> show cs <> "\n"
+    <> "- failed constraints:\n" <> show failedCs <> "\n"
+
+instance ShowLocated m => ShowLocated (MetaCtx m) where
+  showLocated (MetaCtx s t n sσ tσ cs failedCs (UserVars uvs)) =
+    do lcs <- showLocated cs
+       lfailedCs <- showLocated failedCs
+       return $
+             "- sens vars: " <> T.pack (show s) <> "\n"
+          <> "- type vars: " <> T.pack (show t) <> "\n"
+          <> "- name vars: " <> T.pack (show n) <> "\n"
+          <> "- sens subs:   " <> T.pack (show sσ) <> "\n"
+          <> "- type subs:   " <> T.pack (show tσ) <> "\n"
+          <> "- user-chosen vars: " <> T.pack (show uvs) <> "\n"
+          <> "- constraints:\n" <> lcs <> "\n"
+          <> "- failed constraints:\n" <> lfailedCs <> "\n"
+
+instance Show Watcher where
+  show (Watcher changed) = show changed
+
+instance Show (TCState m) where
+  show (TCState w l _ _) = "- watcher: " <> show w <> "\n"
+                        <> "- messages: " <> show l <> "\n"
+
+instance Show m => Show (Full m) where
+  show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
+
+
+--------------------------------------------------------------------------------------------------
+-- TC usage helpers
+--------------------------------------------------------------------------------------------------
+
+
+----------
+-- user vars
+
+memorizeUserVar :: (MonadDMTC m) => Sensitivity -> Text -> JuliaType -> SourceLocExt -> m ()
+memorizeUserVar var bounds ty loc = do
+    UserVars ls <- use (meta.userVars)
+    meta.userVars .= UserVars ((var, bounds, ty, loc) : ls)
+
+
+----------
+-- constraint creation
+
+supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ShowPretty (a k),  ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
+supremum x y = do
+  (z :: a k) <- newVar
+  addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
+  return z
+
+supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ShowPretty (a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => IxSymbol -> (a k) -> (a k) -> t (a k)
+supremumFromName name x y = do
+  (z :: a k) <- newVar
+  addConstraintFromName name (Solvable (IsSupremum ((x, y) :=: z)))
+  return z
+
+infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ShowPretty (a k),  ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
+infimum x y = do
+  (z :: a k) <- newVar
+  addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))
+  return z
+
+----------
+-- variable creation
+
+newTVarWithPriority :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => NamePriority -> Text -> t (TVarOf k)
+newTVarWithPriority np hint = meta.typeVars %%= ((newKindedName np hint))
+
+newTVar :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => Text -> t (TVarOf k)
+newTVar = newTVarWithPriority GeneratedNamePriority 
+
+newSVarWithPriority :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => NamePriority -> Text -> t (SVarOf k)
+newSVarWithPriority np hint = meta.sensVars %%= (newKindedName np hint)
+
+newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
+newSVar = newSVarWithPriority GeneratedNamePriority
+
+newPVar = do
+   p1 :: Sensitivity <- svar <$> newSVarWithPriority UserNamePriority "ε"
+   p2 :: Sensitivity <- svar <$> newSVarWithPriority UserNamePriority "δ"
+   return (p1, p2)
+
+newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
+newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName GeneratedNamePriority hint))
+
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadLog
+--------------------------------------------------------------------------------------------------
 
 logForceStart :: MonadDMTC t => t ()
 logForceStart = do
@@ -679,27 +832,24 @@ dmWithLogLocation l action = do
   (tcstate.logger.loggerCurrentLocation) %= (\_ -> oldloc)
   return res
 
--- logForce = logWithSeverity Force
--- debug = logWithSeverity Debug
--- info = logWithSeverity Info
 
-logWithSeverity :: MonadDMTC t => DMLogSeverity -> String -> t ()
+logWithSeverity :: MonadDMTC t => DMLogSeverity -> Text -> t ()
 logWithSeverity sev text = do
   loc <- use (tcstate.logger.loggerCurrentLocation)
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  let messages = DMLogMessage sev loc <$> (reverse $ linesS text)
   -- traceM text -- force logging even if the computation des not terminate
   tell (DMMessages messages [])
   -- tcstate.logger.loggerMessages %= (messages <>)
 
-dmlog :: MonadDMTC t => String -> t ()
+dmlog :: MonadDMTC t => Text -> t ()
 dmlog text = do
   loc <- use (tcstate.logger.loggerCurrentLocation)
   sev <- use (tcstate.logger.loggerCurrentSeverity)
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  let messages = DMLogMessage sev loc <$> (reverse $ linesS text)
   -- traceM text -- force logging even if the computation des not terminate
   tell (DMMessages messages [])
   -- tcstate.logger.loggerMessages %= ( <>)
@@ -713,57 +863,9 @@ instance Monad m => MonadLog (TCT m) where
   withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
 
 
-
-instance Show m => Show (MetaCtx m) where
-  show (MetaCtx s t n sσ tσ cs fixedT) =
-       "- sens vars: " <> show s <> "\n"
-    <> "- type vars: " <> show t <> "\n"
-    <> "- name vars: " <> show n <> "\n"
-    <> "- sens subs:   " <> show sσ <> "\n"
-    <> "- type subs:   " <> show tσ <> "\n"
-    <> "- fixed TVars: " <> show fixedT <> "\n"
-    <> "- constraints:\n" <> show cs <> "\n"
-
-instance Show Watcher where
-  show (Watcher changed) = show changed
-
-instance Show (TCState m) where
-  show (TCState w l _ _ _) = "- watcher: " <> show w <> "\n"
-                         <> "- messages: " <> show l <> "\n"
-
-instance Show m => Show (Full m) where
-  show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
-
-
-instance Default (CtxStack v a) where
-  def = CtxStack def []
-instance Default (Watcher) where
-instance Default (TCState m) where
-instance Default (MetaCtx m) where
-instance Default (Full m) where
-  def = Full def def (Left def)
-
-
-
-instance Semigroup NormalizationLevel where
-  NormalForMode a <> NormalForMode b = NormalForMode (a `intersect` b)
-
-instance (SemigroupM t a) => SemigroupM t (Watched a) where
-  (⋆) (Watched x a) (Watched y b) = Watched (x <> y) <$> a ⋆ b
-
-instance (MonoidM t a) => MonoidM t (Watched a) where
-  neutral = Watched (NormalForMode [SolveExact , SolveAssumeWorst , SolveGlobal]) <$> neutral
-
-instance (CheckNeutral t a) => CheckNeutral t (Watched a) where
-  checkNeutral a = pure False
-
-instance Monad t => (SemigroupM t (Solvable eC eC2 a)) where
-  (⋆) (Solvable a) (Solvable b) = error "Trying to combine two constraints with the same name."
-instance Monad t => (MonoidM t (Solvable eC eC2 a)) where
-  neutral = error "Trying to get neutral of solvable"
-instance Monad t => (CheckNeutral t (Solvable eC eC2 a)) where
-  checkNeutral a = pure False
-
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadTerm
+--------------------------------------------------------------------------------------------------
 
 instance Monad m => MonadTerm DMTypeOf (TCT m) where
   type VarFam DMTypeOf = TVarOf
@@ -772,7 +874,7 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     σs <- use (meta.typeSubs)
     -- traceM ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     -- withLogLocation "Subst" $ debug ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
-    withLogLocation "Subst" $ debug ("Adding type subst: " <> show σ)
+    withLogLocation "Subst" $ debug ("Adding type subst: " <> T.pack (show σ))
     tcstate.solvingEvents %= (Event_SubstitutionAdded (show σ) :)
     -- logPrintConstraints
     σs' <- σs ⋆ singletonSub σ
@@ -780,15 +882,7 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     meta.typeSubs .= σs'
     meta.typeVars %= (removeNameBySubstitution σ)
 
-    -- remove fixed var
-    meta.fixedTVars %= deleteValue (SingSomeK (fstSub σ))
   newVar = TVar <$> newTVar "τ"
-  getConstraintsBlockingVariable _ v = do
-    vars <- use (meta.fixedTVars)
-    let constrNames = getValue (SingSomeK v) vars
-    case constrNames of
-      Nothing -> pure []
-      Just a -> pure a
 
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
@@ -802,61 +896,20 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
   newVar = coerce <$> svar <$> newSVar "s"
-  getConstraintsBlockingVariable _ _ = return mempty
 
 
-
-getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
-getFixedVarsOfSolvable (Solvable c) =
-      -- compute the fixed vars of this constraint
-      -- and add them to the cached list
-      let newFixed = fixedVars @_ @TVarOf c
-      in [SingSomeK v | SomeK v <- newFixed]
-
--- Recompute fixed vars
--- NOTE: We only look at the topmost constraintctx in the ctxstack.
-recomputeFixedVars :: MonadDMTC t => t ()
-recomputeFixedVars = do
-  (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
-  let constrs2 = H.toList constrs
-  let constrs3 = [(c, name) | (name , (ConstraintWithMessage (Watched _ c) _)) <- constrs2]
-
-  let createSingleCtx (c,name) =
-        let vars = getFixedVarsOfSolvable c
-            varsWithSameName = (\v -> (v,[name])) <$> vars
-            ctxWithSameName = fromKeyElemPairs varsWithSameName
-
-        in ctxWithSameName
-
-  let constrCtxs = fmap createSingleCtx constrs3
-  let constrCtx = mconcat constrCtxs
-
-  -- let constrVarPairs = constrs3 >>= (\(name, c) -> getFixedVarsOfSolvable)
-  meta.fixedTVars %= (\_ -> constrCtx)
-  return ()
-
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadConstraint
+--------------------------------------------------------------------------------------------------
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
-  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
+  type ConstraintBackup (TCT m) = (Ctx IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
   type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) constr_desc = do
-      -- Add location to message
-      curloc <- use (tcstate.currentConstraintMessage)
-      let constr_desc' = case curloc of
-            Nothing -> DMPersistentMessage $ constr_desc
-            Just sle -> DMPersistentMessage $ sle :\\: (constr_desc)
 
       -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) constr_desc'))
-
-      -- compute the fixed vars of this constraint
-      -- and add them to the cached list
-      let newFixed = fixedVars @_ @TVarOf c
-      let varsWithSameName = (\(SomeK v) -> (SingSomeK v,[name])) <$> newFixed
-      let ctxWithSameName = fromKeyElemPairs varsWithSameName
-
-      meta.fixedTVars <>= ctxWithSameName
+      name :: IxSymbol <- meta.constraints %%= (newAnnName GeneratedNamePriority "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
 
       -- log this as event
       tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)
@@ -878,10 +931,20 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   dischargeConstraint name = do
     meta.constraints.anncontent.topctx %= (deleteValue name)
-    recomputeFixedVars
 
     -- log this as event
     tcstate.solvingEvents %= (Event_ConstraintDischarged name :)
+
+  markFailedConstraint name = do
+    val <- getValue name <$> use (meta.constraints.anncontent.topctx)
+    case val of
+      Nothing -> internalError $ "Expected constraint " <> showT name <> " to exist."
+      Just val -> do
+        meta.constraints.anncontent.topctx %= (deleteValue name)
+        meta.failedConstraints %= (setValue name val)
+
+        -- log this as event
+        tcstate.solvingEvents %= (Event_ConstraintMarkedFailed name :)
 
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)
@@ -890,7 +953,6 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (changeValue name (\(ConstraintWithMessage _ descr) -> ConstraintWithMessage (Watched (NormalForMode []) c) descr) cs))
-    recomputeFixedVars
 
     -- log this as event
     tcstate.solvingEvents %= (Event_ConstraintUpdated name (show c) :)
@@ -939,13 +1001,13 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
     log $ "## Constraints ##"
-    log $ show ctrs
+    log $ T.pack $ show ctrs
     log $ ""
 
   logPrintSubstitutions = do
     ctrs <- use (meta.sensSubs)
     log $ "## Substitutions ##"
-    log $ show ctrs
+    log $ T.pack $ show ctrs
     log $ ""
 
   getAllConstraints = do
@@ -953,42 +1015,51 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     let cs' = H.toList cs
     return [(name,c) | (name, (ConstraintWithMessage (Watched _ c) _)) <- cs']
 
+  nubConstraints = do
+    cs <- getAllKeyElemPairs <$> use (meta.constraints.anncontent.topctx)
+
+    let getNamesToDischarge ((name,c):cs) = do
+          let (duplicateConstrs,otherConstrs) = partition (\(n,c') -> c' == c) cs
+          let namesToDischarge = fst <$> duplicateConstrs
+          case length namesToDischarge > 0 of
+            True -> debug $ "Discharging duplicate constraints for " <> showPretty name <> ":\n"
+                      <> "  The following constraints have the same content and are going to be discharged:\n"
+                      <> "  " <> showPretty namesToDischarge
+            False -> return ()
+          otherNamesToDischarge <- getNamesToDischarge otherConstrs
+          return (namesToDischarge <> otherNamesToDischarge)
+        getNamesToDischarge [] = return []
+
+    names <- getNamesToDischarge (fmap (second (\(ConstraintWithMessage (Watched _ c) _) -> c)) cs)
+    mapM dischargeConstraint names
+    return ()
+
+
   clearSolvingEvents = do
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
-    return (show <$> (reverse events))
+    return (showT <$> (reverse events))
 
   getConstraintMessage name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
-    case getValue name ctrs of
+    case getValueCtxStack name ctrs of
       Just (ConstraintWithMessage _ descr) -> return descr
-      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
+      Nothing -> internalError $ "Expected a constraint with the name " <> showT name <> " to exist (getting message).\n"
+                                <> "Ctrs is:\n" 
+                                <> showT ctrs
 
   getConstraint name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
-    case getValue name ctrs of
+    case getValueCtxStack name ctrs of
       Just (ConstraintWithMessage (Watched _ a) descr) -> return (a, descr)
-      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
-    
-
-
-instance FreeVars TVarOf Int where
-  freeVars _ = mempty
-
-instance FreeVars TVarOf (Solvable (GoodConstraint) (GoodConstraintContent) MonadDMTC) where
-  freeVars (Solvable (c :: c a)) = freeVars @_ @TVarOf (runConstr c)
-
-filterWithSomeVars :: FreeVars TVarOf x => [SomeK TVarOf] -> [x] -> [x]
-filterWithSomeVars wanted ctrs =
-  let f x = freeVars @_ @TVarOf x
-  in [x | x <- ctrs , length (intersect (f x) wanted) > 0]
-
-  
+      Nothing -> internalError $ "Expected a constraint with the name " <> showT name <> " to exist (getting constraint content).\n"
+                                <> "Ctrs is:\n" 
+                                <> showT ctrs
 
 
 
-
-
-
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadWatch
+--------------------------------------------------------------------------------------------------
 instance Monad m => MonadWatch (TCT m) where
   resetChanged = tcstate.watcher %= (\(Watcher _) -> Watcher NotChanged)
   notifyChanged = tcstate.watcher %= (\(Watcher _) -> Watcher IsChanged)
@@ -996,40 +1067,23 @@ instance Monad m => MonadWatch (TCT m) where
                   return c
 
 
-
-
-
-instance Monad t => Normalize t AnnotationKind where
-  normalize nt a = pure a
-
-
-supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
-supremum x y = do
-  (z :: a k) <- newVar
-  addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
-  return z
-
-
-supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => Symbol -> (a k) -> (a k) -> t (a k)
-supremumFromName name x y = do
-  (z :: a k) <- newVar
-  addConstraintFromName name (Solvable (IsSupremum ((x, y) :=: z)))
-  return z
-
-infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
-infimum x y = do
-  (z :: a k) <- newVar
-  addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))
-  return z
-
-
-
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadInternalError
+--------------------------------------------------------------------------------------------------
 instance Monad m => MonadInternalError (TCT m) where
   internalError = throwUnlocatedError . InternalError
 
+
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadUnificationError
+--------------------------------------------------------------------------------------------------
 instance Monad m => MonadUnificationError (TCT m) where
   unificationError x y = throwUnlocatedError $ UnificationError x y
 
+
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadDMError
+--------------------------------------------------------------------------------------------------
 instance Monad m => MonadDMError (WithContext DMException) (TCT m) where
   isCritical (WithContext e _)= return (isCriticalError e)
   persistentError e = tell (DMMessages [] [e])
@@ -1050,27 +1104,34 @@ instance Monad m => MonadDMError (WithContext DMException) (TCT m) where
   enterNonPersisting = tcstate.persistingCounter %= (P.+ 1)
   exitNonPersisting = tcstate.persistingCounter %= (P.- 1)
 
+
+
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadNormalize
+--------------------------------------------------------------------------------------------------
+
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
 normalizeContext :: (MonadDMTC t) => NormalizationType -> t ()
 normalizeContext nt = do
   types %=~ normalize nt
   meta.constraints %=~ normalize nt
-
-
+  meta.userVars %=~ normalize nt
 
 instance Monad m => MonadNormalize (TCT m) where
   normalizeState = normalizeContext
 
--- instance MonadDMTC e (TC) where
-instance Monad m => MonadDMTC (TCT m) where
 
--- instance MonadDMTC t => Normalize (t) (Solvable' TC) where
---   normalize solv = liftTC (normalize solv)
+
+--------------------------------------------------------------------------------------------------
+-- Monad instance: LiftTC
+--------------------------------------------------------------------------------------------------
 
 newtype WrapMessageId a = WrapMessageId a
   deriving (Show)
 
 instance ShowPretty a => ShowPretty (WrapMessageId a) where showPretty (WrapMessageId a) = showPretty a
+
+instance (ShowLocated a) => ShowLocated (WrapMessageId a) where showLocated (WrapMessageId a) = showLocated a
 
 instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
   normalize e (WrapMessageId x) = WrapMessageId <$> liftTC (normalize e x)
@@ -1078,6 +1139,7 @@ instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
 newtype WrapMessageRevId a = WrapMessageRevId a
   deriving (Show)
 instance ShowPretty a => ShowPretty (WrapMessageRevId a) where showPretty (WrapMessageRevId a) = showPretty a
+instance ShowLocated a => ShowLocated (WrapMessageRevId a) where showLocated (WrapMessageRevId a) = showLocated a
 
 instance (Monad m) => Normalize (m) (WrapMessageRevId a) where
   normalize e x = pure x
@@ -1114,13 +1176,32 @@ instance Monad m => LiftTC (TCT m) where
         h (Left (WithContext e ctx)) = Left (WithContext e (g ctx))
 
         -- x :: StateT (Full (TCT m)) (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) m)) a
-        x = StateT (\s -> ExceptT (WriterT (return (bimap h f $ runWriter $ runExceptT $ runStateT v (fmap g' s)))))
+        x = StateT (\s -> ExceptT (ReaderT $ \readstate -> (WriterT (return (bimap h f $ runWriter $ runReaderT (runExceptT $ runStateT v (fmap g' s)) readstate)))))
 
     in TCT x
 
 
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadImpossible
+--------------------------------------------------------------------------------------------------
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwUnlocatedError (ImpossibleError err)
+
+
+--------------------------------------------------------------------------------------------------
+-- Monad instance: MonadDMTC
+--------------------------------------------------------------------------------------------------
+instance Monad m => MonadDMTC (TCT m) where
+
+instance Monad m => IsT MonadDMTC (TCT m) where
+
+
+--------------------------------------------------------------------------------------------------
+-- Normalization
+--------------------------------------------------------------------------------------------------
+
+instance (MonadDMTC t) => Normalize t (WithRelev e) where
+  normalize nt (WithRelev i x) = WithRelev i <$> normalize nt x
 
 instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
   normalize nt n =
@@ -1135,9 +1216,6 @@ instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
        -- finally we normalize the uppermost "annotation" layer (if there is one)
        -- , i.e., compute {↷,∧,Trunc}-terms
        normalizeAnn nt n₃
-
--- instance Monad t => Normalize t DMNumType where
---   normalize = pure
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :@ b) where
   normalize nt (a :@ b) = (:@) <$> normalize nt a <*> normalize nt b
@@ -1172,63 +1250,6 @@ instance Normalize m x => Normalize m (WithContext x m) where
 
 instance (MonadDMTC t => Normalize (t) a) => MonadDMTC t :=> Normalize (t) a where
   ins = Sub Dict
-
-
-instance Monad m => IsT MonadDMTC (TCT m) where
-
-
-
-
-
-newTVar :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => Text -> t (TVarOf k)
-newTVar hint = meta.typeVars %%= ((newKindedName hint))
-
-newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
-newSVar hint = meta.sensVars %%= (newKindedName hint)
-
-newPVar = do
-   p1 ::Sensitivity <- newVar
-   p2 :: Sensitivity <- newVar
-   return (p1, p2)
-
-newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
-newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName hint))
-
-------------------------------------------------------------------------
--- unification of sensitivities
-
-instance FixedVars (TVarOf) (IsEqual (Sensitivity,Sensitivity)) where
-  fixedVars = mempty
-
-instance FixedVars (TVarOf) (IsLessEqual (Sensitivity,Sensitivity)) where
-  fixedVars = mempty
-
-instance FixedVars (TVarOf) (IsLess (Sensitivity,Sensitivity)) where
-  fixedVars = mempty
-
--- Before we can unify dmtypes, we have to proof that we can unify
--- sensitivities.
--- We unify them simply by adding an equality constraint. That this
--- constraint is solvable in any class of monads, in particular in MonadDMTC,
--- is shown in Abstract.Data.MonadicPolynomial.
---
-instance MonadDMTC t => Unify (WithContext DMException) t Sensitivity where
-  unify_ msg s1 s2 = do
-    c <- addConstraint (Solvable (IsEqual (s1, s2))) msg
-    return s1
-
-instance (Monad t, Unify (WithContext DMException) t a, Unify (WithContext DMException) t b) => Unify (WithContext DMException) t (a,b) where
-  unify_ name (a1,b1) (a2,b2) = (,) <$> (unify_ name a1 a2) <*> (unify_ name b1 b2)
-
-instance (MonadDMTC t, Show a, Unify (WithContext DMException) t a) => Unify (WithContext DMException) t (Maybe a) where
-  unify_ name Nothing Nothing = pure Nothing
-  unify_ name (Just a) (Just b) = Just <$> unify_ name a b
-  unify_ name t s = throwUnlocatedError (UnificationError t s)
-
-
-
-
-
 
 ----------------------------------------------------------
 -- normalization for annotated dmtypes
@@ -1296,6 +1317,31 @@ normalizeAnn nt (xs :->*: y) = do
   (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn nt y
 normalizeAnn nt x = recDMTypeM (normalizeAnn nt) (pure . normalizeSensSpecial nt) x
 
+
+
+
+--------------------------------------------------------------------------------------------------
+-- unification of sensitivities
+--------------------------------------------------------------------------------------------------
+
+-- Before we can unify dmtypes, we have to proof that we can unify
+-- sensitivities.
+-- We unify them simply by adding an equality constraint. That this
+-- constraint is solvable in any class of monads, in particular in MonadDMTC,
+-- is shown in Abstract.Data.MonadicPolynomial.
+--
+instance MonadDMTC t => Unify (WithContext DMException) t Sensitivity where
+  unify_ msg s1 s2 = do
+    c <- addConstraint (Solvable (IsEqual (s1, s2))) msg
+    return s1
+
+instance (Monad t, Unify (WithContext DMException) t a, Unify (WithContext DMException) t b) => Unify (WithContext DMException) t (a,b) where
+  unify_ name (a1,b1) (a2,b2) = (,) <$> (unify_ name a1 a2) <*> (unify_ name b1 b2)
+
+instance (MonadDMTC t, Show a, Unify (WithContext DMException) t a) => Unify (WithContext DMException) t (Maybe a) where
+  unify_ name Nothing Nothing = pure Nothing
+  unify_ name (Just a) (Just b) = Just <$> unify_ name a b
+  unify_ name t s = throwUnlocatedError (UnificationError t s)
 
 
 

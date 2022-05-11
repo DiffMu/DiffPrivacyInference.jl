@@ -1,6 +1,0 @@
-*.a
-*.o
-*.so
-diffmu-wrapper.dSYM
-diffmu-wrapper
-*.dylib

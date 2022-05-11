@@ -13,7 +13,7 @@ testAVI01 pp = do
   let exa = " function test()        \n\
             \   function f!(a)       \n\
             \     x = a[1,1]         \n\
-            \     norm_convert!(x)   \n\
+            \     undisc_container!(x)   \n\
             \     x                  \n\
             \   end                  \n\
             \ end                    "
@@ -22,7 +22,7 @@ testAVI01 pp = do
   let exb = " function test()        \n\
             \   function f!(a)       \n\
             \     x = a[1]           \n\
-            \     norm_convert!(x)   \n\
+            \     undisc_container!(x)   \n\
             \     x                  \n\
             \   end                  \n\
             \ end                    "
@@ -31,7 +31,7 @@ testAVI01 pp = do
   let exc = " function test()        \n\
             \   function f!(a)       \n\
             \     x = a[1,:]         \n\
-            \     norm_convert!(x)   \n\
+            \     undisc_container!(x)   \n\
             \     x                  \n\
             \   end                  \n\
             \ end                    "
@@ -40,7 +40,7 @@ testAVI01 pp = do
             \   function f!(a)       \n\
             \     (x,y) = a[1,1]     \n\
             \     a = x              \n\
-            \     norm_convert!(a)   \n\
+            \     undisc_container!(a)   \n\
             \     a                  \n\
             \   end                  \n\
             \ end                    "

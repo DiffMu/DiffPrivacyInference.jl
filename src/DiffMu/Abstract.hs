@@ -1,4 +1,7 @@
 
+{- |
+Description: Abstract classes, data structures and algorithms useful in writing type checkers / inference systems.
+-}
 module DiffMu.Abstract (module All)
   where
 

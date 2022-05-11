@@ -1,4 +1,7 @@
 
+{- |
+Description: The typechecking algorithm, defined inductively on `DMTerm`s.
+-}
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude
@@ -7,11 +10,12 @@ import DiffMu.Core
 import DiffMu.Core.Logging
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
+import DiffMu.Core.Unification
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
+import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 import DiffMu.Typecheck.Constraint.IsJuliaEqual
 import DiffMu.Typecheck.Constraint.CheapConstraints
@@ -25,8 +29,6 @@ import Debug.Trace
 import Data.IORef
 import System.IO.Unsafe
 import DiffMu.Abstract.Data.Error
-import DiffMu.Abstract.Data.ErrorReporting
-import DiffMu.Core.TC (currentConstraintMessage)
 
 default (Text)
 
@@ -44,20 +46,6 @@ catchNoncriticalError a x = do
                 msg
     return (resultType, msg')
 
-
-  -- catchError x $ \err@(WithContext e msg) -> case isCriticalError e of
-  --   True -> throwError err
-  --   False -> do
-  --     resultType <- newVar
-  --     -- let msg = DMPersistentMessage $ (WithContext e (("While checking the term", getLocation a):locs))
-  --     --                                 :-----:
-  --     --                                 "Since the checking was not successful, created the following type for this term:" :\\:
-  --     --                                 resultType
-  --     -- tell (DMMessages [] [msg])
-  --     persistentError $ msg :-----: "While checking the term"
-  --     return resultType
-
-
 ------------------------------------------------------------------------
 -- The typechecking function
 checkPriv :: DMScope -> LocDMTerm -> TC DMMain
@@ -68,13 +56,11 @@ checkPriv scope t = do
   case γ of -- TODO prettify.
       Left (Ctx (MonCom c)) | H.null c -> return ()
       Right (Ctx (MonCom c)) | H.null c -> return ()
-      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx
+      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> showT ctx
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
-  tcstate.currentConstraintMessage .= Just (DMPersistentMessage $ getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkPri' scope t)
-  tcstate.currentConstraintMessage .= Nothing
 
   -- The computation to do after checking
   γ <- use types
@@ -92,14 +78,12 @@ checkSens scope t = do
   case γ of -- TODO prettify.
       Left (Ctx (MonCom c)) | H.null c -> return ()
       Right (Ctx (MonCom c)) | H.null c -> return ()
-      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx <> "\nThe term is:\n" <> show t
+      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> showT ctx <> "\nThe term is:\n" <> showPretty t
   types .= Left def -- cast to sensitivity context.
 
 
   -- get the delayed value of the sensititivty checking
-  tcstate.currentConstraintMessage .= Just (DMPersistentMessage $ getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkSen' scope t)
-  tcstate.currentConstraintMessage .= Nothing
 
   -- The computation to do after checking
   γ <- use types
@@ -117,11 +101,13 @@ checkSen' :: DMScope -> LocDMTerm -> TC DMMain
 checkSen' scope (Located l (DMTrue)) = return (NoFun DMBool)
 checkSen' scope (Located l (DMFalse)) = return (NoFun DMBool)
 
--- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' scope (Located l (Sng η τ)) = do
-  res <- Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η))))
-  return (NoFun res)
 
+-- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
+checkSen' scope (Located l (Sng η τ)) = case η < 0 of
+    True -> NoFun <$> Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure NonConst) -- we don't allow negative const
+    False -> NoFun <$> Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η)))) -- we don't allow negative const
+
+    
 -- typechecking an op
 checkSen' scope (Located l (Op op args)) = do
   -- create a new typeop constraint for op
@@ -149,7 +135,7 @@ checkSen' scope (Located l (Op op args)) = do
 -- those get sensitivity 1, all other variables are var terms
 checkSen' scope (Located l (Arg x jτ i)) = do
   τs <- newVar
-  logForce $ "checking arg:" <> show (x :- jτ) <> ", dmtype is " <> show τs
+  logForce $ "checking arg:" <> showPretty (x :- jτ) <> ", dmtype is " <> showPretty τs
   -- the inferred type must be a subtype of the user annotation, if given.
   addJuliaSubtypeConstraint τs jτ (l :\\: "Function argument " :<>: x :<>: " user type annotation.")
 
@@ -158,25 +144,20 @@ checkSen' scope (Located l (Arg x jτ i)) = do
   return τs
 
 
-
-
 checkSen' scope (Located l (Var x)) =  -- get the term that corresponds to this variable from the scope dict
    let mτ = getValue x scope
    in case mτ of
-     Nothing -> debug ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwUnlocatedError (VariableNotInScope x)
+     Nothing -> debug ("[Var-Sens] Scope is:\n" <> showT (getAllKeys scope)) >> throwUnlocatedError (VariableNotInScope x)
      Just jτ -> do
-                     debug ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope))
-                     τ <- jτ -- extract the type of x
-                     -- if the user has given an annotation
-                     -- inferred type must be a subtype of the user annotation
-                     -- addJuliaSubtypeConstraint τ dτ (l :\\: "Variable " :<>: x :<>: " user type annotation.")
-                     return τ
+                     debug ("[Var-Sens] Scope is:\n" <> showT (getAllKeys scope))
+                     jτ
+
 
 checkSen' scope (Located l (Lam xτs retτ body)) = do
 
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let f s sc (x :- τ) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ IsRelevant))) sc
+    let f s sc (x :- (τ, rel)) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ rel))) sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
@@ -187,21 +168,26 @@ checkSen' scope (Located l (Lam xτs retτ body)) = do
     addJuliaSubtypeConstraint btype retτ (l :\\: "The inferred return type of the function " :<>: btype :\\: "is subtype of the annotated return type " :<>: retτ)
 
     -- extract julia signature
-    let sign = (sndA <$> xτs)
+    let sign = (fst <$> sndA <$> xτs)
 
     -- get inferred types and sensitivities for the arguments
-    xrτs <- getArgList @_ @SensitivityK xτs
+    xrτs <- getArgList @_ @SensitivityK [(x :- τ) | (x :- (τ, _)) <- xτs]
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
-    logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
+    logForce $ "Checking Lam, outer scope: " <> showT (getAllKeys scope) <> " | inner: " <> showT (getAllKeys scope')
 
     -- add constraints for making non-const if not resolvable
-    let addC :: (DMMain :@ b, Asgmt a) -> TCT Identity ()
-        addC ((τ :@ _), x :- _) = do
-            addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst)))
-              (l :\\: "Lam argument " :<>: x :<>: " can become NonConst.")
-            pure ()
+    let addC :: (DMMain :@ b, Asgmt (a, Relevance)) -> TCT Identity ()
+        addC ((τ :@ _), x :- (_, i)) = case i of
+                     IsRelevant -> do
+                         addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst)))
+                           (l :\\: "Lam argument " :<>: x :<>: "can become NonConst.")
+                         pure ()
+                     NotRelevant -> do
+                                      addConstraint (Solvable (MakeConst (τ, (showPretty x))))
+                                        (l :\\: "Static Lam argument " :<>: x :<>: " can become Const.")
+                                      return ()
     mapM addC (zip xrτs xτs)
-
+    
     -- make an arrow type.
     let τ = (xrτs' :->: btype)
     return (Fun [τ :@ (Just sign)])
@@ -230,17 +216,15 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
     -- numeric or tuples. that way we can express the result sensitivity/privacy
     -- in terms of the nonrelevant input variables
     let addC :: (DMMain :@ b, Asgmt (a, Relevance)) -> TCT Identity ()
-        addC ((τ :@ _), x :- (_, i)) = do
-               _ <- case i of
+        addC ((τ :@ _), x :- (_, i)) = case i of
                      IsRelevant -> do
                          addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst)))
                            (l :\\: "LamStar argument " :<>: x :<>: "can become NonConst.")
                          pure ()
                      NotRelevant -> do
-                                      addConstraint (Solvable (MakeConst τ))
+                                      addConstraint (Solvable (MakeConst (τ, (showPretty x))))
                                         (l :\\: "Static LamStar argument " :<>: x :<>: " can become Const.")
                                       return ()
-               return ()
     mapM addC (zip xrτs xτs)
 
     -- truncate function context to infinity sensitivity
@@ -249,10 +233,6 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
     -- build the type signature and proper ->* type
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
 
-    -- functions can only return deepcopies of DMModel and DMGrads
-    -- restype <- newVar
-    -- addConstraintNoMessage (Solvable (IsClone (btype, restype)))
-
     let τ = (xrτs' :->*: btype)
     return (Fun [τ :@ (Just sign)])
 
@@ -260,13 +240,12 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
 checkSen' scope (Located l (SLet x term body)) = do
 
    -- put the computation to check the term into the scope
-   --  let scope' = setValue x (checkSens term scope) scope
    let scope' = setValue x (checkSens scope term) scope
 
    -- check body with that new scope
    result <- checkSens scope' body
 
-   debug $ "checking sensitivity SLet: " <> show x <> " = " <> show term <> " in " <> show body
+   debug $ "checking sensitivity SLet: " <> showT x <> " = " <> showPretty term <> " in " <> showPretty body
 
    return result
 
@@ -280,8 +259,6 @@ checkSen' scope (Located l (BBLet name jτs tail)) = do
    result <- checkSens scope' tail
    removeVar @SensitivityK name
    return result
-
-
 
 
 checkSen' scope (Located l (BBApply app args cs k)) =
@@ -308,10 +285,8 @@ checkSen' scope (Located l (BBApply app args cs k)) =
     -- that sets the sensitivity to 1 in case they turn out to be (*,Data).
     checkBBKind :: BBKind EmptyExtension -> TC (DMMain, Bool)
     checkBBKind a = let
-
-        err jt form = throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of this black boxe call.\n"
+        err jt form = throwUnlocatedError $ TypeMismatchError $ "The type " <> showPretty jt <> " is not allowed as return type of this black boxe call.\n"
                                                                 <> form <> "See documentation of `unbox` for more information."
-                                                            
         -- check the user-given return type dimension and make sure it's const
         checkSize pdt = do
            pdt_actual_ty <- checkSens scope pdt <* mscale zeroId
@@ -326,14 +301,12 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                                  tt <- createDMType jt
                                  return (NoFun tt, False)
                              False -> err jt "It must be either one of [Integer, Real, Bool, Data] or you need to specify the size.\n"
-
          BBVecLike jt pdt -> do
-    
            pdt_val <- checkSize pdt -- typecheck the length term
 
            tt <- createDMType jt -- get return dmtype
            case tt of -- set dimension, return return type
-                DMMat _ _ _ _ _ -> err jt ("you gave 1 dim but matrix"<>show tt)
+                DMMat _ _ _ _ _ -> err jt ("you gave 1 dim but matrix"<>showT tt)
                 DMContainer k nrm clp d et -> do
                     unify (l :\\: "Setting black box return container dimension") d pdt_val
                     let niceType = (NoFun $ DMContainer k LInf clp d (NoFun $ Numeric $ Num DMData NonConst))
@@ -347,9 +320,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                     unify (l :\\: "Setting black box return model dimension") d pdt_val
                     return (NoFun tt, False)
                 _ -> err jt "It must be one of [Vector, DMModel, DMGrads, MetricVector, MetricGradient].\n"
-                
          BBMatrix jt pdt1 pdt2 -> do
-
            (pdt1_val,pdt2_val) <- msumTup (checkSize pdt1, checkSize  pdt2) -- typecheck the size terms
            
            tt <- createDMType jt -- get return dmtype
@@ -360,10 +331,8 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                    return (NoFun tt, False)
                _ -> err jt "It must be a Matrix.\n"
 
-
     margs = checkArg <$> args
     mf = checkSens scope app
-
   in do
     -- we merge the different TC's into a single result TC
     let caps = checkCap <$> cs
@@ -400,7 +369,7 @@ checkSen' scope (Located l (Apply f args)) =
     mf = checkSens scope f
 
   in do
-    logForce ("[Apply-Sens]Scope is:\n" <> show (getAllKeys scope))
+    logForce ("[Apply-Sens]Scope is:\n" <> showT (getAllKeys scope))
     (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
@@ -411,7 +380,7 @@ checkSen' scope (Located l (Apply f args)) =
 
 checkSen' scope (Located l (MMap f m)) = do
     s <- newVar
-    mv <- newVar
+    mv <- svar <$> newSVarWithPriority UserNamePriority "m"
     mr <- newVar
     let mm = checkSens scope m <* mscale s
     let mf = checkSens scope f <* mscale mv <* mscale mr
@@ -419,8 +388,8 @@ checkSen' scope (Located l (MMap f m)) = do
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm <- newVar -- variable for norm
-    clp <- newVar -- variable for clip
+    nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     k <- newVar -- variable for container kind
     unify (l :\\: "MMap argument type") τm (NoFun (DMContainer k nrm clp mv τ_in))
 
@@ -433,21 +402,22 @@ checkSen' scope (Located l (MMap f m)) = do
 
     return (NoFun (DMContainer k nrm U mv τ_out))
 
+
 checkSen' scope (Located l (MapRows f m)) = do
     s <- newVar
-    ηm <- newVar
-    ηn₁ <- newVar
-    ηn₂ <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
     let mm = checkSens scope m <* mscale s
     let mf = checkSens scope f <* mscale ηm
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "MapRows argument type") τm (NoFun (DMMat nrm₁ clp₁ ηm ηn₁ τ_in))
 
     -- set the type of the function using IFA
@@ -456,21 +426,22 @@ checkSen' scope (Located l (MapRows f m)) = do
 
     return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
 
+
 checkSen' scope (Located l (MapCols f m)) = do
     ς <- newVar
     r <- newVar
-    ηm₁ <- newVar
-    ηm₂ <- newVar
+    ηm₁ <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηm₂ <- svar <$> newSVarWithPriority UserNamePriority "m"
     let mf = checkSens scope f <* mscale (r)
     let mm = checkSens scope m <* mscale (ς ⋅! r)
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "MapCols argument type") τm (NoFun (DMMat nrm₁ clp₁ ηm₁ r τ_in))
 
     -- set the type of the function using IFA
@@ -484,13 +455,14 @@ checkSen' scope (Located l (MapCols f m)) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₂ U ηm₂ r τ_out))
 
+
 checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     ς₁ <- newVar
     ς₂ <- newVar
     r <- newVar
-    ηm₁ <- newVar
-    ηm₂ <- newVar
-    ηm₃ <- newVar
+    ηm₁ <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηm₂ <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηm₃ <- svar <$> newSVarWithPriority UserNamePriority "m"
     let mf = checkSens scope f <* mscale (ηm₁ ⋅! r)
     let mm₁ = checkSens scope m₁ <* mscale (ς₁ ⋅! r)
     let mm₂ = checkSens scope m₂ <* mscale (ς₂ ⋅! r)
@@ -499,12 +471,12 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     τ_in₁ <- newVar -- a type var for the function input / matrix element type
     τ_in₂ <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
-    nrm₃ <- newVar -- variable for norm
-    clp₃ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₃ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₃ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "Binary MapCols2 first argument type") τm₁ (NoFun (DMMat LInf clp₁ ηm₁ r τ_in₁))
     unify (l :\\: "Binary MapCols2 second argument type") τm₂ (NoFun (DMMat LInf clp₂ ηm₂ r τ_in₂))
 
@@ -516,13 +488,14 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₃ U ηm₃ r τ_out))
 
+
 checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     ς₁ <- newVar
     ς₂ <- newVar
-    ηm <- newVar
-    ηn₁ <- newVar
-    ηn₂ <- newVar
-    ηn₃ <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₃ <- svar <$> newSVarWithPriority UserNamePriority "n"
     let mf = checkSens scope f <* mscale (ηn₁)
     let mm₁ = checkSens scope m₁ <* mscale (ς₁)
     let mm₂ = checkSens scope m₂ <* mscale (ς₂)
@@ -531,12 +504,12 @@ checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     τ_in₁ <- newVar -- a type var for the function input / matrix element type
     τ_in₂ <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
-    nrm₃ <- newVar -- variable for norm
-    clp₃ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₃ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₃ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "Binary MapRows2 first argument type") τm₁ (NoFun (DMMat LInf clp₁ ηm ηn₁ τ_in₁))
     unify (l :\\: "Binary MapRows2 second argument type") τm₂ (NoFun (DMMat LInf clp₂ ηm ηn₂ τ_in₂))
 
@@ -548,11 +521,12 @@ checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₃ clp₃ ηm ηn₃ τ_out))
 
+
 checkSen' scope (Located l (MFold f acc₀ m)) = do
     s₁ <- newVar
     s₂ <- newVar
-    ηm <- newVar
-    ηn <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn <- svar <$> newSVarWithPriority UserNamePriority "n"
     let mm = checkSens scope m <* mscale s₁
     let macc₀ = checkSens scope acc₀ <* mscale (exp s₂ (ηm ⋅! ηn))
     let mf = checkSens scope f <* mscale (ηm ⋅! ηn)
@@ -561,7 +535,7 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     τ_content <- newVar
     τbody_in <- newVar -- a type var for the function input / matrix element type
     τbody_out <- newVar -- a type var for the function output type
-    clp₁ <- newVar -- variable for clip
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "MFold argument type") τm (NoFun (DMMat L1 clp₁ ηm ηn τ_content))
 
     -- set the type of the function using IFA
@@ -580,7 +554,6 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     return τbody_out
 
 
-
 checkSen' scope (Located l (FLet fname term body)) = do
 
   -- make a Choice term to put in the scope
@@ -588,7 +561,7 @@ checkSen' scope (Located l (FLet fname term body)) = do
 
   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
 
-  logForce ("[FLet-Sens] for '" <> show fname <> "', scope is: " <> show (getAllKeys scope))
+  logForce ("[FLet-Sens] for '" <> showT fname <> "', scope is: " <> showT (getAllKeys scope))
   result' <- checkSens scope' body
   removeVar @SensitivityK fname
   return result'
@@ -599,7 +572,6 @@ checkSen' scope (Located l (Choice d)) = do
   choices <- msumS delCs
   let combined = foldl (:∧:) (Fun []) choices
   return combined
-
 
 
 checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
@@ -627,7 +599,6 @@ checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
   return τ
 
 
-
 checkSen' scope (Located l (Tup ts)) = do
 
   -- check tuple entries and sum contexts
@@ -639,10 +610,9 @@ checkSen' scope (Located l (Tup ts)) = do
                         return v
   τnf <- mapM makeNoFun τsum
 
-  log $ "checking sens Tup: " <> show (Tup ts) <> ", type is " <> show (NoFun (DMTup τnf)) <> " when terms were " <> show τsum
+  log $ "checking sens Tup: " <> showPretty (Tup ts) <> ", type is " <> showPretty (NoFun (DMTup τnf)) <> " when terms were " <> showPretty τsum
   -- return the tuple.
   return (NoFun (DMTup τnf))
-
 
 
 checkSen' original_scope (Located l (TLet xs term body)) = do
@@ -692,12 +662,16 @@ checkSen' original_scope (Located l (TLet xs term body)) = do
   -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
   (s ==! (maxS xs_sens)) (l :\\: "TLet sensitivity is maximum of entry sensitivities.")
 
-  log $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term <> " in " <> show body <> "\n ==> types are " <> show τbody <> " for term " <> show τterm
+  log $ "checking sensitivities TLet: " <> showPretty (xs) <> " = " <> showPretty term <> " in " <> showPretty body <> "\n ==> types are " <> showPretty τbody <> " for term " <> showPretty τterm
   -- and we return the type of the body
   return τbody
 
-checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
-  let cniter = checkSens scope niter
+
+checkSen' scope (Located l (Loop (start, step, end) cs' (xi, xc) body)) = do
+  let cstart = checkSens scope start
+  let cstep = checkSens scope step
+  let cend = checkSens scope end
+  let cniter = msum3Tup (cstart, cstep, cend)
 
   let scope_vars = getAllKeys scope
   let s0 = "Capture tuple of this loop"
@@ -728,7 +702,6 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
         return (τ, (τi, si), (τc, sc))
 
 
-  --traceM $ "checking sens Loop: " <> show  (Loop niter cs (xi, xc) body)
   -- add scalars for iterator, capture and body context
   -- we compute their values once it is known if the number of iterations is const or not.
   sit <- newVar
@@ -741,36 +714,18 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   -- τb = inferred type of the body
   -- τbit = type of the iterator variable xi inferred in the body
   -- τbcs = type of the capture variable xc inferred in the body
-  (τit, τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
+  ((tstart, tstep, tend), τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num DMInt NonConst))) τbit
+  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num (IRNum DMInt) NonConst))) τbit
 
   τcsnf <- newVar
   unify (l :\\: "Loop captures cannot be functions") (NoFun τcsnf) τloop_in -- functions cannot be captured.
-
-
-{-
-      -- TODO loops with Const captures/output don't work yet.
-      -- the inferred capture type should be the same as the non-const version of the inferred body type
-      -- so we can loop properly by plugging the loop result into the loop in again
-      -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
-      -- iteration.
-      addConstraintNoMessage (Solvable (IsNonConst (τb, τbcs)))
-
-      -- also the given capture that we start iteration with should fit into the expected capture
-      addConstraintNoMessage (Solvable (IsNonConst (τcs, τbcs)))
--}
-
-      -- the types of body, input captures and captures as used in the body must all be equal
-      -- (except Const-ness, actually. we'll figure that out at some point)
-  -- unify τb τbcs
-  -- unify τcs τbcs
 
   addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
     (l :\\: "Loop captures input must be non-const version of loop output.")
   addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
     (l :\\: "Initial loop captures must match loop output.")
-  addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+  addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, (tstart,tstep,tend)))) -- compute the right scalars once we know if τ_iter is const or not.
     (l :\\: "Set the sensitivities right once it is known whether number of loop iterations is const.")
 
   return τbody_in
@@ -780,7 +735,7 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain
        setDim tm s = do
           τ <- tm -- check dimension term
-          unify (l :\\: "Matrix dimension must be const in mcreate") τ (NoFun (Numeric (Num DMInt (Const s)))) -- dimension must be const integral
+          unify (l :\\: "Matrix dimension must be const in mcreate") τ (NoFun (Numeric (Num (IRNum DMInt) (Const s)))) -- dimension must be const integral
           mscale zeroId
           return τ
 
@@ -795,9 +750,9 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
           WithRelev _ (x2τ :@ _) <- removeVar @SensitivityK x2
 
           -- input vars must be integer
-          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (Num DMInt NonConst)))))
+          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (Num (IRNum DMInt) NonConst)))))
             (l :\\: "First MCreate creation function argument must be integer.")
-          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (Num DMInt NonConst)))))
+          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (Num (IRNum DMInt) NonConst)))))
             (l :\\: "Second MCreate creation function argument must be integer.")
 
           return τ
@@ -808,46 +763,48 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
       let mbody = checkSens scope body
 
       -- variables for matrix dimension
-      nv <- newVar
-      mv <- newVar
+      nv <- svar <$> newSVarWithPriority UserNamePriority "n"
+      mv <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
 
-      nrm <- newVar -- variable for norm
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
       return (NoFun (DMMat nrm U nv mv τbody))
+
 
 checkSen' scope (Located l (Size m)) = do
   mt <- checkSens scope m
 
   -- variables for matrix dimension
-  nv <- newVar
-  mv <- newVar
+  nv <- svar <$> newSVarWithPriority UserNamePriority "n"
+  mv <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- and matrix entries
   τ <- newVar
 
-  nrm <- newVar -- variable for norm
-  clp <- newVar -- variable for clip
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
   unify (l :\\: "Argument of `size` must be a matrix") mt (NoFun (DMMat nrm clp nv mv τ))
 
   mscale zeroId
 
-  return (NoFun (DMTup [Numeric (Num DMInt (Const nv)), Numeric (Num DMInt (Const mv))]))
+  return (NoFun (DMTup [Numeric (Num (IRNum DMInt) (Const nv)), Numeric (Num (IRNum DMInt) (Const mv))]))
+
 
 checkSen' scope (Located l (Length m)) = do
   mt <- checkSens scope m
 
   -- variables for vector dimension and entries
-  nv <- newVar
+  nv <- svar <$> newSVarWithPriority UserNamePriority "n"
   τ <- newVar
 
-  nrm <- newVar -- variable for norm
-  clp <- newVar -- variable for clip
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
   unify (l :\\: "Arguemtn of `length` must be a vector.") mt (NoFun (DMVec nrm clp nv τ))
 
   mscale zeroId
 
-  return (NoFun (Numeric (Num DMInt (Const nv))))
+  return (NoFun (Numeric (Num (IRNum DMInt) (Const nv))))
 
 
 checkSen' scope (Located l (MutClipM c m)) = checkSens scope (Located l (ClipM c m))
@@ -855,8 +812,8 @@ checkSen' scope (Located l (ClipM c m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
-  clp <- newVar
-  n <- newVar
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  n <- svar <$> newSVarWithPriority UserNamePriority "n"
 
   -- variable for vector kind
   k <- newVar
@@ -869,7 +826,31 @@ checkSen' scope (Located l (ClipM c m)) = do
   unify (l :\\: "Argument of `clip` must be an (LInf, Data)-Matrix.") τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- change clip parameter to input
-  return (NoFun (DMContainer k LInf c n (NoFun (Numeric (Num DMData NonConst)))))
+  return (NoFun (DMContainer k LInf (Clip c) n (NoFun (Numeric (Num DMData NonConst)))))
+
+
+checkSen' scope (Located l (MutConvertM nrm m)) = checkSens scope (Located l (ConvertM nrm m))
+checkSen' scope (Located l (ConvertM nrm m)) = do
+    
+  s <- newVar -- scalar for conversion sensitivity, depends on the norms between which we convert
+  τb <- checkSens scope m <* mscale s -- check the matrix
+
+  -- variables for input norm and clip parameters, dimension and element type
+  nrm_in <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  n <- svar <$> newSVarWithPriority UserNamePriority "n"
+  t <- newVar
+
+  -- variable for container kind
+  k <- newVar
+
+  -- set correct matrix type
+  unify (l :\\: "Argument of `norm_convert` must be a Matrix.") τb (NoFun (DMContainer k nrm_in clp n t))
+
+  addConstraint (Solvable (ConversionResult (nrm_in, nrm, n, s))) (l :\\: "Set container norm conversion penalty.")
+
+  -- change clip parameter to input
+  return (NoFun (DMContainer k nrm clp n t))
 
 
 checkSen' scope (Located l (ClipN value upper lower)) = do
@@ -901,21 +882,19 @@ checkSen' scope (Located l (Count f m)) = let
     unify (l :\\: "Parameter of `count` must be a Data vector.") tm (NoFun (DMVec n cl r (NoFun (Numeric (Num DMData NonConst)))))
     unify (l :\\: "Parameter of `count` must be a function from Data to Bool.") tf (Fun [[(NoFun (Numeric (Num DMData NonConst))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
     
-    return (NoFun (Numeric (Num DMInt NonConst)))
+    return (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
 
-  
-  
 
 --------------------
--- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
+-- NOTE this is different from what is in the paper (convert rule), as we scale the result context by 2 not by 1
 -- a proof that this is correct is in the matrixnorm pdf, and the authors told me it's correct too
-checkSen' scope (Located l (MutConvertM m)) = checkSens scope (Located l (ConvertM m))
-checkSen' scope (Located l (ConvertM m)) = do
+checkSen' scope (Located l (MutUndiscM m)) = checkSens scope (Located l (UndiscM m))
+checkSen' scope (Located l (UndiscM m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
-  nrm <- newVar
-  clp <- newVar -- this is a norm, because we do not accept
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- this is a norm, because we do not accept
                 -- the unbounded clip value
   n <- newVar
   
@@ -932,8 +911,8 @@ checkSen' scope (Located l (ConvertM m)) = do
   -- and forget about old `nrm
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
---  return (NoFun (DMGrads clp (Clip clp) n (Numeric (Num DMReal NonConst))))
-  return (NoFun (DMContainer k clp U n (NoFun (Numeric (Num DMReal NonConst)))))
+--  return (NoFun (DMGrads clp (Clip clp) n (Numeric (Num (IRNum DMReal) NonConst))))
+  return (NoFun (DMContainer k clp U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
 --------------------
 
@@ -945,7 +924,7 @@ checkSen' (Transpose m) scope = do
 
       -- variables for norm and clip parameters and dimension
       τ <- newVar
-      clp <- newVar
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       n <- newVar
       m <- newVar
 
@@ -955,6 +934,8 @@ checkSen' (Transpose m) scope = do
       -- change clip parameter to input
       return (NoFun (DMMat L1 U m n (Numeric τ)))
 -}
+
+
 checkSen' scope  (Located l (Index m i j)) = do
 
       -- check indices and set their sensitivity to infinity
@@ -971,16 +952,15 @@ checkSen' scope  (Located l (Index m i j)) = do
 
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
-      nrm <- newVar
-      clp <- newVar
-      n <- newVar
-      m <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+      n <- svar <$> newSVarWithPriority UserNamePriority "n"
+      m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set matrix type
       unify (l :\\: "Index parameter must be matrix") τm (NoFun (DMMat nrm clp n m τ))
 
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
-
       return τ
 
 
@@ -997,19 +977,18 @@ checkSen' scope (Located l (VIndex v i))  = do
 
       (τv, _) <- msumTup (dv, dx)
 
-
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
-      nrm <- newVar
-      clp <- newVar
-      n <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+      n <- svar <$> newSVarWithPriority UserNamePriority "n"
 
       -- set vector type
       unify (l :\\: "single-index parameter must be vector") τv (NoFun (DMVec nrm clp n τ))
 
       -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
-
       return τ
+
 
 checkSen' scope (Located l (Row m i)) = do
           -- check index and set their sensitivity to infinity
@@ -1025,10 +1004,10 @@ checkSen' scope (Located l (Row m i)) = do
 
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
-      nrm <- newVar
-      clp <- newVar
-      n <- newVar
-      m <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+      n <- svar <$> newSVarWithPriority UserNamePriority "n"
+      m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set matrix type
       unify (l :\\: "Rows can only be taken of matrices") τm (NoFun (DMMat nrm clp n m τ))
@@ -1036,6 +1015,7 @@ checkSen' scope (Located l (Row m i)) = do
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
       return (NoFun (DMVec nrm clp m τ)) -- returns Vector type to accomodate julia behaviour
+
 
 checkSen' scope (Located l (MutSubGrad ps gs)) = checkSen' scope (Located l (SubGrad ps gs))
 checkSen' scope (Located l (SubGrad ps gs)) = do
@@ -1046,15 +1026,16 @@ checkSen' scope (Located l (SubGrad ps gs)) = do
 
       -- variables for element types, norm and clip parameters and dimension
       τgs <- newVar
-      nrm <- newVar
-      clp <- newVar
-      m <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+      m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set argument types
       unify (l :\\: "The thing that the gradient is subtracted from must be a model") ps (NoFun (DMModel m))
       unify (l :\\: "The thing that is subtracted from the model must be a gradient") gs (NoFun (DMGrads nrm clp m (NoFun (Numeric τgs))))
 
       return (NoFun (DMModel m))
+
 
 checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
@@ -1075,9 +1056,9 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
   -- Create variables for the matrix type
   -- (norm and clip parameters and dimension)
-  nrm <- newVar
-  clp <- newVar
-  m <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- infer the types of the scalar and the gradient
   -- we get
@@ -1101,11 +1082,6 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
   unify (l :\\: "Set element type of scaled gradient") (Numeric τresnum) τres
   return (NoFun (DMGrads nrm U m (NoFun τres)))
 
--- checkSen' scope (Reorder σ t) = do
---   τ <- checkSens scope t
---   ρ <- newVar
---   addConstraintNoMessage (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
---   return ρ
 
 checkSen' scope (Located l (TProject i t)) = do
   τ <- checkSens scope t
@@ -1113,24 +1089,29 @@ checkSen' scope (Located l (TProject i t)) = do
   addConstraintNoMessage (Solvable (IsTProject ((i , τ) :=: ρ)))
   return ρ
 
+
 checkSen' scope (Located l (ZeroGrad m)) = do
    -- check model
    tm <- checkSens scope m
 
    -- variables for element type, dimension, result norm and clip parameters
-   n <- newVar
-   nrm <- newVar
-   clp <- newVar -- actually variable, as all entries are zero
+   n <- svar <$> newSVarWithPriority UserNamePriority "n"
+   nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+   clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- actually variable, as all entries are zero
 
    -- input must be a model
    unify (l :\\: "Input for `zero_gradient` must be a model") tm (NoFun (DMModel n))
 
    -- we could return const here but it'll probably be trouble
-   return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num DMReal NonConst)))))
+   return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
+
+
+-- The user can explicitly copy return values.
+checkSen' scope term@(Located l (Clone t)) = checkSen' scope t 
 
 
 checkSen' scope term@(Located l (SumGrads g1 g2)) = do
-
+        
   -- Create sensitivity / type variables for the addition
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpAdd) 2
                            (DMPersistentMessage $ "Constraint on the builtin call:" :\\: term)
@@ -1141,10 +1122,10 @@ checkSen' scope term@(Located l (SumGrads g1 g2)) = do
 
   -- Create variables for the gradient type
   -- (norm and clip parameters and dimension)
-  nrm <- newVar
-  clp1 <- newVar
-  clp2 <- newVar
-  m <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp1 <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  clp2 <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- infer the types of the scalar and the gradient
   let dg1 = checkSens scope g1
@@ -1186,16 +1167,6 @@ checkSen' scope term@(Located l (InternalMutate a)) = do
   res <- checkSens scope a <* mscale (constCoeff $ Fin 2)
   return res
 
---
--- The user can explicitly copy return values.
---
-checkSen' scope term@(Located l (Clone t)) = checkSen' scope t -- do
-  -- res <- checkSens scope t
-
-  -- ta <- newVar
-  -- res' <- unify res (NoFun (ta))
-
-  -- return (NoFun (ta))
 
 checkSen' scope term@(Located l (Disc t)) = do
   tt <- checkSen' scope t <* mtruncateS inftyS
@@ -1203,14 +1174,15 @@ checkSen' scope term@(Located l (Disc t)) = do
   unify (l :\\: "Input for `disc` must be numeric") (NoFun (Numeric v)) tt
   return (NoFun (Numeric (Num DMData NonConst)))
 
+
 checkSen' scope term@(Located l (MakeVec m)) = do
   mtype <- checkSens scope m
 
   -- variables for element type, norm and clip parameters and dimension
   τ <- newVar
-  nrm <- newVar
-  clp <- newVar
-  cols <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  cols <- svar <$> newSVarWithPriority UserNamePriority "n"
 
   -- set 1-row matrix type
   unify (l :\\: "`vec_from_row` expects one-row matrix") mtype (NoFun (DMMat nrm clp oneId cols τ))
@@ -1218,14 +1190,21 @@ checkSen' scope term@(Located l (MakeVec m)) = do
   return (NoFun (DMVec nrm clp cols τ))
 
 
+checkSen' scope term@(Located l (Undisc t)) = do
+  tt <- checkSen' scope t <* mtruncateS inftyS
+  v <- newVar
+  unify (l :\\: "Input for `undisc` must be numeric (use `undisc_container` for container types)") (NoFun (Numeric v)) tt
+  return (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
+
+
 checkSen' scope term@(Located l (MakeRow m)) = do
   mtype <- checkSens scope m
 
   -- variables for element type, norm and clip parameters and dimension
   τ <- newVar
-  nrm <- newVar
-  clp <- newVar
-  cols <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  cols <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- set 1-row matrix type
   unify (l :\\: "`row_from_vec` expects vector") mtype (NoFun (DMVec nrm clp cols τ))
@@ -1234,7 +1213,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (showPretty $ getLocated t))
+checkSen' scope t = throwLocatedError (TermColorError SensitivityK (showPretty $ getLocated t)) (getLocation t)
 
 --------------------------------------------------------------------------------
 -- Privacy terms
@@ -1243,14 +1222,9 @@ checkPri' :: DMScope -> LocDMTerm -> TC DMMain
 checkPri' scope (Located l (Ret t)) = do
    τ <- checkSens scope t
    mtruncateP inftyP
-   log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
+   log $ "checking privacy " <> showPretty (Ret t) <> ", type is " <> showPretty τ
    return τ
 
-{-
-checkPri' scope (Rnd t) = do
-  τ <- (createDMTypeBaseNum t)
-  return (NoFun (Numeric (NonConst τ)))
--}
 
 checkPri' scope term@(Located l (Apply f args)) =
   let
@@ -1274,7 +1248,7 @@ checkPri' scope term@(Located l (Apply f args)) =
        -- we typecheck the function, but `apply` our current layer on the Later computation
        -- i.e. "typecheck" means here "extracting" the result of the later computation
        res <- (checkSens scope f)
-       logForce ("[Apply-Priv]Scope is:\n" <> show (getAllKeys scope))
+       logForce ("[Apply-Priv]Scope is:\n" <> showT (getAllKeys scope))
        mtruncateP inftyP -- truncate f's context to ∞
        return res
 
@@ -1297,9 +1271,10 @@ checkPri' scope (Located l (SLet x term body)) = do
   -- check body with that new scope
   result <- checkPriv scope' body
 
-  log $ "checking (transparent) privacy SLet: " <> show x <> " = " <> show term <> " in " <> show body
+  log $ "checking (transparent) privacy SLet: " <> showPretty x <> " = " <> showPretty term <> " in " <> showPretty body
 
   return result
+
 
 checkPri' scope (Located l (SBind x term body)) = do
   -- this is the bind rule.
@@ -1334,7 +1309,7 @@ checkPri' scope (Located l (SBind x term body)) = do
   τnofun <- newVar
   unify (l :\\: "Term after a bind cannot be a function") τbody (NoFun τnofun)
 
-  debug $ "checking privacy SLet: " <> show x <> " = " <> show term <> " in " <> show body<> "\n ==> inferred type is " <> show τx <> ", term type is " <> show τterm <> ", body types is " <> show τbody
+  debug $ "checking privacy SLet: " <> showPretty x <> " = " <> showPretty term <> " in " <> showPretty body<> "\n ==> inferred type is " <> showPretty τx <> ", term type is " <> showPretty τterm <> ", body types is " <> showPretty τbody
   -- return the type of this bind expression
   return τbody
 
@@ -1364,9 +1339,11 @@ checkPri' original_scope curterm@(Located l (TLet xs term body)) = do
   -- -- check body with that new scope
   result <- checkPriv scope_with_args body
 
-  log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
+  log $ "checking (transparent) privacy SLet: " <> showPretty xs <> " = " <> showPretty term <> " in " <> showPretty body
 
   return result
+
+
 checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
   a <- newTeVar "tbind_var"
   -- we check the term
@@ -1380,47 +1357,6 @@ checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
                    (Located (RelatedLoc s1 l) (TLet xs (Located (RelatedLoc s1 l) (Var a))
                          body))))
 
-
------------------------------------
--- PRIVACY TUPLE HACK
---
-{-
--- there are no privacy tuples. instead we transform the term:
--- (t1, t2)
--- becomes
---
--- slet x1 = t1
--- slet x2 = t2
--- in return (x1, x2)
---
--- this way if t1 and t2 are privacy terms, they can be checked in privcacy mode
--- but the tuple is still a sensitivity term.
-checkPri' (Tup ts) scope = do
-   names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]] -- make unique new names for the elements.
-   let body = Ret (Tup [Var (n :- JTAny) | n <- names])
-   let t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
-      --traceM $ "privacy Tup checking term " <> show t1
-   checkPriv t1 scope
-
--- there are no privacy tlets either. so here's what we do:
--- tlet (x1, x2) = t
--- in ...
--- becomes
---
--- tup = t
--- slet x1 = return { tlet (x1,_) = tup
---                    in x1 }
--- slet x2 = return { tlet (_,x2) = tup
---                   in x2 }
--- in ...
---
--- this way we can do the projections in sensitivity mode while the body can still be a privacy term.
-checkPri' (TLet xs term body) scope = do
-   tupvar <- newTeVar "tup" -- make a new unique name for the tup
-   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (tupvar :- JTAny)) (Var (x :- τj)))) t) body xs
-       t2 = SLet (tupvar :- (JTAny)) term t1
-   checkPriv t2 scope
--}
 
 checkPri' scope (Located l (MutGauss rp εp δp f)) = checkPri' scope (Located l (Gauss rp εp δp f))
 checkPri' scope term@(Located l (Gauss rp εp δp f)) =
@@ -1438,16 +1374,16 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
       τf <- df
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
-        ("In the gauss call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+        (l :\\:
+         "Gauss: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       ctxBeforeTrunc <- use types
-      debug $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
+      debug $ "[Gauss] Before truncation, context is:\n" <> showT ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types
-      debug $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
+      debug $ "[Gauss] After truncation, context is:\n" <> showT ctxAfterTrunc
       (ivars, itypes) <- getInteresting
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
       -- return type is a privacy type.
@@ -1471,9 +1407,10 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
         (l :\\: "Gauss delta parameter must be <= 1")
       addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
         (l :\\: "Gauss epsilon parameter must be > 0")
+
       addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
         (l :\\: "Gauss delta parameter must be > 0")
-
+        
       -- restrict interesting variables in f's context to v_r
       let mf = setBody df (v_ε, v_δ) v_r
 
@@ -1506,8 +1443,8 @@ checkPri' scope term@(Located l (Laplace rp εp f)) =
       τf <- df
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
-        ("In the laplace call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+        (l :\\: 
+         "Laplace: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
@@ -1558,25 +1495,25 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
       let mt  = checkSens scope t  <* mtruncateP inftyP
 
       n <- newVar -- number of queries
-      nrm <- newVar -- norm of query vector
-      clp <- newVar -- clip of query vector
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- norm of query vector
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- clip of query vector
 
       (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
 
       tfun <- newVar
-      addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Nothing]))))
+      addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num (IRNum DMReal) NonConst)))) :@ Nothing]))))
         (l :\\: "AboveThreshold query vector must contain functions of the right type.")
       unify (l :\\: "Set AboveThreshold query vector type") τqs (NoFun (DMVec nrm clp n tfun))
       
-      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
+      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num (IRNum DMReal) (Const eps)))))))
         (l :\\: "AboveThreshold epsilon parameter must be const (Static).")
-      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num DMReal NonConst))))))
+      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num (IRNum DMReal) NonConst))))))
         (l :\\: "AboveThreshold threshold parameter must be const (Static).")
 
-      return (NoFun (Numeric (Num DMInt NonConst)))
+      return (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
+
 
 checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
-
   let
    setParamConst :: TC DMMain -> Sensitivity -> TC ()
    setParamConst dt v = do -- parameters must be const numbers.
@@ -1597,38 +1534,32 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
    setBody df ε r t_x = do
 
       -- extract f's type from the TC monad
-      --
       t_f_actual <- df
 
       -- unify with expected
       --  the sensitivity of the function can be \infty,
       --  so we simply use a var and allow any sensitivity.
-      --
       s_input <- newVar
-      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Just [JTAny]])
+      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num (IRNum DMReal) NonConst)))) :@ Just [JTAny]])
       unify (l :\\: "Exponential mechanism expects a function from element type to the reals.") t_f_actual t_f_required
 
       -- interesting input variables must have sensitivity <= r
-      --
       restrictInteresting r
-        ("In the exponential call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+        (l :\\:
+         "Exponential: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
-        
 
       -- interesting output variables are set to (ε, 0), the rest is truncated to ∞
-      --
       ctxBeforeTrunc <- use types
-      debug $ "[Exponential] Before truncation, context is:\n" <> show ctxBeforeTrunc
+      debug $ "[Exponential] Before truncation, context is:\n" <> showT ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types
-      debug $ "[Exponential] After truncation, context is:\n" <> show ctxAfterTrunc
+      debug $ "[Exponential] After truncation, context is:\n" <> showT ctxAfterTrunc
       (ivars, itypes) <- getInteresting
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
 
       return ()
-
 
    in do
       -- check all the parameters and f, extract the TC monad from the Delayed monad.
@@ -1653,8 +1584,8 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
 
       return (v_t_x)
 
-checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
-   --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
+
+checkPri' scope (Located l (Loop (start,step,end) cs' (xi, xc) body)) =
    let setInteresting (xs, τps) n = do
           let τs = map fstAnn τps
           let ps = map sndAnn τps
@@ -1668,6 +1599,8 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
           addConstraint (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
             (l :\\: "This variable can be chosen freely > 0")
 
+          memorizeUserVar δn "within (0,1]" JTReal l
+
           -- compute the new privacy for the xs according to the advanced composition theorem
           let two = oneId ⋆! oneId
           let newp = (two ⋅! (ε ⋅! (sqrt (two ⋅! (n ⋅! (minus (ln oneId) (ln δn)))))), δn ⋆! (n ⋅! δ))
@@ -1680,8 +1613,10 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       let s2 = "Iterator var generated by this loop"
       let s3 = "Capture var generated by this loop"
 
-      --traceM $ "checking privacy Loop: " <> show  (Loop niter cs (xi, xc) body)
-      let cniter = checkSens scope niter <* mtruncateP zeroId
+      let cstart = checkSens scope start
+      let cstep = checkSens scope step
+      let cend = checkSens scope end
+      let cniter = msum3Tup (cstart, cstep, cend) <* mtruncateP zeroId
 
       -- build the tup of variables
       let cs = (Located (RelatedLoc s0 l) (Tup ((\a -> (Located (RelatedLoc s1 l) (Var a))) <$> cs')))
@@ -1719,28 +1654,21 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       -- n = number of iterations as assumed in the loop body
       -- τbit = type of the iterator variable xi inferred in the body
       -- τbcs = type of the capture variable xc inferred in the body
-      (τit, τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
+      ((tstart, tstep, tend), τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
 
-      unify (l :\\: "Number of iterations in private loop must be const (Static) integer.") τit (NoFun (Numeric (Num DMInt (Const n)))) -- number of iterations must be constant integer
-      unify (l :\\: "Iterator in private loop must be integer") (NoFun (Numeric (Num DMInt NonConst))) τbit -- number of iterations must match type requested by body
+      n1 <- newVar
+      n2 <- newVar
+      n3 <- newVar
+      unify (l :\\: "Start value of iterator in private loop must be const (Static) integer.") tstart (NoFun (Numeric (Num (IRNum DMInt) (Const n1)))) -- number of iterations must be constant integer
+      unify (l :\\: "Step size in interator of private loop must be const (Static) integer.") tstep (NoFun (Numeric (Num (IRNum DMInt) (Const n2)))) -- number of iterations must be constant integer
+      unify (l :\\: "End value of iterator in private loop must be const (Static) integer.") tend (NoFun (Numeric (Num (IRNum DMInt) (Const n3)))) -- number of iterations must be constant integer
+      unify (l :\\: "Iterator in private loop must be integer") (NoFun (Numeric (Num (IRNum DMInt) NonConst))) τbit -- number of iterations must match type requested by body
 
+      let η = ceil (divide (minus n3 (minus n1 oneId)) n2) -- compute number of iterations
+      unify (l :\\: "User-given number of iterations must match number of iterations assumed in the loop.") n η
+      
       τcsnf <- newVar
       unify (l :\\: "Loop captures cannot be functions.") (NoFun τcsnf) τloop_in -- functions cannot be captured.
-
-{-
-      -- TODO loops with Const captures/output don't work yet.
-      -- the inferred capture type should be the same as the non-const version of the inferred body type
-      -- so we can loop properly by plugging the loop result into the loop in again
-      -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
-      -- iteration.
-      addConstraintNoMessage (Solvable (IsNonConst (τb, τbcs)))
-
-      -- also the given capture that we start iteration with should fit into the expected capture
-      addConstraintNoMessage (Solvable (IsNonConst (τcs, τbcs)))
--}
-
-      -- the types of body, input captures and captures as used in the body must all be equal
-      -- (except Const-ness, actually. we'll figure that out at some point)
 
       addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
          (l :\\: "Loop captures input must be non-const version of loop output.")
@@ -1748,14 +1676,6 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
          (l :\\: "Initial loop captures must match loop output.")
 
       return τbody_in
-
-
-
--- checkPri' scope (Reorder σ t) = do
---   τ <- checkPriv scope t
---   ρ <- newVar
---   addConstraintNoMessage (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
---   return ρ
 
 
 checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) tail)) =
@@ -1793,7 +1713,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
                 -- truncate tail context to infinite privacy and return tail type and args types/privacies
                 case xs_types_privs' of
                      [(t1,p1), (t2,p2)] -> ((return (τ,(t1,p1),(t2,p2))) <* mtruncateP inftyP)
-                     _ -> impossible $ ("Both results of sample must be assigned a name. Instead I got " <> (show xs_types_privs'))
+                     _ -> impossible $ ("Both results of sample must be assigned a name. Instead I got " <> (showPretty xs_types_privs'))
   in do
       -- sum all involved contexts.
       -- tn, tm1, tm2: types of n_samples and the two matrices that are sampled
@@ -1803,14 +1723,14 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
       (((tn,pn), (tm1,pm1), (tm2,pm2)), (ttail, (t1, (e1,d1)), (t2, (e2,d2)))) <- msumTup (msum, mtail)
       
       -- variables for clip parameter, dimensions and number of samples (m2)
-      clp <- newVar
-      m1 <- newVar
-      m2 <- newVar
-      n1 <- newVar
-      n2 <- newVar
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+      m1 <- svar <$> newSVarWithPriority UserNamePriority "m"
+      m2 <- svar <$> newSVarWithPriority UserNamePriority "m"
+      n1 <- svar <$> newSVarWithPriority UserNamePriority "n"
+      n2 <- svar <$> newSVarWithPriority UserNamePriority "n"
     
       -- set number of samples to const m2 and truncate context with 0
-      unify (l :\\: "Number of samples must be const (Static) integer") tn (NoFun (Numeric (Num DMInt (Const m2))))
+      unify (l :\\: "Number of samples must be const (Static) integer") tn (NoFun (Numeric (Num (IRNum DMInt) (Const m2))))
       unify (l :\\: "Truncate context of number of samples with 0") pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule
@@ -1831,7 +1751,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
 checkPri' scope (Located l (PReduceCols f m)) = do
     ε <- newVar
     δ <- newVar
-    ηm <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
     r <- newVar
     let mm = checkSens scope m <* mtruncateP (r ⋅! ε, r ⋅! δ)
     let mf = checkSens scope f <* mtruncateP inftyP
@@ -1847,17 +1767,18 @@ checkPri' scope (Located l (PReduceCols f m)) = do
 
     return (NoFun (DMVec LInf U r τ_out))
 
+
 checkPri' scope (Located l (MutPFoldRows f acc m₁ m₂)) = checkPri' scope (Located l (PFoldRows f acc m₁ m₂))
 checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     ε <- newVar
     δ <- newVar
-    ηm <- newVar
-    ηn₁ <- newVar
-    ηn₂ <- newVar
-    l₁ <- newVar
-    l₂ <- newVar
-    c₁ <- newVar
-    c₂ <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    l₁ <- TVar <$> newTVarWithPriority UserNamePriority "N"
+    l₂ <- TVar <$> newTVarWithPriority UserNamePriority "N"
+    c₁ <- TVar <$> newTVarWithPriority UserNamePriority "C"
+    c₂ <- TVar <$> newTVarWithPriority UserNamePriority "C"
     let mf = checkSens scope f <* mtruncateP inftyP
     let macc = checkSens scope acc <* mtruncateP inftyP
     let mm₁ = checkSens scope m₁ <* mtruncateP (ε, δ)
@@ -1895,6 +1816,5 @@ checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     return τbody_out
 
 
-checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (showPretty $ getLocated t))
-
+checkPri' scope t = throwLocatedError (TermColorError PrivacyK (showPretty $ getLocated t)) (getLocation t)
 

@@ -1,11 +1,15 @@
 
 {-# LANGUAGE UndecidableInstances #-}
 
+{- |
+Description: Wrapping monoidal combinations (`MonCom`) to use as data types for various contexts.
+-}
 module DiffMu.Abstract.Data.MonComCtx where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Data.MonadicPolynomial
 import DiffMu.Abstract.Class.Term
+import DiffMu.Abstract.Data.HashMap
 
 import Data.HashMap.Strict as H
 
@@ -38,13 +42,15 @@ instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
 instance (ShowPretty v, ShowPretty x, DictKey v) => ShowPretty (Ctx v x) where
   showPretty (Ctx γ) = showWith ",\n" (\x τ -> showPretty x <> " : " <> showPretty τ) γ ""
 
+instance (ShowLocated v, ShowLocated x, DictKey v) => ShowLocated (Ctx v x) where
+  showLocated (Ctx γ) = do
+    source <- ask
+    return $ showWith ",\n" (\x τ -> runReader (showLocated x) source <> " : " <> runReader (showLocated τ) source) γ ""
+
+
 instance Default (Ctx v x)
 
 
-class DictKey k => DictLikeM t k v d | d -> k v where
-  setValueM :: k -> v -> d -> t d
-  getValueM :: k -> d -> t (Maybe v)
-  deleteValueM :: k -> d -> t d
 
 instance (MonadInternalError t,
           DictLike k v1 d1, DictLike k v2 d2,
@@ -52,7 +58,7 @@ instance (MonadInternalError t,
          ) => DictLikeM t k (Either v1 v2) (Either d1 d2) where
   setValueM k (Left v) (Left d) = return $ Left (setValue k v d)
   setValueM k (Right v) (Right d) = return $ Right (setValue k v d)
-  setValueM k v d = internalError $ "Trying to set " <> show k <> " := " <> show v <> " in dict " <> show d
+  setValueM k v d = internalError $ "Trying to set " <> showT k <> " := " <> showT v <> " in dict " <> showT d
   getValueM k (Left d) = case getValue k d of
     Just x  -> return $ Just (Left (x))
     Nothing -> return $ Nothing

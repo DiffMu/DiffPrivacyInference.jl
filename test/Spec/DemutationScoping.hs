@@ -20,7 +20,7 @@ testDScope01 pp = do
            \   f(0)             \n\
            \ end               "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "01a works (capturing variables is allowed)" exa (pure ty)
@@ -37,7 +37,7 @@ testDScope01 pp = do
             \   f(1) * f(3)    \n\
             \ end              "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 8)) :@ Just []])
 
   parseEval pp "01b works (same named variables in disjunct scopes is allowed)" exb(pure ty)
@@ -98,7 +98,7 @@ testDScope03 pp = do
            \   f(1) + a         \n\
            \ end                "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
   parseEval pp "03 works (mutation of function arguments is allowed, even if they are same-named)" ex (pure ty)

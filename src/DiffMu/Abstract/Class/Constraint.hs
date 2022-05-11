@@ -1,7 +1,16 @@
-
 {-# LANGUAGE UndecidableInstances #-}
 
+{- |
+Description: System for generic constraint solving.
 
+Consists of:
+  1. A class `TCConstraint` for specifying new constraint types
+     as functors isomorphic to the identity functor.
+  2. A class `Solvable` for specifying how a given constraint type
+     can be solved in a given class of monads.
+  3. A class `MonadConstraint` for monads which provide primitives for
+     constraint solving: creating, updating, discharging, getting constraints.
+-}
 module DiffMu.Abstract.Class.Constraint where
 
 import DiffMu.Prelude
@@ -9,34 +18,37 @@ import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Class.Term
 import DiffMu.Abstract.Data.Error
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Logging
--- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
+import qualified Data.Text as T
 
 default (Text)
 
-data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
+---------------------------------------------------------------------------------
+-- Solving Mode
+---------------------------------------------------------------------------------
+data SolvingMode = SolveExact | SolveRecreateSupremum | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
   deriving (Eq)
 
 instance Show SolvingMode where
   show SolveExact = "exact"
+  show SolveRecreateSupremum = "recreate_supremum" -- NOTE: this is only to be used in monadic graph search
   show SolveAssumeWorst = "worst"
   show SolveGlobal = "global"
   show SolveFinal = "final"
   show SolveSpecial = "special"
+  
+instance ShowPretty SolvingMode where
+    showPretty = T.pack . show
 
 instance Monad m => Normalize m SolvingMode where
   normalize _ = pure
 
 
--- instance FreeVars SVarOf SolvingMode where
 
--- instance Ord SolvingMode where
---   SolveExact <= a = True
---   SolveAssumeWorst <= SolveExact = False
---   SolveAssumeWorst <= SolveAssumeWorst = True
-
+---------------------------------------------------------------------------------
+-- TCConstraint & Solvable
+---------------------------------------------------------------------------------
 class TCConstraint c where
   constr :: a -> c a
   runConstr :: c a -> a
@@ -45,16 +57,12 @@ class TCConstraint c where
   insideConstr f c = constr <$> f (runConstr c)
 
 class TCConstraint c => Solve (isT :: (* -> *) -> Constraint) c a where
-  solve_ :: Dict ((IsT isT t)) -> SolvingMode -> Symbol -> c a -> t ()
-
-class MonadNormalize t where
-  normalizeState :: NormalizationType -> t ()
+  solve_ :: Dict ((IsT isT t)) -> SolvingMode -> IxSymbol -> c a -> t ()
 
 data Solvable  (extraConstr :: * -> Constraint) (extraContentConstr :: * -> Constraint) isT where
-  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a, extraContentConstr a, extraConstr (c a)) => c a -> Solvable extraConstr extraContentConstr isT
+  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), ShowPretty (c a), Eq (c a), Typeable c, Typeable a, extraContentConstr a, extraConstr (c a)) => c a -> Solvable extraConstr extraContentConstr isT
 
--- solve' :: (Solve isT c a, IsT isT t, Normalize (t) a) => c a -> t ()
-solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable eC eC2 isT) -> t ()
+solve :: (Monad (t), IsT isT t) => SolvingMode -> IxSymbol -> (Solvable eC eC2 isT) -> t ()
 solve mode name (Solvable (c :: c a) :: Solvable eC eC2 isT) = f Proxy
   where f :: (Monad (t), IsT isT t) => Proxy (t) -> t ()
         f (_ :: Proxy (t)) = (insideConstr normalizeExact c >>= solve_ @isT Dict mode name)
@@ -66,124 +74,87 @@ instance (isT t, Monad (t)) => Normalize (t) (Solvable eC eC2 isT) where
 instance Show (Solvable eC eC2 isT) where
   show (Solvable c) = show c
 
+instance Eq (Solvable eC eC2 isT) where
+  (Solvable (ca :: c a)) == (Solvable (db :: d b)) = 
+    let case0 = testEquality (typeRep @(c a)) (typeRep @(d b))
+    in case case0 of
+      Just Refl -> ca == db
+      Nothing   -> False
+
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a :=: b) where
+  showPretty (a :=: b) = showPretty a <> " :=: " <> showPretty b
+
+
 instance ShowPretty (Solvable eC eC2 isT) where
-  showPretty = show
+  showPretty (Solvable c) = showPretty c
+
+instance ShowLocated (Solvable eC eC2 isT) where
+  showLocated = pure . showPretty
 
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 
+
+---------------------------------------------------------------------------------
+-- `MonadConstraint` class
+---------------------------------------------------------------------------------
+class MonadNormalize t where
+  normalizeState :: NormalizationType -> t ()
+
 class (Monad t) => MonadConstraint isT t | t -> isT where
--- class (IsT isT t) => MonadConstraint v isT t e | t -> isT where
   type ContentConstraintOnSolvable t :: * -> Constraint
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: (Normalize t a, ShowPretty a, Show a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
-  getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
-  dischargeConstraint :: Symbol -> t ()
-  failConstraint :: Symbol -> t ()
-  updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
+  addConstraint :: (MessageLike t a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t IxSymbol
+  getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (IxSymbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
+  nubConstraints :: t ()
+  dischargeConstraint :: IxSymbol -> t ()
+  markFailedConstraint :: IxSymbol -> t ()
+  failConstraint :: IxSymbol -> t ()
+  updateConstraint :: IxSymbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
   openNewConstraintSet :: t ()
   mergeTopConstraintSet :: t CloseConstraintSetResult
   logPrintConstraints :: t ()
   logPrintSubstitutions :: t ()
-  getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
-  getConstraintMessage :: Symbol -> t (DMPersistentMessage t)
-  getConstraint :: Symbol -> t (Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, DMPersistentMessage t)
-  getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
-  clearSolvingEvents :: t [String]
+  getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(IxSymbol, c a)]
+  getConstraintMessage :: IxSymbol -> t (DMPersistentMessage t)
+  getConstraint :: IxSymbol -> t (Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, DMPersistentMessage t)
+  getAllConstraints :: t [(IxSymbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
+  clearSolvingEvents :: t [Text]
+
+
+
+
+
+---------------------------------------------------------------------------------
+-- Using the `MonadConstraint` interface
+---------------------------------------------------------------------------------
 
 inheritanceMessageFromName name = do
     (c,msg) <- getConstraint name
     return
-      (("Inherited from the constraint:" :: Text) :\\:
-       ("  " :: Text) :<>: c :\\:
+      (("Inherited from the constraint: " :: Text) :\\->:
+       (c :\\:
        msg
+       )
       )
 
+addConstraintNoMessage :: MonadConstraint isT t => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t IxSymbol
 addConstraintNoMessage solvable = addConstraint solvable ()
-addConstraintFromName name solvable = do
-    (c,msg) <- getConstraint name
-    addConstraint solvable
-      (("Inherited from the constraint:" :: Text) :\\:
-       ("  " :: Text) :<>: c :\\:
-       msg
-      )
 
+addConstraintFromName :: (isT m, MonadConstraint isT m) => IxSymbol -> Solvable (ConstraintOnSolvable m) (ContentConstraintOnSolvable m) isT -> m IxSymbol
+addConstraintFromName name solvable = do
+    msg <- inheritanceMessageFromName name
+    addConstraint solvable msg
+
+addConstraintFromNameMaybe :: (isT m, MonadConstraint isT m) => Maybe IxSymbol -> Solvable (ConstraintOnSolvable m) (ContentConstraintOnSolvable m) isT -> m IxSymbol
 addConstraintFromNameMaybe (Just name) = addConstraintFromName name
 addConstraintFromNameMaybe (Nothing)   = addConstraintNoMessage
 
 
-
-
-(==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
-(==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
-
--- An abbreviation for adding a less equal constraint.
-(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
-(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
-
-
--- Basic constraints
-newtype IsEqual a = IsEqual a
-  deriving (Show)
-
-instance TCConstraint IsEqual where
-  constr = IsEqual
-  runConstr (IsEqual c) = c
-
-
----- Less Equal (subtyping)
-newtype IsLessEqual a = IsLessEqual a
-  deriving (Show)
-
-instance TCConstraint IsLessEqual where
-  constr = IsLessEqual
-  runConstr (IsLessEqual c) = c
-
----- Less (for sensitivities)
-newtype IsLess a = IsLess a
-  deriving (Show)
-
-instance TCConstraint IsLess where
-  constr = IsLess
-  runConstr (IsLess c) = c
-
----- Sups
-newtype IsSupremum a = IsSupremum a deriving Show
-
-instance TCConstraint IsSupremum where
-  constr = IsSupremum
-  runConstr (IsSupremum c) = c
-
----- Infimum
-newtype IsInfimum a = IsInfimum a deriving Show
-
-instance TCConstraint IsInfimum where
-  constr = IsInfimum
-  runConstr (IsInfimum c) = c
-
----- Choices
-newtype IsChoice a = IsChoice a deriving Show
-
-instance TCConstraint IsChoice where
-  constr = IsChoice
-  runConstr (IsChoice c) = c
-
----- Functions/Privacy Functions
-newtype IsFunction a = IsFunction a deriving Show
-
-instance TCConstraint IsFunction where
-  constr = IsFunction
-  runConstr (IsFunction c) = c
-
-
-----------------------------------------------------------
--- functions for Constraint
-
-
--- Iterates over all constraints which are currently in a "changed" state, and tries to solve them.
--- Returns if no "changed" constraints remains.
--- An unchanged constraint is marked "changed", if it is affected by a new substitution.
--- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
+-- | Iterates over all constraints which are currently in a "changed" state, and tries to solve them.
+--   Returns if no "changed" constraints remains.
+--   An unchanged constraint is marked "changed", if it is affected by a new substitution.
+--   A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
 solveAllConstraints :: forall isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t ()
 solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
@@ -193,11 +164,14 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
     [] -> pure ()
     xs -> do
       log $ "[Solver]: Before solving all constraints, the following events have accumulated unnoticed:"
-      log $ intercalate "\n" (fmap ("           - " <>) xs)
+      log $ intercalateS "\n" (fmap ("           - " <>) xs)
       log ""
 
 
+  -- normalize state
   normalizeState nt
+
+  -- get the first constraint to solve
   openConstr <- getUnsolvedConstraintMarkNormal modes
 
   case openConstr of
@@ -208,7 +182,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       -- logPrintSubstitutions
 
       catchAndPersist (solve mode name constr) $ \msg -> do
-        dischargeConstraint name
+        markFailedConstraint name
         let msg' = "The constraint" :<>: name :<>: ":" :<>: constr :\\:
                   "could not be solved:"
                   :-----:
@@ -216,20 +190,6 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
                   :-----:
                   msg
         return ((),msg')
-      -- catchError (solve mode name constr) $ \(WithContext err ctx) -> do
-      --   crit <- isCritical err
-      --   case crit of
-      --     True -> throwError err
-      --     False -> do
-      --       let changeMsg :: DMPersistentMessage t -> DMPersistentMessage t
-      --           changeMsg (DMPersistentMessage msg) = DMPersistentMessage $ 
-      --             "The constraint" :<>: name :<>: ":" :<>: constr
-      --             :\\:
-      --             "could not be solved:"
-      --             :\\:
-      --             msg
-      --       persistentError (changeMsg (getPersistentErrorMessage err))
-      --       dischargeConstraint name
 
       -- debug $ "[Solver]: Notice: AFTER solving (" <> show mode <> ") " <> show name <> " : " <> show constr
 
@@ -248,8 +208,8 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       case (bDischarged, events) of
         (False,[]) -> pure ()
         (b,xs) -> do
-          log $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
-          log $ intercalate "\n" (fmap ("             - " <>) xs)
+          log $ "[Solver]: solving (" <> showT mode <> ") " <> showT name <> " : " <> showPretty constr
+          log $ intercalateS "\n" (fmap ("             - " <>) xs)
           log $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
 
       solveAllConstraints nt modes
@@ -271,12 +231,15 @@ solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
-solveAndNormalize :: forall a isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
+solveAndNormalize :: forall a isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, ShowPretty a) => NormalizationType -> [SolvingMode] -> a -> t a
 solveAndNormalize nt modes value = f 4 value
   where
     f :: Int -> a -> t a
     f n a0 | n <= 0 = impossible "Solving & normalizing needed more than 4 iterations. Cancelling."
     f n a0          = do
+
+      -- remove duplicate constraints
+      nubConstraints
 
       -- get all constraint names
       allCs0 <- getAllConstraints
@@ -287,8 +250,8 @@ solveAndNormalize nt modes value = f 4 value
       debug $ "Solved constraints as far as possible."
       debug $ "Now normalizing type."
       a1 <- normalize nt a0
-      debug $ "Old type: " <> show a0
-      debug $ "New type: " <> show a1
+      debug $ "Old type: " <> showPretty a0
+      debug $ "New type: " <> showPretty a1
 
       allCs1 <- getAllConstraints
       let allNames1 = fst <$> allCs1

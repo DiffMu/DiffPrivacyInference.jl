@@ -1,4 +1,7 @@
 
+{- |
+Description: Core definitions of the duet/DiffPriv type system.
+-}
 module DiffMu.Core (module All)
   where
 

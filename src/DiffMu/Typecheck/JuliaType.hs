@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedLists #-}
 
+{- |
+Description: Conversion between `DMType`s and `JuliaType`s.
+-}
 module DiffMu.Typecheck.JuliaType where
 
 import DiffMu.Prelude
@@ -8,7 +11,9 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core
 import DiffMu.Core.Logging
+import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
+import DiffMu.Typecheck.Constraint.Definitions
 
 -- local imports
 import Algebra.PartialOrd
@@ -34,6 +39,8 @@ default (Text)
 -- type has not (yet) been inferred, we get a bottom julia type because they could
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
+juliatypes (IRNum (TVar _)) = [JTReal, JTInt]
+juliatypes (IRNum t) = juliatypes t
 juliatypes (Numeric (Num t c)) = juliatypes t
 juliatypes (Numeric (TVar _)) = [JTInt, JTReal, JTData]
 juliatypes DMInt = [JTInt]
@@ -65,15 +72,15 @@ juliatypesInContainer constr t = map constr (juliatypes t)
 
 -- get a BaseNumKind DMType corresponding to the given JuliaType
 createDMTypeBaseNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
-createDMTypeBaseNum (JTInt) = pure DMInt
-createDMTypeBaseNum (JTReal) = pure DMReal
+createDMTypeBaseNum (JTInt) = pure (IRNum DMInt)
+createDMTypeBaseNum (JTReal) = pure (IRNum DMReal)
 createDMTypeBaseNum (JTData) = pure DMData
 createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
 createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
-createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num DMInt NonConst)))
-createDMTypeNum (JTReal) = pure (NoFun (Numeric (Num DMReal NonConst)))
+createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
+createDMTypeNum (JTReal) = pure (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 createDMTypeNum (JTData) = pure (NoFun (Numeric (Num DMData NonConst)))
 createDMTypeNum (t) = pure DMAny
 
@@ -81,8 +88,8 @@ createDMTypeNum (t) = pure DMAny
 -- used to make DMType subtyping constraints for annotated things
 createDMType :: MonadDMTC t => JuliaType -> t DMType
 createDMType (JTBool) = pure DMBool
-createDMType (JTInt) = pure (Numeric (Num DMInt NonConst))
-createDMType (JTReal) = pure (Numeric (Num DMReal NonConst))
+createDMType (JTInt) = pure (Numeric (Num (IRNum DMInt) NonConst))
+createDMType (JTReal) = pure (Numeric (Num (IRNum DMReal) NonConst))
 createDMType (JTData) = pure (Numeric (Num DMData NonConst))
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts
@@ -125,8 +132,24 @@ createDMType (JTMetricGradient t nrm) = do
   n <- newVar
   return (DMGrads nrm clp n dt)
 createDMType JTAny = return DMAny
-createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
+createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> showT t <> " to not be a function.")
 
+
+----------------------------------------------------------------
+-- Things that should be functions
+
+instance Solve MonadDMTC IsFunction (AnnotationKind, DMMain) where
+    solve_ Dict _ name (IsFunction (kind, typ)) = let
+        checkKind (f :@ _) = case (f, kind) of
+            (_:->:_, SensitivityK) -> True
+            (_:->*:_, PrivacyK) -> True
+            _ -> False
+        in case typ of
+            Fun ts -> case and (map checkKind ts) of
+                           True -> dischargeConstraint name
+                           False -> failConstraint name
+            NoFun _ -> failConstraint name
+            _ -> pure ()
 
 ---------------------------------------------------------
 -- julia-subtype constraints
@@ -171,22 +194,3 @@ newtype JuliaSignature = JuliaSignature [JuliaType]
 instance PartialOrd JuliaSignature where
   leq (JuliaSignature a) (JuliaSignature b) = and (zipWith leq a b)
 
-
-----------------------------------------------------------------
--- Things that should be functions
-
-instance FixedVars TVarOf (IsFunction (AnnotationKind, DMTypeOf MainKind)) where
-  fixedVars (IsFunction (b)) = []
-
-instance Solve MonadDMTC IsFunction (AnnotationKind, DMMain) where
-    solve_ Dict _ name (IsFunction (kind, typ)) = let
-        checkKind (f :@ _) = case (f, kind) of
-            (_:->:_, SensitivityK) -> True
-            (_:->*:_, PrivacyK) -> True
-            _ -> False
-        in case typ of
-            Fun ts -> case and (map checkKind ts) of
-                           True -> dischargeConstraint name
-                           False -> failConstraint name
-            NoFun _ -> failConstraint name
-            _ -> pure ()

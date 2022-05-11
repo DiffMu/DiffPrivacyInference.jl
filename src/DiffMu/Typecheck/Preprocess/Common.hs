@@ -1,6 +1,9 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Definition of `LightTC`, a monad with state, logging and errors to be used by the preprocessing steps.
+-}
 module DiffMu.Typecheck.Preprocess.Common where
 
 import DiffMu.Prelude
@@ -16,8 +19,9 @@ import qualified Data.Text as T
 import Debug.Trace
 
 
-newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT (LocatedDMException (LightTC l s)) (Writer (DMMessages (LightTC l s) )))) a)}
-  deriving (Functor, Applicative, Monad, MonadState s, MonadError (LocatedDMException (LightTC l s)), MonadWriter (DMMessages (LightTC l s)))
+
+newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT (LocatedDMException (LightTC l s)) (ReaderT RawSource (Writer (DMMessages (LightTC l s) ))))) a)}
+  deriving (Functor, Applicative, Monad, MonadState s, MonadError (LocatedDMException (LightTC l s)), MonadWriter (DMMessages (LightTC l s)), MonadReader RawSource)
 
 instance ISing_DMLogLocation l => MonadInternalError (LightTC l s) where
   internalError = throwUnlocatedError . InternalError
@@ -35,11 +39,11 @@ instance ISing_DMLogLocation l => MonadLog (LightTC l a) where
 
 
 -- logging
-logWithSeverityOfMut :: forall l a. ISing_DMLogLocation l => DMLogSeverity -> String -> LightTC l a ()
+logWithSeverityOfMut :: forall l a. ISing_DMLogLocation l => DMLogSeverity -> Text -> LightTC l a ()
 logWithSeverityOfMut sev text = do
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev (singDMLogLocation (Proxy @l)) <$> (reverse $ lines text)
+  let messages = DMLogMessage sev (singDMLogLocation (Proxy @l)) <$> (reverse $ linesS text)
   tell (DMMessages messages [])
 
 -- lifting
@@ -48,12 +52,14 @@ newtype WrapMessageLight a = WrapMessageLight a
   deriving (Show)
 instance ShowPretty a => ShowPretty (WrapMessageLight a) where
   showPretty (WrapMessageLight a) = showPretty a
+instance ShowLocated a => ShowLocated (WrapMessageLight a) where
+  showLocated (WrapMessageLight a) = showLocated a
 instance Monad m => Normalize m (WrapMessageLight a) where
   normalize e x = pure x
 
 liftNewLightTC :: Default s => LightTC l s a -> TC a
 liftNewLightTC a =
-  let s = runExceptT $ runStateT (runLightTC a) def
+  let s = runReaderT $ runExceptT $ runStateT (runLightTC a) def
 
       h = \(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)
 
@@ -66,11 +72,11 @@ liftNewLightTC a =
       f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, def), g b)
 
-  in TCT (StateT (\t -> ExceptT (WriterT (return (f $ runWriter $ s)))))
+  in TCT (StateT (\t -> ExceptT (ReaderT (\readstate -> (WriterT (return (f $ runWriter $ s readstate)))))))
 
 liftLightTC :: forall s t k l a. s -> (s -> t) -> LightTC k s a -> LightTC l t a
 liftLightTC start conv a =
-  let s = runExceptT $ runStateT (runLightTC a) start
+  let s = (runReaderT $ runExceptT $ runStateT (runLightTC a) start)
 
       h = \(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)
 
@@ -83,6 +89,6 @@ liftLightTC start conv a =
       f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, conv s), g b)
 
-  in LightTC (StateT (\t -> ExceptT (WriterT (return (f $ runWriter $ s)))))
+  in LightTC (StateT (\t -> ExceptT (ReaderT (\readstate -> WriterT (return (f $ runWriter $ s readstate))))))
 
 

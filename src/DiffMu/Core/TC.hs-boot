@@ -18,8 +18,8 @@ data Full (t :: *)
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
 
-class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
-instance (FixedVars TVarOf x) => GoodConstraint x where
+class GoodConstraint (x :: *) where
+instance GoodConstraint x where
 
 class LiftTC (t :: * -> *)
 

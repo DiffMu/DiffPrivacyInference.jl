@@ -1,9 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Symbolic terms used for sensitivity values.
+-}
 module DiffMu.Core.Symbolic where
 
 import DiffMu.Prelude
--- import DiffMu.Prelude.MonadicAlgebra
 import DiffMu.Abstract
 import qualified Prelude as P
 
@@ -12,15 +14,11 @@ import Data.HashMap.Strict as H
 import DiffMu.Prelude.MonadicAlgebra (Normalize)
 
 data SymVal =
-  Infty | Fin Float -- a| Ln (SymTerm t)
+  Infty | Fin Float
   deriving (Generic, Eq)
 instance Show SymVal where
   show Infty = "∞"
   show (Fin f) = show f
-    -- let a = numerator f
-    --     b = denominator f
-    -- in if b == 1 then show a
-    --              else show @Float (fromRational f)
 
 instance Ord SymVal where
   _ <= Infty = True
@@ -37,8 +35,6 @@ data SensKind = MainSensKind
 
 genSingletons [''SensKind]
 
--- data SymTerm = SymTerm SymVal
---   deriving (Generic, Show)
 -- addition
 instance Monad t => SemigroupM t (SymVal) where
   (⋆) Infty _            = pure Infty
@@ -51,8 +47,6 @@ instance Monad t => MonoidM t (SymVal) where
 
 instance Monad t => CMonoidM t (SymVal)
 
--- instance Group SymVal where
---   neg Infty = MinusInfty
 
 -- multiplication
 -- special thing: 0 * Infty = 0 (see paper page 38)
@@ -64,7 +58,6 @@ instance Monad t => SemiringM t (SymVal) where
   (⋅)      _  Infty      = pure $ Infty
   (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
 
--- instance SingI SensKind where
 
 -- SymTerm are polynomials for describing sensitivities
 -- apart from regular variables (HonestVar) they can have
@@ -91,17 +84,13 @@ maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
 divide s t = s ⋅! injectVarId (Div t)
 
+instance HasVarPriority SymVar where
+  varPriority (HonestVar x@(SymbolOf (IxSymbol v@(y,yi,ynp)))) = varPriority x
+  varPriority _ = CompoundPriority GeneratedNamePriority 0
 
--- tryComputeSym :: NormalizationType -> SymVar k -> SymVar k
--- tryComputeSym nt x = case f x of
---                     Just val -> undefined --Id val
---                     Nothing -> x
 
 tryComputeSym :: NormalizationType -> SymVar k -> SymVar k
 tryComputeSym nt x = x
-  -- case f x of
-  --                   Just val -> undefined --Id val
-  --                   Nothing -> x
 
 normalizationSubstitution :: NormalizationType -> SymVar k -> SymTerm k
 normalizationSubstitution nt x = case f x of
@@ -146,7 +135,6 @@ normalizationSubstitution nt x = case f x of
 
     f :: SymVar k -> Maybe (SymTerm MainSensKind)
     f (HonestVar _)  = Nothing
-    -- f (Id t)         = Nothing
     f (Ln a)         = constCoeff <$> (dmLog <$> extractVal a)
     f (Exp (a,b))    = case extractVal a of
       Just (Fin 1) -> pure (a)
@@ -182,21 +170,18 @@ normalizationSubstitution nt x = case f x of
       SimplifyingNormalization -> Just b
 
 
-    -- dmTruncateSym :: SymVal -> SymTerm MainSensKind -> SymVal
-    -- dmTruncateSym (Fin 0) b = (Fin 0)
-
 instance Show (SymVar k) where
   show (HonestVar v) = show v
-  -- show (Id te) = "id(" <> show te <> ")"
   show (Ln te) = "ln(" <> show te <> ")"
   show (Exp (b, e)) = show b <> "^(" <> show e <> ")"
-  show (Ceil te) = "ceil(" <> show te <> ")"
-  show (Sqrt te) = "sqrt(" <> show te <> ")"
+  show (Ceil te) = "⌈" <> show te <> "⌉"
+  show (Sqrt te) = "√(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
   show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2 <> ")"
   show (Div t2) = "(1 / " <> show t2 <> ")"
   show (TruncateSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
   show (TruncateDoubleSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
+
 
 instance Hashable (SymVar k)
 
@@ -209,7 +194,6 @@ type SymTerm :: SensKind -> *
 type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
-  -- checkContains (Id _) = Nothing
   checkContains (Ln _) = Nothing
   checkContains (Exp _) = Nothing
   checkContains (Ceil _) = Nothing
@@ -250,7 +234,6 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
 --
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
-  -- substitute σ (Id v)        = tryComputeSym ExactNormalization <$> Id <$> substitute σ v
   substitute σ (Ln a)        = tryComputeSym ExactNormalization <$> Ln <$> substitute σ a
   substitute σ (Exp (b,e))   = tryComputeSym ExactNormalization <$> ((\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e)
   substitute σ (Ceil a)      = tryComputeSym ExactNormalization <$> Ceil <$> substitute σ a
@@ -268,10 +251,6 @@ instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2
 --
 normalizeSensSpecial :: NormalizationType -> (CPolyM SymVal Int (SymVar MainSensKind) MainSensKind) -> (CPolyM SymVal Int (SymVar MainSensKind) MainSensKind)
 normalizeSensSpecial nt s = runIdentity $ substitute (pure . normalizationSubstitution nt) s
--- nt (SingleKinded (LinCom (MonCom m))) = SingleKinded (LinCom (MonCom (f m)))
---   where
---     f :: HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal -> HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal
---     f = H.mapKeys (\(MonCom hmap) -> MonCom $ H.mapKeys (tryComputeSym nt) hmap)
 
 
 

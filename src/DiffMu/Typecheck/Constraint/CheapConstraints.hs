@@ -1,4 +1,7 @@
 
+{- |
+Description: This file contains the solving code for constraints where said code is not very complex.
+-}
 module DiffMu.Typecheck.Constraint.CheapConstraints where
 
 import DiffMu.Prelude
@@ -12,6 +15,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.JuliaType
+import DiffMu.Typecheck.Constraint.Definitions
 import Algebra.PartialOrd
 
 import Debug.Trace
@@ -28,48 +32,27 @@ import qualified Prelude as P
 
 default (Text)
 
+
 -------------------------------------------------------------------
 -- set the a type to a variable const, in case it's numeric or a tuple.
 --
 
-newtype MakeConst a = MakeConst a deriving Show
-
-instance TCConstraint MakeConst where
-  constr = MakeConst
-  runConstr (MakeConst c) = c
-
-instance FixedVars TVarOf (MakeConst (DMMain)) where
-  fixedVars (MakeConst _) = []
-
-instance Solve MonadDMTC MakeConst (DMMain) where
-  solve_ Dict _ name (MakeConst τ) = case τ of
+instance Solve MonadDMTC MakeConst (DMMain, Text) where
+  solve_ Dict _ name (MakeConst (τ,username)) = case τ of
       TVar _ -> pure ()
       NoFun (TVar _) -> pure ()
-      NoFun (DMTup ts) -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst (NoFun t)))) ts) >> dischargeConstraint name
-      NoFun (Numeric (Num _ (TVar k))) -> do
-                     ck <- newVar
-                     unifyFromName name (TVar k) (Const ck)
-                     dischargeConstraint name
-      NoFun (Numeric (TVar k)) -> do
+      NoFun (DMTup ts) -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst (NoFun t, username)))) ts) >> dischargeConstraint name
+      NoFun (Numeric k) -> do
                      cv <- newVar 
-                     ck <- newVar
-                     unifyFromName name (TVar k) (Num cv (Const ck))
+                     ck <- newSVarWithPriority UserNamePriority username
+                     debug $ "While making const: priority of " <> showT ck <> " is: " <> showT (varPriority ck)
+                     unifyFromName name (k) (Num cv (Const (svar ck)))
                      dischargeConstraint name
       _ -> dischargeConstraint name 
 
 
 ----------------------------------------------------------
 -- replacing all Numeric TVars by non-const
-
-
-newtype MakeNonConst a = MakeNonConst a deriving Show
-
-instance TCConstraint MakeNonConst where
-  constr = MakeNonConst
-  runConstr (MakeNonConst c) = c
-
-instance Typeable k => FixedVars TVarOf (MakeNonConst (DMTypeOf k, SolvingMode)) where
-  fixedVars (MakeNonConst _) = []
 
 instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) where
   solve_ Dict currentMode name (MakeNonConst (τ, targetMode)) | currentMode == targetMode = do
@@ -81,7 +64,6 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) wh
          freev4 = filterSomeK @TVarOf @ConstnessKind freev
 
      let makeVarNonConst v = do
-                    --  k <- newVar
                      τv <- newVar
                      unifyFromName name (TVar v) (Num τv NonConst)
 
@@ -90,75 +72,43 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) wh
      let makeCVarNonConst v = do unifyFromName name (TVar v) (NonConst)
      mapM makeCVarNonConst freev4
 
-
-     -- compare the length of `m` and `n`, that is, if all free variables
-     -- have the aforementioned kinds
-     let m = length freev
-         n = length freev0 P.+ length freev1 P.+ length freev2 P.+ length freev3 P.+ length freev4
-
-     case (m == n) of
-        True -> dischargeConstraint name
-        False -> dischargeConstraint name -- pure ()
+     dischargeConstraint name
 
   solve_ Dict currentMode name (MakeNonConst (τ, targetMode)) | otherwise = pure ()
 
 
-{-
-
-makeConst_JuliaVersion :: MonadDMTC t => DMTypeOf k -> t (DMTypeOf k)
-makeConst_JuliaVersion (TVar a) = return (TVar a)
-makeConst_JuliaVersion (Num a (Const k)) = return (Num a (Const k))
-makeConst_JuliaVersion (Num a NonConst) = do
-                                         k <- newVar
-                                         return (Num a (Const k))
-makeConst_JuliaVersion (NoFun a) = NoFun <$> (makeConst_JuliaVersion a)
-makeConst_JuliaVersion (DMTup as) = DMTup <$> (sequence (makeConst_JuliaVersion <$> as))
-makeConst_JuliaVersion (Numeric a) = Numeric <$> (makeConst_JuliaVersion a)
--- everything else is not changed
-makeConst_JuliaVersion x = return x
--}
 -------------------------------------------------------------------
 -- is it Loop or static Loop (i.e. is no of iterations const or not)
 
-newtype IsLoopResult a = IsLoopResult a deriving Show
-
-instance TCConstraint IsLoopResult where
-  constr = IsLoopResult
-  runConstr (IsLoopResult c) = c
-
-instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain)) where
-  fixedVars (IsLoopResult (_, _, res)) = freeVars res
-
-
-instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain) where
-  solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
+instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, (DMMain, DMMain, DMMain)) where
+  solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, (i1,i2,i3))) = do
      let SensitivityAnnotation s = sa
-     case τ_iter of
-        NoFun (Numeric (Num _ (Const η))) -> do
-           unifyFromName name s1 zeroId
-           unifyFromName name s2 (exp s η)
-           unifyFromName name s3 η
-           dischargeConstraint name
-        NoFun (Numeric (Num _ NonConst)) -> do
-           unifyFromName name s oneId
-           unifyFromName name s1 oneId
-           unifyFromName name s2 oneId
-           unifyFromName name s3 inftyS
-           dischargeConstraint name
-        _ -> return ()
+     let isConst :: DMMain -> Maybe (Either Sensitivity ())
+         isConst t = case t of
+                          (NoFun (Numeric (Num _ (Const n)))) -> Just (Left n)
+                          (NoFun (Numeric (Num _ NonConst))) -> Just (Right ())
+                          _ -> Nothing
+     msg <- inheritanceMessageFromName name
+     case (isConst i1,isConst i2,isConst i3) of
+          (Just (Left start), Just (Left step), Just (Left end)) -> do -- all operands are const, so number of iterations is const too
+             let η = ceil (divide ((minus end start) ⋆! oneId) step) -- compute number of iterations
+             addConstraint (Solvable (IsLessEqual (start, end))) (msg :\\: "Start value of iterator must be <= end value of iterator.")
+             unifyFromName name s1 zeroId -- iteration variable context scales with 0
+             unifyFromName name s2 (exp s η)
+             unifyFromName name s3 η
+             dischargeConstraint name
+          (Just _, Just _, Just _) -> do -- some operands are non-const
+             unify (msg :\\: "The loop has variable number of iterations, so the sensitivity of all captured variables in the loop body must be 1.") s oneId
+             unifyFromName name s1 inftyS -- iteration variable context scales with inf (dffers from paper but is true)
+             unifyFromName name s2 oneId
+             unifyFromName name s3 inftyS
+             dischargeConstraint name
+          _ -> pure ()
+
 
 --------------------------------------------------
 -- is it gauss or mgauss?
 --
-newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving Show
-
-instance TCConstraint IsAdditiveNoiseResult where
-  constr = IsAdditiveNoiseResult
-  runConstr (IsAdditiveNoiseResult c) = c
-
-
-instance FixedVars TVarOf (IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
-  fixedVars (IsAdditiveNoiseResult (gauss,_)) = freeVars gauss
 
 instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf MainKind) where
   solve_ Dict _ name (IsAdditiveNoiseResult (τgauss, τin)) =
@@ -167,73 +117,29 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
         NoFun (TVar x) -> pure () -- we don't know yet.
         NoFun (DMContainer k nrm clp n τ) -> do -- is mgauss
 
-           logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
+           logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> showT (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
 
            iclp <- newVar -- clip of input matrix can be anything
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so we can put Integer or Real (but not Data)
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num DMReal τv))))))))
-           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num (IRNum DMReal) τv))))))))
+           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
            τ <- newVar -- input type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the gauss rule
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num DMReal τ))))))
-           unifyFromName name τgauss (NoFun (Numeric (Num DMReal NonConst)))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num (IRNum DMReal) τ))))))
+           unifyFromName name τgauss (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 
            dischargeConstraint @MonadDMTC name
 
 
 --------------------------------------------------
--- reordering of tuples
-
-{-
-newtype IsReorderedTuple a = IsReorderedTuple a deriving Show
-
-instance FixedVars TVarOf (IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMTypeOf MainKind)) where
-  fixedVars (IsReorderedTuple (_ :=: ρ)) = freeVars ρ
-
-instance TCConstraint IsReorderedTuple where
-  constr = IsReorderedTuple
-  runConstr (IsReorderedTuple c) = c
-
-instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMTypeOf MainKind) where
-  solve_ Dict _ name (IsReorderedTuple ((σ , τ) :=: ρ)) = f τ
-    where
-      f :: MonadDMTC t => DMTypeOf MainKind -> t ()
-      f (TVar _) = pure ()
-      f (_ :∧: _) = pure ()
-      f (NoFun (TVar _)) = pure ()
-      f (NoFun (DMTup τs)) = do
-        --
-        -- Since demutation expects single elements instead of unary tuples, we
-        -- have to special-case here.
-        --
-        let resultTuple = (permute σ τs)
-        case resultTuple of
-          [resultType] -> unify ρ (NoFun (resultType))
-          resultTuple -> unify ρ (NoFun (DMTup resultTuple))
-        dischargeConstraint name
-        pure ()
-      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")
-
--}
-
---------------------------------------------------
 -- projecting of tuples
-
-newtype IsTProject a = IsTProject a deriving Show
-
-instance FixedVars TVarOf (IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainKind)) where
-  fixedVars (IsTProject (_ :=: ρ)) = freeVars ρ
-
-instance TCConstraint IsTProject where
-  constr = IsTProject
-  runConstr (IsTProject c) = c
 
 instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainKind) where
   solve_ Dict _ name (IsTProject ((i , ρs) :=: ρ)) = f ρs
@@ -249,24 +155,15 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
             unifyFromName name ρ (NoFun ρ')
             dischargeConstraint name
             pure ()
-          Nothing -> internalError $ "tuple index out of range\nwhere index: " <> show i <> ",tuple type: " <> show ρs
-      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> show ρs <> " to be a tuple type.")
+          Nothing -> internalError $ "tuple index out of range\nwhere index: " <> showPretty i <> ",tuple type: " <> showPretty ρs
+      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> showT ρs <> " to be a tuple type.")
 
 
 --------------------------------------------------
 -- black boxes
 
-newtype IsBlackBox a = IsBlackBox a deriving Show
-
-instance FixedVars TVarOf (IsBlackBox ((DMTypeOf MainKind, [DMTypeOf MainKind]))) where
-  fixedVars (IsBlackBox (b, args)) = []
-
-instance TCConstraint IsBlackBox where
-  constr = IsBlackBox
-  runConstr (IsBlackBox c) = c
-
 instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
-    solve_ Dict _ name (IsBlackBox (box, args)) =
+  solve_ Dict _ name (IsBlackBox (box, args)) =
      case box of
         TVar x -> pure () -- we don't know yet.
         BlackBox jts -> do -- its a box!
@@ -279,17 +176,6 @@ instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
                 False -> throwUnlocatedError (NoChoiceFoundError "Wrong number of arguments for black box call.")
         _ -> impossible $ "Box Apply used with non-box!"
 
-
-
-
-newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving Show
-
-instance FixedVars TVarOf (IsBlackBoxReturn (DMTypeOf MainKind, Sensitivity)) where
-  fixedVars (IsBlackBoxReturn (b, args)) = []
-
-instance TCConstraint IsBlackBoxReturn where
-  constr = IsBlackBoxReturn
-  runConstr (IsBlackBoxReturn c) = c
 
 
 instance Solve MonadDMTC IsBlackBoxReturn (DMMain, Sensitivity) where
@@ -307,58 +193,9 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, Sensitivity) where
               discharge oneId
           _ -> discharge inftyS
 
-{-
--- TODO for now we set output to L_inf directly
--- black boxes have infinite sensitivity in their arguments, except for ones whose output is a vector with
--- (L_inf, Data) norm and the argument is a vector with any Data norm. in this case the black box (as every
--- other function with such input/output) has sensitivity 1 in that argument.
-instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
-    solve_ Dict SolveSpecial name (IsBlackBoxReturn (ret, (argt, args))) =
-     let discharge s = do
-                          unifyFromName name args s
-                          dischargeConstraint @MonadDMTC name
-     in case ret of
-          TVar _ -> pure ()
-          NoFun (DMContainer _ nret cret n tret) -> case cret of
-              U -> case argt of
-                        TVar _ -> pure ()
-                        NoFun (DMContainer _ narg carg _ targ) -> case (nret, tret) of
-                           (TVar _, TVar _)         -> pure ()
-                           (LInf, TVar _)           -> pure ()
-                           (TVar _, Numeric (Num DMData NonConst)) -> pure ()
-                           -- if the output norm d is (L_inf, Data) and the input norm is some norm d' on data,
-                           -- we have for every function f and all input vectors x!=y:
-                           -- d(f(x), f(y)) = 1 <= d'(x, y)
-                           -- so f is 1-sensitive using these norms.
-                           (LInf, Numeric (Num DMData NonConst))   -> case targ of
-                              TVar _ -> pure ()
-                              (Numeric (Num DMData NonConst)) -> discharge oneId
-                              _ -> discharge inftyS
-                           _ -> discharge inftyS
-                        _ -> discharge inftyS
-              _ -> do
-                      unifyFromName name cret U -- output type cannot be clipped
-                      return ()
-          _ -> discharge inftyS
--- if the blackbox output is a vector, the black boxes sensitivity is 1 when measured using the (L_inf, Data) norm on
--- the output vector and some Data norm on the input vector (see above).
--- in the final typechecking stage it is likely that we won't manage to infer the vector norm, so we just set it to (L_inf, Data),
--- risking unification errors but giving us sensitivity 1 on the black box...
-    solve_ Dict SolveFinal name (IsBlackBoxReturn (ret, (argt, args))) = case (ret, argt) of
-          (NoFun (DMContainer vret nret cret dret tret), (NoFun (DMContainer varg narg carg darg targ))) -> do
-              unifyFromName name ret (NoFun (DMContainer vret LInf U dret (Numeric (Num DMData NonConst))))
-              unifyFromName name targ (Numeric (Num DMData NonConst))
-              return ()
-          _ -> pure ()
-          
-    solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) = pure ()
-    -}
-
 
 --------------------------------------------------
 -- IsLess for sensitivities
-
-
 
 instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
   solve_ Dict _ name (IsLess (s1, s2)) = solveLessSensitivity s1 s2
@@ -385,48 +222,8 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
 
 
 
-{-
--------------------------------------------------------------------
--- functions that return DMGrads or DMModel must deepcopy the return value.
-
-newtype IsClone a = IsClone a deriving Show
-
-instance TCConstraint IsClone where
-  constr = IsClone
-  runConstr (IsClone c) = c
-
-instance FixedVars TVarOf (IsClone (DMMain, DMMain)) where
-  fixedVars (IsClone res) = freeVars res
-
-
-instance Solve MonadDMTC IsClone (DMMain, DMMain) where
-  solve_ Dict _ name (IsClone (TVar v, _)) = return ()
-  solve_ Dict _ name (IsClone (NoFun (TVar v), _)) = return ()
-  solve_ Dict _ name (IsClone (NoFun (DMTup ts), tv)) = do
-     nvs <- mapM (\_ -> newVar) ts
-     unifyFromName name tv (NoFun (DMTup nvs))
-     mapM (\(tt, nv) -> addConstraintNoMessage (Solvable (IsClone ((NoFun tt), (NoFun nv))))) (zip ts nvs)
-     dischargeConstraint name
-  solve_ Dict _ name (IsClone (NoFun (DMModel _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsClone (NoFun (DMContainer _ _ _ _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsClone (NoFun (Cloned v), t)) = unifyFromName name (NoFun v) t >> dischargeConstraint name
-  solve_ Dict _ name (IsClone (ti, tv)) = unifyFromName name ti tv >> dischargeConstraint name
--}
-
-
-
-
 --------------------------------------------------
 -- matrix or vector
-
-newtype IsVecOrMat a = IsVecOrMat a deriving Show
-
-instance FixedVars TVarOf (IsVecOrMat (VecKind, Sensitivity)) where
-  fixedVars (IsVecOrMat _) = []
-
-instance TCConstraint IsVecOrMat where
-  constr = IsVecOrMat
-  runConstr (IsVecOrMat c) = c
 
 instance Solve MonadDMTC IsVecOrMat (VecKind, Sensitivity) where
     solve_ Dict _ name (IsVecOrMat (k, s)) =
@@ -440,15 +237,6 @@ instance Solve MonadDMTC IsVecOrMat (VecKind, Sensitivity) where
 -- gradient or vector or 1d-matrix
 --
 
-newtype IsVecLike a = IsVecLike a deriving Show
-
-instance FixedVars TVarOf (IsVecLike VecKind) where
-  fixedVars (IsVecLike _) = []
-
-instance TCConstraint IsVecLike where
-  constr = IsVecLike
-  runConstr (IsVecLike c) = c
-
 instance Solve MonadDMTC IsVecLike VecKind where
     solve_ Dict _ name (IsVecLike k) =
      case k of
@@ -457,32 +245,19 @@ instance Solve MonadDMTC IsVecLike VecKind where
         Gradient -> dischargeConstraint name
         Matrix r -> unifyFromName name r oneId >> dischargeConstraint name
 
-
 --------------------------------------------------
--- check if a type is equal to another, set a sensitivity accordingly
+-- container norm conversion
+--
 
-
-newtype SetIfTypesEqual a = SetIfTypesEqual a deriving Show
-
-instance FixedVars TVarOf (SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivity, Sensitivity)) where
-  fixedVars (SetIfTypesEqual _) = []
-
-instance TCConstraint SetIfTypesEqual where
-  constr = SetIfTypesEqual
-  runConstr (SetIfTypesEqual c) = c
-
-instance Solve MonadDMTC SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivity, Sensitivity) where
-    solve_ Dict _ name (SetIfTypesEqual (target, t1, t2, strue, sfalse)) = let
-       f1 :: [SomeK TVarOf] = freeVars t1
-       f2 :: [SomeK TVarOf] = freeVars t2
-     in
-       case (and [null f1, null f2]) of -- no free variables in any of the types
-            True -> case t1 == t2 of
-                         True -> do
-                           unifyFromName name target strue
-                           dischargeConstraint name
-                         False -> do
-                           unifyFromName name target sfalse
-                           dischargeConstraint name
-            False -> pure ()
+instance Solve MonadDMTC ConversionResult (DMTypeOf NormKind, DMTypeOf NormKind, Sensitivity, Sensitivity) where
+    solve_ Dict _ name (ConversionResult (nrm_in, nrm_out, n, s)) =
+     case (nrm_in, nrm_out) of
+        (L1,_)      -> unify ("Setting container norm conversion penalty to 1.") s oneId >> dischargeConstraint name
+        (L2,L2)     -> unify ("Setting container norm conversion penalty to 1.") s oneId >> dischargeConstraint name
+        (LInf,LInf) -> unify ("Setting container norm conversion penalty to 1.") s oneId >> dischargeConstraint name
+        (L2,L1)     -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        (L2,LInf)   -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        (LInf,L1)   -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        (LInf,L2)   -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        _           -> pure ()
 

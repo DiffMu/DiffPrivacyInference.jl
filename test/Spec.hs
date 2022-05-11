@@ -6,6 +6,7 @@ import Spec.Subtyping
 import Spec.Supremum
 import Spec.Rules
 import Spec.Scoping
+import Spec.Recursion
 import Spec.Demutation.AssignmentMoveSemantics
 import Spec.Demutation.NonAliasedMutatingArguments
 import Spec.Demutation.AliasedVectorIndexing
@@ -45,6 +46,7 @@ runAllTests parse = defaultspec $ do
   testSupremum
   testCheck_Rules
   testScoping parse
+  testRecursion parse
   testDemutation parse
   testDemutationScoping parse
   testOriginalScoping parse
@@ -54,6 +56,8 @@ runAllTests parse = defaultspec $ do
   testDemutation_Passthrough parse
   testTypecheckingExamples parse
   testIssues parse
+
+  -- not activated:
   -- testParsing parse
 
 

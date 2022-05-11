@@ -1,4 +1,11 @@
 
+{- |
+Description: Executing the preprocessing and typechecking pipeline.
+
+This is the top level code which describes how a user input (a string passed to us from the julia runtime),
+is fed into the preprocessing - typechecking - constraint solving pipeline. And furthermore how the resulting
+output (logging, error messages) are presented to the user.
+-}
 module DiffMu.Runner where
 
 import DiffMu.Prelude
@@ -15,11 +22,8 @@ import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
 import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.All
--- import DiffMu.Typecheck.Preprocess.Demutation
--- import DiffMu.Typecheck.Preprocess.FLetReorder
---import DiffMu.Parser.DMTerm.FromString
-import DiffMu.Parser.Expr.FromString
-import DiffMu.Parser.Expr.JExprToDMTerm
+import DiffMu.Parser.FromString
+import DiffMu.Parser.JExprToDMTerm
 
 import DiffMu.Typecheck.JuliaType
 
@@ -28,28 +32,35 @@ import Algebra.PartialOrd
 import           Foreign.C.String
 
 import Debug.Trace
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 
 run :: IO ()
 run = putStrLn "Hello?"
 
-typecheckFromString_DMTerm_Detailed :: String -> IO ()
-typecheckFromString_DMTerm_Detailed term = do
- let res = parseJTreeFromString term >>= parseJExprFromJTree 
- case res of
-   Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Detailed term
 
-typecheckFromString_DMTerm_Simple :: String -> IO ()
-typecheckFromString_DMTerm_Simple term = do
+typecheckFromString_DMTerm_Debug :: String -> String -> IO ()
+typecheckFromString_DMTerm_Debug term rawsource = do
+ let (res) = parseJTreeFromString term >>= parseJExprFromJTree
+ case (res) of
+   Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
+   Right (term,files) -> do
+     rs <- (rawSourceFromString rawsource files)
+     typecheckFromJExpr_Debug term rs
+
+typecheckFromString_DMTerm_Simple :: ShouldPrintConstraintHistory -> String -> String -> IO ()
+typecheckFromString_DMTerm_Simple bHistory term rawsource = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Simple term
+   Right (term,files) -> do
+     rs <- (rawSourceFromString rawsource files)
+     typecheckFromJExpr_Simple bHistory term rs
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 
-executeTC l r = do
-  let (x,logs) = runWriter (runExceptT ((runStateT ((runTCT r)) (Full def def (Right def)))))
+executeTC l r rawsource = do
+  let (x,logs) = runWriter (runReaderT (runExceptT ((runStateT ((runTCT r)) (Full def def (Right def))))) rawsource)
 
   case l of
     (DoShowLog s ls) -> do
@@ -70,88 +81,120 @@ executeTC l r = do
                     (errs, Left err) -> (err:errs, Nothing)
                     (errs, Right res) -> (errs, Just res)
 
-  putStrLn "======================== Errors ====================="
-  putStrLn (getErrorMessage errs)
-  putStrLn "======================== End Errors ====================="
+  case errs of
+       [] -> pure ()
+       _ -> do
+              putStrLn "======================== Errors ====================="
+              TIO.putStrLn (getErrorMessage rawsource errs)
+              putStrLn "======================== End Errors ====================="
 
   return (errs,res)
 
-  -- case errs of
-  --   [] -> return x
-  --   (x:xs) -> return (Left x)
-
-typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> String) -> DoShowLog -> JExpr -> IO ()
-typecheckFromJExprWithPrinter printer logoptions term = do
+typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> Text) -> DoShowLog -> JExpr -> RawSource -> IO ()
+typecheckFromJExprWithPrinter printer logoptions term rawsource = do
   let r = do
 
-        log $ "Checking term   : " <> show term
+        log $ "Checking term   : " <> showT term
 
         term' <- parseDMTermFromJExpr term >>= (liftNewLightTC . preprocessAll)
 
-        -- let tres = checkSens (term') def
         tres' <- checkSens def (term')
-        -- let tres'' = tres
-        -- let (tres'',_) = runState (runTCT tres) def
-        -- tres' <- case tres'' of
-        --            Nothing -> internalError "The result of typechecking was a non-applied later value.\nFrom this, no type information can be extracted."
-        --            Just a -> a
 
-
-        -- log $ "Type before constraint resolving: " <> show tres'
-        -- logForce $ "================================================"
-        -- logForce $ "before solving constraints (1)"
-        -- logPrintConstraints
-        -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        -- tres'' <- normalize tres'
-        -- logForce $ "================================================"
-        -- logForce $ "before solving constraints (2)"
-        -- logPrintConstraints
-        -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        -- tres''' <- normalize tres''
-        -- logForce $ "================================================"
-        -- logForce $ "before solving constraints (3)"
-        -- logPrintConstraints
         tres''' <- solveAndNormalize ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
         tres'''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'''
         return tres''''
 
-  x <- executeTC logoptions r
+  x <- executeTC logoptions r rawsource
 
   case x of
     (_, Nothing) -> putStrLn $ "No type could be inferred"
-    (_, Just x) -> putStrLn $ printer x
+    (_, Just x) -> TIO.putStrLn $ printer x
 
 
--- (DoShowLog Warning logging_locations)
+data ShouldPrintConstraintHistory = PrintConstraintHistory | DontPrintConstraintHistory
 
-typecheckFromJExpr_Simple :: JExpr -> IO ()
-typecheckFromJExpr_Simple term = do
+typecheckFromJExpr_Simple :: ShouldPrintConstraintHistory -> JExpr -> RawSource -> IO ()
+typecheckFromJExpr_Simple bHistory term rawsource = do
   let printer (ty, full) =
-        "\n---------------------------------------------------------------------------\n"
-        <> "Type:\n" <> showPretty ty
-        <> "\n---------------------------------------------------------------------------\n"
-        <> "Constraints:\n" <> showPretty (_constraints (_meta full))
-  typecheckFromJExprWithPrinter printer (DontShowLog) term
+        let cs = _topctx (_anncontent (_constraints (_meta full)))
+            cs_simple :: Ctx IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) = fmap (\(ConstraintWithMessage a m) -> a) cs
 
-typecheckFromJExpr_Detailed :: JExpr -> IO ()
-typecheckFromJExpr_Detailed term = do
+            pcs = case bHistory of
+              PrintConstraintHistory     -> runReader (showLocated cs) rawsource
+              DontPrintConstraintHistory -> runReader (showLocated cs_simple) rawsource
+
+            cstring = case isEmptyDict cs of
+                           True -> ""
+                           _ -> "Constraints:\n" <> pcs
+            fcs = (_failedConstraints (_meta full))
+            pfcs = runReader (showLocated fcs) rawsource
+            fcstring = case isEmptyDict fcs of
+                           True -> ""
+                           _ -> red "CHECKING FAILED" <> ": The following constraints are not satisfiable:\n"
+                                <> pfcs
+        in do
+           "\n---------------------------------------------------------------------------\n"
+           <> "Type:\n" <> runReader (showLocated ty) rawsource
+           <> "\n" <> (showPretty (_userVars (_meta full)))
+           <> "\n---------------------------------------------------------------------------\n"
+           <> showSpecialWarnings ty <> "\n"
+           <> cstring <> "\n"
+           <> fcstring
+  typecheckFromJExprWithPrinter printer (DontShowLog) term rawsource
+
+typecheckFromJExpr_Debug :: JExpr -> RawSource -> IO ()
+typecheckFromJExpr_Debug term rawsource = do
 
   let logging_locations = [
         -- Location_Check,
         Location_Constraint,
         Location_PrePro_Demutation,
-        Location_PreProcess
+        Location_PreProcess,
         -- Location_Subst
         -- Location_INC,
-        -- Location_MonadicGraph,
+        Location_MonadicGraph
          --Location_All
         ]
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
-        <> "Type:\n" <> show ty
+        <> "Type:\n" <> runReader (showLocated ty) rawsource
         <> "\n---------------------------------------------------------------------------\n"
-        <> "Monad state:\n" <> show full
+        <> showSpecialWarnings ty <> "\n"
+        <> "Monad state:\n" <> (showT full)
 
-  typecheckFromJExprWithPrinter printer (DoShowLog Warning logging_locations) term
+  typecheckFromJExprWithPrinter printer (DoShowLog Debug logging_locations) term rawsource
+
+
+--------------------------------------------------------------------------------------------------
+-- special warnings
+showSpecialWarnings :: DMMain -> Text
+showSpecialWarnings ty =
+  let warns = checkSpecialWarnings ty
+  in intercalateS "\n" (fmap (\tx -> yellow "WARNING" <> ":\n" <> indent tx) warns)
+
+checkSpecialWarnings :: DMMain -> [Text]
+checkSpecialWarnings ty = checkClipping
+  where
+    checkClipping = case ty of
+      Fun xs ->
+        let checkArg :: DMTypeOf MainKind -> [Text]
+            checkArg arg@(NoFun (DMContainer dto' dto2 clip_parameter sk dto4)) | clip_parameter /= U =
+               [ "The typechecked function has an input argument of type " <> quote (showPretty arg) <> ".\n" <>
+                 "(Note the clipping parameter " <> showPretty clip_parameter <> ".)\n" <>
+                 "This says that the input is required to be clipped wrt the norm " <> showPretty clip_parameter <> ",\n" <>
+                 "where \"clipped\" means that each row must have an " <> showPretty clip_parameter <> "-norm that is less or equal than 1." <> "\n" <>
+                 "\n" <>
+                 "If your data is not clipped, you have to call `clip` in your code. Then the inferred type will be " <> quote (showPretty (NoFun (DMContainer dto' dto2 U sk dto4))) <> "."
+               ]
+            checkArg _ = []
+
+            checkSingleFun :: DMTypeOf FunKind -> [Text]
+            checkSingleFun = \case
+              DMAny -> []
+              TVar so -> []
+              (:->:) xs dto  -> checkArg =<< (fstAnn <$> xs)
+              (:->*:) xs dto -> checkArg =<< (fstAnn <$> xs)
+        in checkSingleFun =<< (fstAnn <$> xs)
+      _ -> []
 
 

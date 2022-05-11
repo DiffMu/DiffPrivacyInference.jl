@@ -1,15 +1,25 @@
 
+{- |
+Description: Definition of the subtyping system.
+
+This involves code for solving questions of subtyping, as well as infimum/supremum.
+For generic graph search the computation is done using `DiffMu.Abstract.Computation.MonadicGraph`.
+But there are also further mechanisms for resolving such constraints:
+ - Diamond contraction
+ - Cycle contraction
+ - Top/Bottom evaluation
+-}
 module DiffMu.Typecheck.Subtyping where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.Logging
 import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
+import DiffMu.Typecheck.Constraint.Definitions
 
 
 import qualified Data.HashMap.Strict as H
@@ -24,13 +34,7 @@ default (Text)
 ---------------------------------------------------------------------
 -- "Non strict subtyping"
 
-
-
--- A helper function used below in defining the subtyping graph.
-getArrowLength :: DMFun -> Maybe Int
-getArrowLength (a :->: _) = Just (length a)
-getArrowLength _         = Nothing
-
+-- helper functions used below in defining the subtyping graph.
 getFun :: DMMain -> INCRes () [DMTypeOf FunKind :@ Maybe [JuliaType]]
 getFun (Fun xs) = Finished xs
 getFun (TVar _) = Wait
@@ -42,7 +46,7 @@ getTupSize (TVar a) = Wait
 getTupSize _ = Fail (UserError ())
 
 -- The subtyping graph for our type system.
-subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => Symbol -> EdgeType -> [Edge t (DMTypeOf k)]
+subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => IxSymbol -> EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph name =
   let 
       -- An abbreviation for adding a subtyping constraint.
@@ -54,12 +58,13 @@ subtypingGraph name =
       case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
       case3 = testEquality (typeRep @k) (typeRep @NumKind)
       case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
-      case5 = testEquality (typeRep @k) (typeRep @ClipKind)
-      case6 = testEquality (typeRep @k) (typeRep @NormKind)
-      case7 = testEquality (typeRep @k) (typeRep @ConstnessKind)
-  in case (case0,case1,case2,case3,case4,case5,case6,case7) of
+      case5 = testEquality (typeRep @k) (typeRep @IRNumKind)
+      case6 = testEquality (typeRep @k) (typeRep @ClipKind)
+      case7 = testEquality (typeRep @k) (typeRep @NormKind)
+      case8 = testEquality (typeRep @k) (typeRep @ConstnessKind)
+  in case (case0,case1,case2,case3,case4,case5,case6,case7,case8) of
     -- Main Kind
-    (Just Refl, _, _, _, _, _, _, _) ->
+    (Just Refl, _, _, _, _, _, _, _, _) ->
       \case { IsReflexive NotStructural
               -> []
             ; IsReflexive IsStructural
@@ -71,35 +76,17 @@ subtypingGraph name =
 
                    -- we do not have subtyping for arrows
                    MultiEdge getFun $ \a -> do
-                     -- a0 <- newVar
-                     -- a1 <- newVar
-                     -- a0 ⊑! a1
                      return (Fun a, Fun a)
                  ]
             ; _
               -> []
             }
-
-    (_,Just Refl, _, _, _, _, _, _) ->
+    -- Fun Kind
+    (_,Just Refl, _, _, _, _, _, _, _) ->
       \case { IsReflexive IsStructural -> []
             ; _ -> []}
-              -- -> [ MultiEdge getArrowLength $
-              --      \n -> do
-              --        let f () = do a <- newVar
-              --                      b <- newVar
-              --                      b ⊑! a
-              --                      s <- newVar
-              --                      return (a :@ s, b :@ s)
-
-              --        args <- mapM f (take n $ repeat ())
-              --        let (args₀, args₁) = unzip args
-              --        r₀ <- newVar
-              --        r₁ <- newVar
-              --        r₀ ⊑! r₁
-              --        return (args₀ :->: r₀,  args₁ :->: r₁)
-              --    ]}
-
-    (_,_, Just Refl, _, _, _, _, _) ->
+    -- NoFunKind
+    (_,_, Just Refl, _, _, _, _, _, _) ->
       \case { IsReflexive IsStructural
             -> [
                  (SingleEdge $
@@ -159,34 +146,13 @@ subtypingGraph name =
                       clp₀ ⊑! clp₁
                       return ((DMGrads nrm₀ clp₀ m a₀), (DMGrads nrm₁ clp₁ m a₁))
                  , SingleEdge $ return (DMBool, DMBool)
-                      {-
-                      {-
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting (Num DMData NonConst) to DMReal
-                   do nrm <- newVar
-                      clp <- newVar
-                      n <- newVar
-                      m <- newVar
-                      return ((DMMat nrm (Clip clp) n m (Numeric (Num DMData NonConst))), (DMMat clp U n m (Numeric (Num DMReal NonConst))))
-                    -}
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting (Num DMData NonConst) to DMReal
-                   do nrm <- newVar
-                      clp <- newVar
-                      m <- newVar
-                      return ((DMGrads nrm (Clip clp) m (Numeric (Num DMData NonConst))), (DMGrads clp U m (Numeric (Num DMReal NonConst))))
-                 , SingleEdge $ -- this is the fr-sens rule made implicit, for converting from L1 norm to any other
-                   do nrm <- newVar
-                      clp <- newVar
-                      t <- newVar
-                      m <- newVar
-                      return ((DMGrads L1 clp m (Numeric t)), (DMGrads nrm clp m (Numeric t)))
-                      -}
                  ]
             ; IsReflexive NotStructural -> []
             ; _ -> []
             }
 
     -- Num Kind
-    (_,_, _, Just Refl, _, _, _, _) ->
+    (_,_, _, Just Refl, _, _, _, _, _) ->
       \case { IsReflexive IsStructural
               -> [
                     -- SingleEdge $ return ((Num DMData NonConst), (Num DMData NonConst))
@@ -200,41 +166,29 @@ subtypingGraph name =
                       return (Num a₀ c₀, Num a₁ c₁)
                  ]
             ; IsReflexive IsLeftStructural -> []
-              -- -> [
-              --      SingleEdge $
-              --      do a₀ <- newVar
-              --         a₁ <- newVar
-              --         a₀ ⊑! a₁
-              --         return (NonConst a₀, NonConst a₁)
-              --    ]
             ; IsReflexive IsRightStructural -> []
-              --  -> [SingleEdge $
-              --      do a₀ <- newVar
-              --         a₁ <- newVar
-              --         a₀ ⊑! a₁
-              --         s₀ <- newVar
-              --         return (Const s₀ a₀, Const s₀ a₁)
-              --  ]
             ; NotReflexive -> []
-              -- -> [ SingleEdge $
-              --      do a₀ <- newVar
-              --         s₀ <- newVar
-              --         return (Const s₀ a₀, NonConst a₀)
-              --    ]
             ; _ -> []
             }
 
     -- BaseNum Kind
-    (_,_, _, _, Just Refl, _, _, _) ->
+    (_,_, _, _, Just Refl, _, _, _, _) ->
       \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (DMData, DMData)
+                 , SingleEdge $ do
+                     a <- newVar
+                     b <- newVar
+                     a ⊑! b
+                     return (IRNum a, IRNum b)
                  ]
-            ; IsReflexive IsRightStructural
-              -> [ SingleEdge $ return (DMInt, DMInt)
+            ; _ -> []
+            }
 
-                 -- , SingleEdge $
-                 --    do a <- newVar
-                 --       return (a , DMAny)
+    -- IRNum Kind
+    (_,_, _, _, _, Just Refl, _, _, _) ->
+      \case { IsReflexive IsRightStructural
+              -> [
+                   SingleEdge $ return (DMInt, DMInt)
                  ]
             ; IsReflexive IsLeftStructural
               -> [
@@ -245,9 +199,8 @@ subtypingGraph name =
                  ]
             ; _ -> []
             }
-
     -- kind = clip
-    (_, _, _, _, _, Just Refl, _, _) ->
+    (_, _, _, _, _, _, Just Refl, _, _) ->
       \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (U, U)
                  , SingleEdge $ do
@@ -256,30 +209,21 @@ subtypingGraph name =
                      a ⊑! b
                      return (Clip a, Clip b)
                  ]
-            -- ; IsReflexive IsRightStructural
-            --   -> [
-              -- SingleEdge $
-              --       do a <- newVar
-              --          return (a , DMAny)
-              --    ]
             ; _ -> []
             }
 
     -- kind = norm
-    (_, _, _, _, _, _, Just Refl, _) ->
+    (_, _, _, _, _, _, _, Just Refl, _) ->
       \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (L1, L1)
                  , SingleEdge $ return (L2, L2)
                  , SingleEdge $ return (LInf, LInf)
                  ]
-            -- ; IsReflexive IsRightStructural
-              -- -> [ SingleEdge $
-              --       do a <- newVar
-              --          return (a , DMAny)
-              --    ]
             ; _ -> []
             }
-    (_, _, _, _, _, _, _, Just Refl) ->
+            
+    -- constness kind
+    (_, _, _, _, _, _, _, _, Just Refl) ->
       \case { IsReflexive IsStructural
               -> [ ]
             ; IsReflexive IsLeftStructural
@@ -287,18 +231,11 @@ subtypingGraph name =
                    SingleEdge $
                    do 
                       return (NonConst, NonConst)
-                  -- , SingleEdge $
-                  --  do a <- newVar
-                  --     s <- newVar
-                  --     return (Const s, a)
                  ]
             ; IsReflexive IsRightStructural
                -> [SingleEdge $
                    do s₀ <- newVar
                       return (Const s₀, Const s₀)
-                  -- , SingleEdge $
-                  --   do a <- newVar
-                  --      return (a, NonConst)
                ]
             ; NotReflexive
               -> [ SingleEdge $
@@ -308,70 +245,86 @@ subtypingGraph name =
             ; _ -> []
             }
 
-    (_, _, _, _, _, _, _, _) -> \_ -> []
+    (_, _, _, _, _, _, _, _, _) -> \_ -> []
 
+
+
+convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToSupremum = convertSubtypingToSupInf (\(a,b,c) msg -> addConstraint (Solvable (IsSupremum ((a,b) :=: c))) msg) (\(a,b) -> (a,b))
+
+convertSubtypingToInfimum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToInfimum = convertSubtypingToSupInf (\(a,b,c) msg -> addConstraint (Solvable (IsInfimum ((a,b) :=: c))) msg) (\(a,b) -> (b,a))
+
+type MaybeInversionFunc k = (DMTypeOf k, DMTypeOf k) -> (DMTypeOf k, DMTypeOf k)
+type SupInfCreationFunc t k = forall msg. MessageLike t msg => (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> msg -> t IxSymbol
 
 -- If we have a bunch of subtyping constraints {β ≤ α, γ ≤ α, δ ≤ α} then it
 -- are allowed to turn this into a supremum constraint, i.e. "sup{β,γ,δ} = α"
 -- in the case that α does not appear in any other constraints except as lower bound of
 -- subtyping constraints. 
-convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
-convertSubtypingToSupremum name (lower, TVar upper) = do
-  -- case testEquality (typeRep @k) (typeRep @ConstnessKind) of
-  --   Just Refl -> pure ()
-  --   _ -> do
+convertSubtypingToSupInf :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => SupInfCreationFunc t k -> MaybeInversionFunc k -> IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToSupInf createConstr invert name (l,u) = do
+  case invert (l,u) of
+    (lower, TVar upper) -> do
+    -- case testEquality (typeRep @k) (typeRep @ConstnessKind) of
+    --   Just Refl -> pure ()
+    --   _ -> do
+        logForce $ "[SubToSupInf]: Trying conversion for " <> showT (invert (lower, TVar upper))
 
-      -- all (subtyping) constraints that contain upper
-      allCsWithUpper <- filterWithSomeVars [(SomeK upper)] <$> getAllConstraints
-      allSubWithUpper <- filterWithSomeVars [(SomeK upper)] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+        -- all (subtyping) constraints that contain upper
+        allCsWithUpper <- filterWithSomeVars [(SomeK upper)] <$> getAllConstraints
+        allSubWithUpper <- filterWithSomeVars [(SomeK upper)] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
 
-      case ((length allSubWithUpper) == (length allCsWithUpper)) of
-        False -> return () -- upper is involved in other constraints that are not LessEqual constraints, so this simplification is not allowed
-        True -> do
-            allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
-            -- TODO: We are actually not allowed to do this always, but only if there is nothing which could be broken...
-            -- all subtyping constraints δ ≤ upper for some δ
-            let (names, lowers) = unzip [(name', lower') | (name', IsLessEqual (lower', TVar upper')) <- allSubtypings,
-                                        name' /= name,
-                                        upper' == upper]
+        case ((length allSubWithUpper) == (length allCsWithUpper)) of
+          False -> (logForce "[SubToSupInf]: => other constraints are in the way!") >> return () -- upper is involved in other constraints that are not LessEqual constraints, so this simplification is not allowed
+          True -> do
+              allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+              let invSubtypings = second (\(IsLessEqual a) -> IsLessEqual (invert a)) <$> allSubtypings
+              -- TODO: We are actually not allowed to do this always, but only if there is nothing which could be broken...
+              -- all subtyping constraints δ ≤ upper for some δ
+              let (names, lowers) = unzip [(name', lower') | (name', IsLessEqual (lower', TVar upper')) <- invSubtypings,
+                                          name' /= name,
+                                          upper' == upper]
 
-            messages <- mapM getConstraintMessage names
+              messages <- mapM getConstraintMessage names
 
-            -- for the list [β, γ, δ] create supremum constraints sup{β,γ} = u and sup{u,δ} = upper for a new TVar u
-            -- as we only have two-argument sup constraints. also discharge the involved subtyping constraints.
-            let makeChain lowers = case lowers of
-                    [] -> return ()
-                    (l:[]) -> do
-                                dischargeConstraint name
-                                mapM dischargeConstraint names
-                                addConstraint (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
-                                  ("Supremum recreated for the following constraints:" :\\:
-                                  messages
-                                  )
-                                logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
-                                logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, l) :=: TVar upper))
-                                logForce "Whyever that is supposed to be correct..."
-                                return ()
-                    (l1:l2:ls) -> do
-                                u <- newVar
-                                addConstraint (Solvable (IsSupremum ((l1, l2) :=: u)))
-                                  ("Supremum recreated for the following constraints:" :\\:
-                                  messages
-                                  )
-                                makeChain (u:ls)
-                                return ()
+              -- for the list [β, γ, δ] create supremum constraints sup{β,γ} = u and sup{u,δ} = upper for a new TVar u
+              -- as we only have two-argument sup constraints. also discharge the involved subtyping constraints.
+              let makeChain lowers = case lowers of
+                      [] -> return ()
+                      (l:[]) -> do
+                                  dischargeConstraint name
+                                  mapM dischargeConstraint names
+                                  -- addConstraint (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
+                                  createConstr (lower, l, TVar upper)
+                                    ("Supremum recreated for the following constraints:" :\\:
+                                    messages
+                                    )
+                                  logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
+                                  logForce ("What happens is that we convert the subtyping constraint of " <> showT (lower, TVar upper) <> " into the supremum " <> showT ((lower, l) :=: TVar upper))
+                                  logForce "Whyever that is supposed to be correct..."
+                                  return ()
+                      (l1:l2:ls) -> do
+                                  u <- newVar
+                                  -- addConstraint (Solvable (IsSupremum ((l1, l2) :=: u)))
+                                  createConstr (l1, l2, u)
+                                    ("Supremum recreated for the following constraints:" :\\:
+                                    messages
+                                    )
+                                  makeChain (u:ls)
+                                  return ()
 
-            makeChain lowers
-            return ()
-convertSubtypingToSupremum name _                   = pure ()
+              makeChain lowers
+              return ()
+    _ -> pure ()
 
 -- The actual solving is done here.
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
 -- We return True if we could do something about the constraint
 --    return False if nothing could be done
-solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name (_, DMAny) = dischargeConstraint name
-solveSubtyping name path = withLogLocation "Subtyping" $ do
+solveSubtyping name path@(a,b) = withLogLocation "Subtyping" $ do
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -391,42 +344,40 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a     -> do
-      log $ "Subtyping computation of " <> show path <> " finished with result " <> show res <> ". Discharging constraint " <> show name
+      log $ "Subtyping computation of " <> showT path <> " finished with result " <> showT res <> ". Discharging constraint " <> showT name
       dischargeConstraint @MonadDMTC name
     Partial (a,_)  -> do
-      log $ "Subtyping computation of " <> show path <> " gave partial result " <> show res <> ". Updating constraint " <> show name
+      log $ "Subtyping computation of " <> showT path <> " gave partial result " <> showT res <> ". Updating constraint " <> showT name
       updateConstraint name (Solvable (IsLessEqual a))
     Wait           -> do
-      log $ "Subtyping computation of " <> show path <> " returned `Wait`. Keeping constraint as is."
+      log $ "Subtyping computation of " <> showT path <> " returned `Wait`. Keeping constraint as is."
       npath <- normalizeExact path
-      log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
-      convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
-    Fail e         -> throwUnlocatedError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
-                         <> "Got the following errors while searching the subtyping graph:\n"
-                         <> show e))
+      log $ "(With normalizations applied the constraint is now " <> showT npath <> " ; it should be the same as the input.)"
+      -- convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
+    Fail e         -> do
 
-instance Typeable k => FixedVars TVarOf (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
-  fixedVars _ = mempty
-instance Typeable k => FixedVars TVarOf (IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)) where
-  fixedVars (IsSupremum (_ :=: a)) = freeVars a
-instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)) where
-  fixedVars (IsInfimum (_ :=: a)) = freeVars a
+      let msg2 = case getUnificationFailingHint @t (path) of
+                   Just hint -> DMPersistentMessage (hint :\\: msg)
+                   Nothing -> DMPersistentMessage msg
+      throwError (WithContext (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path))) (msg2))
 
 
 data ContractionAllowed = ContractionAllowed | ContractionDisallowed
 
-{- since we have Dta there is no top and bot for numerics :( see issue #247
+
 getBottoms :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
 getBottoms =
-  case testEquality (typeRep @k) (typeRep @BaseNumKind) of
+  case testEquality (typeRep @k) (typeRep @IRNumKind) of
      Just Refl -> [DMInt]
      _ -> []
--}
 
 getTops :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
-getTops = case testEquality (typeRep @k) (typeRep @ConstnessKind) of
-               Just Refl -> [NonConst]
-               _ -> []
+getTops =
+  case testEquality (typeRep @k) (typeRep @IRNumKind) of
+     Just Refl -> [DMReal]
+     _ -> case testEquality (typeRep @k) (typeRep @ConstnessKind) of
+            Just Refl -> [NonConst]
+            _ -> []
 
 type TypeGraph k = H.HashMap (DMTypeOf k) [DMTypeOf k]
 
@@ -464,7 +415,8 @@ getCurrentConstraintSubtypingGraph = do
 
 
   let graph = foldl addEdge H.empty edges
-  return graph
+  let graph' = foldl addEdge graph [(b, e) | b <- getBottoms @k, e <- (H.keys graph)] -- add edges from bottoms to all other nodes.
+  return graph'
 
 
 
@@ -530,6 +482,7 @@ completeDiamondUpstream graph (a0,a1) =
 -- and may even only work if `a == center` or `b == center`.
 checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> DMTypeOf k -> t ContractionAllowed
 checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
+  debug $ "[CheckContractionAllowd]: Called for (" <> showT a <> " ==> " <> showT b <> "), center: " <> showT center <> ", contrTypes: " <> showT contrTypes
   let acceptOnlyVar (TVar a) = Just a
       acceptOnlyVar _        = Nothing
 
@@ -541,7 +494,7 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
   -- The actual case distinction
   case contrVars' of
     Nothing -> do
-      debug "Contraction not allowed because the candidate list contains types which are not TVars."
+      debug "  ^^^^ Contraction not allowed because the candidate list contains types which are not TVars."
       return ContractionDisallowed
     (Just contrVars') -> do
       let contrVars = (SomeK <$> contrVars')
@@ -556,7 +509,9 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
       let m = length ctrs_all_ab
           n = length ctrs_relevant P.+ length ctrs_relevant_max P.+ length ctrs_relevant_min
       case m == n of
-        False -> return ContractionDisallowed
+        False -> do
+          debug "  ^^^^ Contraction not allowed because constraints which are not subtyping/inf/sup constraints exist for the contrVars (=contrTypes\\{center})"
+          return ContractionDisallowed
         True -> do
           -- Get all subtyping pairs
           let subFromSub (_,(a,b)) = [(a,b)]
@@ -566,6 +521,8 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
           let subs = (ctrs_relevant >>= subFromSub)
                     <> (ctrs_relevant_max >>= subFromMax)
                     <> (ctrs_relevant_min >>= subFromMin)
+
+          debug $ "  ^^^^ subtyping pairs are: " <> showT subs
 
           --
           -- NOTE: In the following, we only deal with edges here which are relevant,
@@ -590,10 +547,14 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
                   , and [x == TVar b, freeVars y `intersect` contrVars == []]
                   ]
 
-          let allRelevantAreGood = and (isGood <$> subs)
-          case allRelevantAreGood of
-            False -> return ContractionDisallowed
-            True -> return ContractionAllowed
+          let edgesWithGoodness = [(a,b,isGood (a,b)) | (a,b) <- subs]
+          case find (\(a,b,good) -> not good) edgesWithGoodness of
+            Just (a,b,_) -> do
+              debug $ "  ^^^^ Contraction not allowed because the edge " <> showT (a,b) <> " is not good."
+              return ContractionDisallowed
+            Nothing -> do
+              debug $ "  ^^^^ Contraction allowed because all edges are good."
+              return ContractionAllowed
 
 checkContractionAllowed _ _ _ = return ContractionDisallowed
 
@@ -601,33 +562,41 @@ checkContractionAllowed _ _ _ = return ContractionDisallowed
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
+  solve_ Dict SolveRecreateSupremum name (IsLessEqual (a,b)) = convertSubtypingToSupremum name (a,b) >> convertSubtypingToInfimum name (a,b)
   solve_ Dict SolveSpecial name (IsLessEqual (a,b)) = return ()
   solve_ Dict SolveExact name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
   solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
   solve_ Dict SolveAssumeWorst name (IsLessEqual (a,b)) = return ()
+  solve_ Dict SolveFinal name (IsLessEqual (a,b))  | a `elem` getBottoms = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | b `elem` getTops    = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | otherwise = do
     -- if we are in solve final, we try to contract the edge
-        debug $ "Computing LessEqual: " <> show (a,b)
+        debug $ "Computing LessEqual: " <> showT (a,b)
         alloweda <- checkContractionAllowed [a,b] (a,b) a
-        allowedb <- checkContractionAllowed [a,b] (a,b) a
+        allowedb <- checkContractionAllowed [a,b] (a,b) b
         case (alloweda , allowedb) of
           (ContractionAllowed, _) -> unify "diamond contraction" a b >> return ()
           (_, ContractionAllowed) -> unify "diamond contraction" a b >> return ()
           _ -> return ()
 
+(≤!) :: (SingI k, Typeable k, MessageLike t msg, IsT MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> msg -> t ()
+(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
 
+
+instance (SingI k, Typeable k) => ShowPretty (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
+    showPretty (IsLessEqual (a,b)) = showPretty a <> " ⊑ " <> showPretty b
+        
 
 
 
 --------------------------------------------
 -- wrapper for computing supremum
-solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveSupremum graph name ((a,b) :=: x) = callMonadicGraphSupremum graph name ((a,b) :=: x)
 
 --------------------------------------------
 -- wrapper for computing infimum
-solveInfimum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveInfimum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveInfimum graph name ((a,b) :=: x) = callMonadicGraphSupremum (oppositeGraph graph) name ((a,b) :=: x)
 
 
@@ -635,7 +604,7 @@ solveInfimum graph name ((a,b) :=: x) = callMonadicGraphSupremum (oppositeGraph 
 -- solvers for special cases
 -------------------
 -- supremum
-solveSupremumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveSupremumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 -- if one input is equal to the output we can skip the supremum computation,
 -- then we only have to create a subtyping constraint
 solveSupremumSpecial graph name ((a,b) :=: x) | a == x = do
@@ -648,11 +617,21 @@ solveSupremumSpecial graph name ((a,b) :=: x) | b == x = do
   (a ≤! x) msg
   dischargeConstraint name
 
+solveSupremumSpecial graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
+  msg <- inheritanceMessageFromName name
+  unify msg b x
+  dischargeConstraint name
+
+solveSupremumSpecial graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
+  msg <- inheritanceMessageFromName name
+  unify msg a x
+  dischargeConstraint name
+
 solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
 -------------------
 -- infimum
-solveInfimumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveInfimumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveInfimumSpecial graph name ((a,b) :=: x) | a == x = do
   msg <- inheritanceMessageFromName name
   (x ≤! b) msg
@@ -676,10 +655,11 @@ solveInfimumSpecial graph name ((a,b) :=: x) | elem b (getTops @k) = do
 solveInfimumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
 
+
 --------------------------------------------
 -- The actual solving is done here.
 -- we call the `findSupremumM` function from Abstract.Computation.MonadicGraph
-callMonadicGraphSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+callMonadicGraphSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
@@ -693,18 +673,23 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   -- Executing the computation
   msg <- inheritanceMessageFromName name
-  enterNonPersisting 
+  enterNonPersisting
   res <- findSupremumM @(Full (DMPersistentMessage t)) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath) msg
-  exitNonPersisting 
+  exitNonPersisting
 
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a -> dischargeConstraint @MonadDMTC name
     Partial a  -> updateConstraint name (Solvable (IsSupremum a))
     Wait       -> return ()
-    Fail e     -> throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
-                         <> "Got the following errors while search the subtyping graph:\n"
-                         <> show e))
+    Fail e     -> do
+      let msg2 = case getUnificationFailingHint @t ((a,b)) of
+                   Just hint -> DMPersistentMessage (hint :\\: msg)
+                   Nothing -> DMPersistentMessage msg
+      throwError (WithContext (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x)) (msg2))
+      -- throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
+      --                    <> "Got the following errors while search the subtyping graph:\n"
+      --                    <> show e))
 
 
 unifyAll :: (Typeable k, IsT MonadDMTC t, MessageLike t msg) => msg -> [DMTypeOf k] -> t ()
@@ -716,6 +701,7 @@ unifyAll msg (x:y:vars) = do
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
+  solve_ Dict SolveRecreateSupremum name (IsSupremum ((a,b) :=: y)) = pure ()
   solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = solveSupremum (GraphM (subtypingGraph name)) name ((a,b) :=: y)
   solve_ Dict SolveSpecial name (IsSupremum ((a,b) :=: y)) = solveSupremumSpecial (GraphM (subtypingGraph name)) name ((a,b) :=: y)
 
@@ -724,7 +710,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     collapseSubtypingCycles (b,y)
 
   solve_ Dict SolveFinal name (IsSupremum ((a,b) :=: y)) = do
-    debug $ "Computing supremum (final solving mode): " <> show ((a,b) :=: y)
+    debug $ "Computing supremum (final solving mode): " <> showT ((a,b) :=: y)
     msg <- inheritanceMessageFromName name
     let msg' = "Diamond contraction (from supremum)" :\\: msg
 
@@ -732,7 +718,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     let contrCandidates = completeDiamondUpstream graph (a,b)
     let f (x,contrVars) = do
 
-              debug $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
+              debug $ "Trying to contract from " <> showT (x,y) <> " with contrVars: " <> showT contrVars
               allowedy <- checkContractionAllowed (y:contrVars) (x,y) y
               allowedx <- checkContractionAllowed (y:contrVars) (x,y) x
               case (allowedy, allowedx) of
@@ -754,6 +740,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
+  solve_ Dict SolveRecreateSupremum name (IsInfimum ((a,b) :=: y)) = pure ()
   solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = solveInfimum (GraphM (subtypingGraph name)) name ((a,b) :=: x)
   solve_ Dict SolveSpecial name (IsInfimum ((a,b) :=: x)) = solveInfimumSpecial (GraphM (subtypingGraph name)) name ((a,b) :=: x)
   solve_ Dict SolveGlobal name (IsInfimum ((a,b) :=: x)) = do
@@ -761,7 +748,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     collapseSubtypingCycles (x,b)
 
   solve_ Dict SolveFinal name (IsInfimum ((a,b) :=: x)) = do
-    debug $ "Computing infimum (final solving): " <> show ((a,b) :=: x)
+    debug $ "Computing infimum (final solving): " <> showT ((a,b) :=: x)
 
     msg <- inheritanceMessageFromName name
     let msg' = "Diamond contraction (from infimum)" :\\: msg
@@ -771,7 +758,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     let contrCandidates = completeDiamondDownstream graph (a,b)
     let f (y,contrVars) = do
 
-              debug $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
+              debug $ "Trying to contract from " <> showT (x,y) <> " with contrVars: " <> showT contrVars
               allowedx <- checkContractionAllowed (x:contrVars) (x,y) x
               allowedy <- checkContractionAllowed (x:contrVars) (x,y) y
               case (allowedx , allowedy) of
@@ -798,15 +785,15 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 -- all types in such a chain can be unified.
 collapseSubtypingCycles :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => (DMTypeOf k, DMTypeOf k) -> t ()
 collapseSubtypingCycles (start, end) = withLogLocation "Subtyping" $ do
-  debug $ ("~~~~ collapsing cycles of " <> show (start,end))
+  debug $ ("~~~~ collapsing cycles of " <> showT (start,end))
   graph <- getCurrentConstraintSubtypingGraph
 
-  debug $ ("~~~~ graph is " <> show graph)--(H.insert end (start:[start]) H.empty))
+  debug $ ("~~~~ graph is " <> showT graph)--(H.insert end (start:[start]) H.empty))
 
   -- find all paths from the ssucc to the start node, hence cycles that contain the start-end-edge
   let cycles = concat (allPaths graph (end, start))
 
-  debug $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
+  debug $ ("~~~~ found cycles " <> showT cycles <> " unifying with " <> showT end <> "\n")
 
   -- unify all types in all cycles with the end type
   unifyAll "Subtyping cycles collapse" (concat cycles)

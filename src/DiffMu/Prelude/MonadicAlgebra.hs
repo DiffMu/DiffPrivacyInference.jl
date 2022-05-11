@@ -1,19 +1,12 @@
 
--- {-# LANGUAGE UndecidableInstances #-}
 
-module DiffMu.Prelude.MonadicAlgebra
---   (
---     SemigroupM(..), MonoidM(..), CMonoidM(..), SemiringM(..)
--- -- , Abelian(..), Ring(..), Module(..)
---     -- HasInverse(..)
---   )
-where
+{- |
+Description: Provides monadic monoids and the `Normalize` class.
+-}
+module DiffMu.Prelude.MonadicAlgebra where
 
 import DiffMu.Imports
-import DiffMu.Prelude.Data
 
--- import Data.Semigroup as All hiding (diff, Min, Max, Any)
--- import Data.Monoid as All hiding (Last, First, getLast, getFirst)
 
 import qualified Prelude as P
 
@@ -56,9 +49,6 @@ instance (Normalize t a, Normalize t b) => Normalize t (Either a b) where
   normalize nt (Left a)   = Left <$> normalize nt a
   normalize nt (Right a)  = Right <$> normalize nt a
 
-instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
-  normalize nt (a :=: b) =  (:=:) <$> normalize nt a <*> normalize nt b
-
 instance Monad t => (Normalize t ()) where
   normalize nt () = pure ()
 
@@ -76,10 +66,6 @@ instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d, Normalize 
   normalize nt (a,b,c,d,e) = (,,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d <*> normalize nt e
 
 
--- class Has a where
---   mempty :: a
--- class Pointed a where
---   pt :: a
 
 
 class Monad t => SemigroupM t a where
@@ -90,17 +76,14 @@ class Monad t => SemigroupM t a where
 (⋆>)  = chainM2_R (⋆)
 (⋆!)  = extractIdentity2 (⋆)
 
--- type Semigroup = SemigroupM Identity
 
 class (SemigroupM t a) => MonoidM t a where
   neutral :: t a
 neutralId :: MonoidM Identity a => a
 neutralId = runIdentity neutral
--- type Monoid = MonoidM Identity
 
 class (Monad t) => CheckNeutral t a where
   checkNeutral :: a -> t Bool
--- instance (SemigroupM t a) => MonoidM t a
 
 class (MonoidM t a) => CMonoidM t a where
   (+) :: a -> a -> t a
@@ -116,10 +99,6 @@ zeroId = runIdentity zero
 (+>)  = chainM2_R (+)
 (+!)  = extractIdentity2 (+)
 
--- type Semigroup = SemigroupM Identity
-
--- class HasOne r where
---   one :: r
 
 class (CMonoidM t r) => SemiringM t r where
   one :: t r
@@ -188,38 +167,3 @@ instance Monad t => MonoidM t [a] where
 instance (Eq a, Monad t) => CheckNeutral t [a] where
   checkNeutral a = return (a == [])
 
-
-  {-
-(?:) :: Monad m => m a -> m [a] -> m [a]
-(?:) x xs = (:) <$> x <⋅> xs
-
-{-
-class Monoid g => HasInverse g where
-  neg :: g -> g
-
-class Monoid t => Module t x where
-  (⋅) :: t -> x -> x
-
-class (SemiRing r, HasInverse r) => Ring r
-instance (SemiRing r, HasInverse r) => Ring r
-
-class (CMonoid t, HasInverse t) => Abelian t
-instance (CMonoid t, HasInverse t) => Abelian t
-
-
-
--- class Group a => Abelian a where
---   (+) :: a -> a -> a
-  -- (+) x y = x <> y
-
--- class Abelian r => Ring r where
---   one :: r
---   (⋅) :: r -> r -> r
-
-
-
--- instance P.Num a => Semigroup a where
---   (<>) a b = a P.+ b
-
--}
--}
