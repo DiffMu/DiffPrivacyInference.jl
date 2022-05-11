@@ -21,12 +21,9 @@ function __init__()
 end
 
 
-# make Expr matchable
-@as_record Expr
-
-function expand_includes(exin)
-   @match exin begin
-      Expr(:call, :include, args...) => let
+function expand_includes(exin::Expr)
+   if exin.head == :call && exin.args[1] == :include
+         args = exin.args[2:end]
          if length(args) != 1
             error("include with mapexpr not supported: $exin")
          end
@@ -34,15 +31,17 @@ function expand_includes(exin)
             error("filename \"none\" is not permitted.")
          end
          inast = Meta.parseall(read(args[1], String), filename = args[1])
-         @match inast begin
-            Expr(:toplevel, args...) => return expand_includes(Expr(:block, args...))
-            _ => error("Unexpected include: $(typeof(inast))")
+         if inast isa Expr && inast.head == :toplevel
+            return expand_includes(Expr(:block, inast.args...))
+         else
+            error("Unexpected include: $(typeof(inast))")
          end
-      end;
-      Expr(head, args...) => return Expr(head, map(expand_includes, args)...)
-      e => return e
+  else
+      return Expr(exin.head, map(expand_includes, exin.args)...)
    end
 end
+
+expand_includes(exin) = exin
 
 
 function callback_issubtype(ca::Cstring, cb::Cstring) :: UInt8
