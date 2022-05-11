@@ -1,5 +1,5 @@
 
-# [Scoping rules](@id scoping_rules)
+# [Scoping rules](@id scoping-rules)
 
 Some features of julia make static analysis more difficult than necessary. In particular,
 the behaviour of variables captured in functions. Consider the following:

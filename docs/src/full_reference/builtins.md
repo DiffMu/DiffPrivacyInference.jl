@@ -1,6 +1,6 @@
 
 
-# Builtins
+# [Builtins](@id builtins)
 
 ```@autodocs
 Modules = [DiffPrivacyInference]

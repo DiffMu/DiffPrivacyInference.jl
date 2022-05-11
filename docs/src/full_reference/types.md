@@ -1,6 +1,6 @@
 
 # [Types](@id types)
-The privacy analysis result is presented to you as a type together with a collection of [Constraints](@ref). You need to be able to read the types to understand it, so here's how.
+The privacy analysis result is presented to you as a type together with a collection of [constraints](@ref constraints). You need to be able to read the types to understand it, so here's how.
 
 
 ## Overview
@@ -79,7 +79,7 @@ Type:
 }
 (...)
 ```
-The privacy of the `x` argument is expressed in terms of the `eps` and `del` arguments. Note how you can [annotate](@ref) numeric variables if you want them to be static.
+The privacy of the `x` argument is expressed in terms of the `eps` and `del` arguments. Note how you can [annotate](@ref annotations) numeric variables if you want them to be static.
 
 ### Data
 The sensitivity of a function is given with respect to a metric on the input and output spaces of the function. The typechecker supports two metrics on numbers, namely the euclidean metric `d(x,y) = |x-y|` and the discrete metric `d(x,y) = 0 if x==y, 1 otherwise`. If you want to use the latter, annotate your variables with `Data`:`
@@ -97,7 +97,7 @@ Type:
 ```
 Note that you have to use the [`disc`](@ref) function to tell the typechecker that the scalar `100.0` should be measured in the discrete metric as well.
 
-See the [documentation on metrics](@ref) for more detailed information on how we measure distance.
+See the [documentation on metrics](@ref measuring-distance) for more detailed information on how we measure distance.
 
 ## Containers
 Our matrix/vector types have some more parameters than native julia matrices. They look like this:
@@ -113,7 +113,7 @@ The types know about:
 
 You can specify the norm and element type of a matrix or vector using the type functions [`MetricMatrix`](@ref) and [`MetricVector`](@ref). The dimensions and row clip parameter are inferred.
 
-See the [documentation on metrics](@ref) for more detailed information on how we measure distance.
+See the [documentation on metrics](@ref measuring-distance) for more detailed information on how we measure distance.
 
 ### Special types for `Flux.jl`
 For compatibility with [`Flux.jl`](https://fluxml.ai/Flux.jl/stable/), we have two special types:

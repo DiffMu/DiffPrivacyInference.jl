@@ -1,5 +1,5 @@
 
-# Measuring Distance
+# [Measuring Distance](@id measuring-distance)
 
 The [defintion of differential privacy](https://en.wikipedia.org/wiki/Differential_privacy#Definition_of_%CE%B5-differential_privacy) employs the notion of "two datasets that differ on a single element". It follows that the distance metric on the input space of a differentially private function must be one in which it is possible to measure this notion. On the other hand, the [mechanisms we employ](https://en.wikipedia.org/wiki/Additive_noise_mechanisms) to make a function differentially private expect the output space of said function to be equipped with a different distance metric, namely the one induced by the `L2` norm. Hence, one has to determine the sensitivity of a function with respect to different metrics on input and output space.
 

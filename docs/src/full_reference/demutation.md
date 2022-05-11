@@ -112,7 +112,7 @@ end
 ```
 
 ### [The type `Blackbox`](@id mut_type_black_box)
-There is a seperate mutation type for [black box functions](@ref black_boxes). This makes sure that the same function name
+There is a seperate mutation type for [black box functions](@ref black-boxes). This makes sure that the same function name
 cannot be given both normal function and black box implementations at the same time.
 
 The implementation of black boxes is not checked in any way. Users must check that the following rules are followed by themselves!
