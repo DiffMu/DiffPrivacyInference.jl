@@ -93,7 +93,7 @@ end
 
 
 """
-typecheck_from_file(file::AbstractString)
+    typecheck_from_file(file::AbstractString)
 
 Typecheck the file named `file`, calling the haskell bcakend. Includes are resolved and parsed as well.
 The typechecking result will be printed to the REPL. It will be the inferred type of the last statement in the file.
@@ -118,7 +118,7 @@ function typecheck_from_file_debug(file::AbstractString)
 end
 
 """
-typecheck_from_string(code::AbstractString)
+    typecheck_from_string(code::AbstractString)
 
 Typecheck the julia code passed as a `String`, calling the haskell bcakend. Includes are resolved and parsed as well.
 The typechecking result will be printed to the REPL. It will be the inferred type of the last statement in the file.
