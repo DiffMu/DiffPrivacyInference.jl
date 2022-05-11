@@ -118,7 +118,7 @@ See the [documentation on metrics](@ref measuring-distance) for more detailed in
 ### Special types for `Flux.jl`
 For compatibility with [`Flux.jl`](https://fluxml.ai/Flux.jl/stable/), we have two special types:
 - `DMModel[m]` is the type of `Flux.jl` models with `m` parameters.
-- `DMGrads<n:N, c:C>[m]{T}` is the type of [`Zygote.jl`](https://fluxml.ai/Zygote.jl/stable/) gradients measured in metric `N`, with bounded `C`-norm and `m` parameters of type `T`
+- `DMGrads<n:N, c:C>[m]{T}` is the type of [`Zygote.jl`](https://fluxml.ai/Zygote.jl/stable/) gradients measured in metric `N`, with bounded `C`-norm and `m` parameters of type `T`. Specify the matric using [`MetricGradient`](@ref)
 
 See the [example implementation of DP-SGD](@ref fluxdp) for usage examples of these.
 

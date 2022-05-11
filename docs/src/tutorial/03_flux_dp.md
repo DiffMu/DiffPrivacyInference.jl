@@ -16,7 +16,7 @@ We import the Flux library. Note that including modules means one has to qualify
 import Flux
 ```
 
-Next, we define a function that initializes a small `Flux` neural network model. It uses stuff imported from the `Flux` module. As we cannot expect that code to be checkable (see the [supported syntax](@ref syntax) on what checkable code needs to look like), we declare this function a so-called [*black box*](@ref blackbox) and signify this with the `BlackBox()` annotation. This means the typechecker will ignore the code inside the function body and assume it hase infinite sensitivity in all it's arguments (of which this specimen has none).
+Next, we define a function that initializes a small `Flux` neural network model. It uses stuff imported from the `Flux` module. As we cannot expect that code to be checkable (see the [supported syntax](@ref syntax) on what checkable code needs to look like), we declare this function a so-called [*black box*](@ref black-boxes) and signify this with the `BlackBox()` annotation. This means the typechecker will ignore the code inside the function body and assume it hase infinite sensitivity in all it's arguments (of which this specimen has none).
 Note that the `Flux` model is not returned by the function as-is, but wrapped in our [`DMModel`](@ref) type. It's really just a plain wrapper, but as you cannot access it's content in checkable code, this allows us to control what you do with your model in the part of the program that is relevant for analysis.
 ```julia
 function init_model() :: BlackBox()
@@ -89,12 +89,12 @@ end
 ```
 
 So here's what's going on:
-- We're only interested in the privacy of the `data` and `labels` inputs, so all other parameters get a [`Static()`](@ref) annotation. We want the interesting inputs' privacy expressed w.r.t the [discrete metric], so we annotate them with ['Data'](@ref) as matrix element type. It's supposed to be a differentially private function, so we annotate it with [`Priv()`](@ref).
+- We're only interested in the privacy of the `data` and `labels` inputs, so all other parameters get a [`Static()`](@ref) annotation. We want the interesting inputs' privacy expressed w.r.t the [discrete metric], so we annotate them with [`Data`](@ref) as matrix element type. It's supposed to be a differentially private function, so we annotate it with [`Priv()`](@ref).
   ```julia
   function train_dp(data::Matrix{<:Data}, labels::Matrix{<:Data}, eps::Static(), del::Static(), eta::Static(), k::Static(Integer), b::Static(Integer)) :: Priv()
   ```
 
-- It initializes the network using the previously defined [black box function](@ref blackbox) and the builtin [`unbox`](@ref) to tell the typechecker the model type and number of parameters.
+- It initializes the network using the previously defined [black box function](@ref black-boxes) and the builtin [`unbox`](@ref) to tell the typechecker the model type and number of parameters.
   ```julia
      n_params = 31810
      model = unbox(init_model(), DMModel, n_params)
@@ -117,7 +117,7 @@ So here's what's going on:
          gs = unbox(unbounded_gradient(model, d, l), DMGrads, n_params) 
   ```
 
-- We want to noise the gradient using the Gaussian Mechanism, which expects a container type that has the standard euclidean `(L2,ℝ)`-metric assigned. However, the metric used to measure `gs` is the discrete `(LInf, 𝔻)`-metric (see the last section of the [black box documentation](@ref blackbox) to learn why). Hence, we have to convert `gs` from discrete to real metric using the [`undisc_container`](@ref) builtin. This however only works on containers with entries whose `(L2,ℝ)`-norm is bounded by 1, so we clip the gradient prior to converting.
+- We want to noise the gradient using the Gaussian Mechanism, which expects a container type that has the standard euclidean `(L2,ℝ)`-metric assigned. However, the metric used to measure `gs` is the discrete `(LInf, 𝔻)`-metric (see the last section of the [black box documentation](@ref black-boxes) to learn why). Hence, we have to convert `gs` from discrete to real metric using the [`undisc_container`](@ref) builtin. This however only works on containers with entries whose `(L2,ℝ)`-norm is bounded by 1, so we clip the gradient prior to converting.
   ```julia
          clip!(L2,gs)
          undisc_container!(gs)
