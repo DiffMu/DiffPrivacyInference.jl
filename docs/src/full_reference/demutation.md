@@ -39,7 +39,7 @@ There are three mutation types:
 Please note that currently all function arguments are assumed to be of type `Pure`. It is thus impossible to pass black boxes and mutating functions as arguments to other functions.
 
 ### The type `Mutating`
-A function is marked as mutating automatically if it is inferred that it mutates its arguments. This is only possible by either calling [mutating builtins](@ref),
+A function is marked as mutating automatically if it is inferred that it mutates its arguments. This is only possible by either calling mutating [builtins](@ref builtins),
 or by calling other mutating functions. 
 
 The following rules apply:
