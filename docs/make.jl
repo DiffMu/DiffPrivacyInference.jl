@@ -29,7 +29,8 @@ makedocs(sitename="DiffPrivacyInference",
                  "full_reference/constraints.md",
              ],
              "Development Notes" => [
-                 "development_notes/updating_haskell.md"
+                 "development_notes/updating_haskell.md",
+                 "development_notes/project_structure.md"
              ]
          ]
 )
