@@ -14,7 +14,7 @@ Modules = [DiffPrivacyInference]
 Pages = ["builtins_sensitivity.jl"]
 ```
 
-## Privacy functions
+## [Privacy functions](@id builtin-privacy-mechanisms)
 ```@autodocs
 Modules = [DiffPrivacyInference]
 Pages = ["builtins_privacy.jl"]
