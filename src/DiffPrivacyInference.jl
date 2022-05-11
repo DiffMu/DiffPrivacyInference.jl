@@ -1,7 +1,6 @@
 module DiffPrivacyInference
 
 using CodeTracking
-using MLStyle
 using Distributions
 using Random
 using LinearAlgebra

@@ -1,9 +1,11 @@
 # A type for norms, used to specify what to clip to.
-@data Norm begin
-    L1
-    L2
-    LInf
-end
+#
+# Since on the julia side these are always encoded as floats anyway,
+# we merely define them transparently.
+const global Norm = Float64
+const global L1   = 1.0
+const global L2   = 2.0
+const global LInf = Inf
 
 
 ###########################################
@@ -507,13 +509,7 @@ end
 
 Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient, returns `nothing`.
 """
-function clip!(l::Norm, cg::DMGrads) :: Nothing
-
-    p = @match l begin
-        L1 => 1
-        L2 => 2
-        LInf => Inf
-    end
+function clip!(p::Norm, cg::DMGrads) :: Nothing
 
     n = norm(cg.grads.grads, p)
 
@@ -530,13 +526,7 @@ end
 
 Return a clipped copy of the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
 """
-function clip(l::Norm, cg::DMGrads) :: DMGrads
-
-    p = @match l begin
-        L1 => 1
-        L2 => 2
-        LInf => Inf
-    end
+function clip(p::Norm, cg::DMGrads) :: DMGrads
 
     n = norm(cg.grads.grads, p)
 
@@ -555,12 +545,7 @@ end
 
 Return a clipped copy of the input vector, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
 """
-function clip(l::Norm, cg::AbstractVector)
-    p = @match l begin
-        L1 => 1
-        L2 => 2
-        LInf => Inf
-    end
+function clip(p::Norm, cg::AbstractVector)
 
     n = norm(cg, p)
 
@@ -575,12 +560,12 @@ end
 
 
 """
-    clip(v::T, upper::T, lower::T) where T <: Number
+    clipn(v::T, upper::T, lower::T) where T <: Number
 
 Clip the number `v`, i.e. return `v` if it is in `[lower,upper]`, return `upper` if `v` is larger than `upper`,
 and return `lower` if `v` is smaller than `lower`.
 """
-function clip(v::T, upper::T, lower::T) where T <: Number
+function clipn(v::T, upper::T, lower::T) where T <: Number
    if lower > upper
       error("Lower bound must be less or equal upper bound.")
    elseif v > upper
