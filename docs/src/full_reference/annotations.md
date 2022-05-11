@@ -5,7 +5,7 @@ Our typechecker can infer many things about your code, but is does need you to a
 
 ## Function kinds
 ### `Priv()`
-We distinguish between functions that provide differential privacy (so called [privacy functions](@ref)), and ones that do not (so called [sensitivity functions](@ref)). The typechecker cannot know whether you expect a function to be differentially private or not, so if you do you'll have to annotate your function definition using the [`Priv()`](@ref)/[`Priv(T)`](@ref) type function. Its argument is the desired return type of the annotated function, no argument means any return type. For example to declare function `f` to be differentially private and returning something of type [`Matrix`](@ref):
+We distinguish between functions that provide differential privacy (so called [privacy functions](@ref)), and ones that do not (so called [sensitivity functions](@ref)). The typechecker cannot know whether you expect a function to be differentially private or not, so if you do you'll have to annotate your function definition using the [`Priv()`](@ref)/[`Priv(T)`](@ref) type function. Its argument is the desired return type of the annotated function, no argument means any return type. For example to declare function `f` to be differentially private and returning something of type `Matrix`:
 ```
 function f(eps, del, x::Matrix) :: Priv(Matrix)
    gaussian_mechanism(1, eps, del, x)
@@ -66,9 +66,9 @@ loss(X, y, m::DMModel) :: BlackBox() = Flux.crossentropy(m.model(X), y)
 
 ## Container types
 [Our types](@ref types) for matrices, vectors and gradients contain more information than the julia-native types, namely the dimension, which metric is used to measure, and if there is a bound on the row norm. If you want to specify which metric you would like your guarantees to be given in, you can annotate by using the corresponding type functions instead of the native `Matrix{T}` etc. types:
-- [`MetricMatrix(T, L::Norm)`](@ref)
-- [`MetricVector(T, L::Norm)`](@ref)
-- [`MetricGradient(T, L::Norm)`](@ref)
+- [`MetricMatrix`](@ref)`(T, L::Norm)`
+- [`MetricVector`](@ref)`(T, L::Norm)`
+- [`MetricGradient`](@ref)`(T, L::Norm)`
 where `L` is one of the norms `L1,L2,LInf` denoting the induced metric. See the documentation on [container metrics](@ref measuring-distance) for more details about metrics.
 
 

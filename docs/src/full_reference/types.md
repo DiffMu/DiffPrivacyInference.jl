@@ -28,7 +28,7 @@ Here's a list of all possible result types. See the below sections for more elab
 
 
 ## Functions
-Function types carry the information you're probably most interested in, namely the inferred sensitivity or differential privacy of the function arguments. There are two sorts of functions, [sensitivity functions](@ref) and [privacy functions](@ref).
+Function types carry the information you're probably most interested in, namely the inferred sensitivity or differential privacy of the function arguments. There are two sorts of functions, [sensitivity functions](@ref) and [privacy functions](@ref privacy-functions).
 ### Sensitivity functions
 Functions that do not employ any differential privacy mechanisms have this type. It is denoted like this:
 ```
@@ -37,7 +37,7 @@ Functions that do not employ any differential privacy mechanisms have this type.
 The part before the `->` is the list of argument types this function admits, together with the inferred [sensitivity](https://en.wikipedia.org/wiki/Differential_privacy#Sensitivity) annotated with the `@` symbol. Hence this tells us the typechecker inferred the function to be `0`-sensitive in its first and `s₁`-sensitivie in it's second input. It outputs the number `2`.
 
 ### Privacy functions
-Functions that do use one of the [builtin privacy mechanisms](@ref) or use other functions that do are called `privacy functions`. The typechecker can infer their [(ε, δ)-differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) parameters. The result looks like this:
+Functions that do use one of the [builtin privacy mechanisms](@ref) or use other functions that do are called *privacy functions*. The typechecker can infer their [(ε, δ)-differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) parameters. The result looks like this:
 ```
 {
 |   - τ₅[s ©] @ (0, 0)
@@ -48,7 +48,7 @@ Functions that do use one of the [builtin privacy mechanisms](@ref) or use other
 |    ->* Matrix<n: LInf, c: U>[s₃ × s₂]{Real}
 }
 ```
-It was inferred that the input julia code describes a [privacy function](@ref) (denoted by `->*`) that maps some number with value `s` and some `s₃ × s₂`-dimensional matrix with elements of type `τ₃₄` to a `s₃ × s₂`-dimensional matrix with `Real` entries. The inferred privacy of the arguments is `(0,0)` and `(s,0)` respectively.
+It was inferred that the input julia code describes a [privacy function](@ref privacy-functions) (denoted by `->*`) that maps some number with value `s` and some `s₃ × s₂`-dimensional matrix with elements of type `τ₃₄` to a `s₃ × s₂`-dimensional matrix with `Real` entries. The inferred privacy of the arguments is `(0,0)` and `(s,0)` respectively.
 
 ## Base types
 ### Numbers
@@ -120,7 +120,7 @@ For compatibility with [`Flux.jl`](https://fluxml.ai/Flux.jl/stable/), we have t
 - `DMModel[m]` is the type of `Flux.jl` models with `m` parameters.
 - `DMGrads<n:N, c:C>[m]{T}` is the type of [`Zygote.jl`](https://fluxml.ai/Zygote.jl/stable/) gradients measured in metric `N`, with bounded `C`-norm and `m` parameters of type `T`
 
-See the [example implementation of DP-SGD](@ref) for usage examples of these.
+See the [example implementation of DP-SGD](@ref fluxdp) for usage examples of these.
 
 ## Subtyping
 The subtyping hierarchy builds on the usual julia type hierarchy. That is, we have

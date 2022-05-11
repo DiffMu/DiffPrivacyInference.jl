@@ -15,7 +15,7 @@ d_\mathbb{D}(x,y) = \begin{cases}
       1, & \text{otherwise}
     \end{cases}
 ```
-Our typechecker differentiates between these two, using the native julia type `Real` and our custom type [`Data`](@ref). You can convert back and forth between the two using the builtin [`discrete(n::Real)`](@ref) and [`undisc(n::Data)`](@ref) functions. Note that both of them incur a sensitivity penalty, the former an infinite one.
+Our typechecker differentiates between these two, using the native julia type `Real` and our custom type [`Data`](@ref). You can convert back and forth between the two using the builtin [`discrete`](@ref)`(n::Real)` and [`undisc`](@ref)`(n::Data)` functions. Note that both of them incur a sensitivity penalty, the former an infinite one.
 
 ## Metric on Vectors
 We extend the metrics from the previous section on vector types with elements of type ℝ and 𝔻. The `DMGrads` type behaves just like a vector, and the metrics presented here are also applicable there.
@@ -45,7 +45,7 @@ d_{L2,\mathbb{D}}(v,w) = \sqrt{\sum_i d_\mathbb{D}(v_i, w_i)^2} = \sqrt{d_{L1,\m
 ```math
 d_{L\infty,\mathbb{D}}(v,w) = \max_i d_\mathbb{D}(v_i, w_i)
 ```
-Use the [`MetricVector`](@ref) (or [`MetricGradient`](@ref) if we're talking gradients) function to annotate vector function arguments with the metric you wish to use for them. The function [`norm_convert(n::Norm, v)`](@ref) lets you convert between different metrics, which comes with a sensitivity penalty.
+Use the [`MetricVector`](@ref) (or [`MetricGradient`](@ref) if we're talking gradients) function to annotate vector function arguments with the metric you wish to use for them. The function [`norm_convert`](@ref)`(n::Norm, v)` lets you convert between different metrics, which comes with a sensitivity penalty.
 
 ## Metric on Matrices
 We again extend the metrics from the section on vectors to matrix types with elements of type ℝ and 𝔻, by forming the sum of row-wise distances. That is, for `m,n` being matrices with elements of type τ and `l` being one of `L1,L2,LInf`, we have
@@ -61,7 +61,7 @@ d_{\mathbb{M}^\star_{L\infty}\mathbb{D}}(m,n) = \text{number of matrix rows that
 ```
 So the (`LInf`, 𝔻)-metric on matrices allows us to measure the property required by the definition of differential privacy, as discussed in the introduction: "two datasets that differ on a single element" are precisely two matrices with (`LInf`, 𝔻)-metric of 1.
 
-Use the [`MetricMatrix`](@ref) function to annotate matrix function arguments with the metric you wish to use for them. The function [`norm_convert(n::Norm, v)`](@ref) lets you convert between different metrics, which comes with a sensitivity penalty.
+Use the [`MetricMatrix`](@ref) function to annotate matrix function arguments with the metric you wish to use for them. The function [`norm_convert`](@ref)`(n::Norm, v)` lets you convert between different metrics, which comes with a sensitivity penalty.
 
 ## Programming with the metric in mind
-The two additive noise mechanisms we support, namely [`laplacian_mechanism`](@ref) and [`gaussian_mechanism`](@ref), both expect the input they are supposed to add noise to to be of a type that uses (`L2`,ℝ)-metric. Their output will then be of a corresponding type measured in (`LInf`,ℝ)-metric. This means you have to take care to convert your container types to the right metric before using these mechanisms. See the [flux-dp code](@ref) for example usage.
+The two additive noise mechanisms we support, namely [`laplacian_mechanism`](@ref) and [`gaussian_mechanism`](@ref), both expect the input they are supposed to add noise to to be of a type that uses (`L2`,ℝ)-metric. Their output will then be of a corresponding type measured in (`LInf`,ℝ)-metric. This means you have to take care to convert your container types to the right metric before using these mechanisms. See the [flux-dp code](@ref fluxdp) for example usage.
