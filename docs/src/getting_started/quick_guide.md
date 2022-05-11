@@ -16,9 +16,9 @@ Also note that sensitivity/differential privacy is a property of a function betw
 
 ## Usage examples
 
-To infer the sensitivity of a simple function, use [`typecheck_hs_from_string`](@ref):
+To infer the sensitivity of a simple function, use [`typecheck_from_string`](@ref):
 ```julia
-julia> typecheck_hs_from_string("
+julia> typecheck_from_string("
        module Foo
        function foo(x::Matrix{<:Real}, y::Matrix{<:Real})
           2*x - y

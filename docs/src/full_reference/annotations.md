@@ -24,7 +24,7 @@ end
 ## Static parameters
 As you can read in the documentation of our [types](@ref types), we allow two kinds of numeric function arguments -- static and variable ones. Static arguments are usueful if you want the inferred sensitivity/privacy guarantee of some of your function's arguments to depend on the values of some other of the function arguments. A simple example with an argument annotated using the [`Static()`](@ref)/[`Static(T)`](@ref) type function:
 ```julia
-julia> typecheck_hs_from_string("module L
+julia> typecheck_from_string("module L
           function f(x::Integer, y::Integer)
              x * y
           end
@@ -40,7 +40,7 @@ julia> typecheck_hs_from_string("module L
 
 
 
-julia> typecheck_hs_from_string("module L
+julia> typecheck_from_string("module L
           function f(x::Static(Integer), y::Integer)
              x * y
           end

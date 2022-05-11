@@ -32,7 +32,7 @@ yields an (``\varepsilon``, ``\delta``)-differentially private function, where `
 
 This mechansim is implemented in the [`gaussian_mechanism`](@ref) builtin function. There is a mutating implementation that does not make a copy of the value to be noised in [`gaussian_mechanism!`](@ref). Here's a function that achieves (0.1, 0.2)-differential privacy for it's integer argument by employing the Gaussian Mechanism:
 ```julia
-julia> typecheck_hs_from_string("
+julia> typecheck_from_string("
        module Foo
        function foo(x::Integer) :: Priv()
           gaussian_mechanism(1,0.1,0.2,x)
@@ -58,7 +58,7 @@ There are nice theorems about properties of differentially private functions in 
 ### Robustness to Post-Processing
 Proposition 2.1 claims that no matter what we do with the output of an (``\varepsilon``, ``\delta``)-differentially private function, it stays (``\varepsilon``, ``\delta``)-differentially private. Our typechecker knows this:
 ```julia
-julia> typecheck_hs_from_string("
+julia> typecheck_from_string("
        module Foo
        function foo(x::Integer) :: Priv()
           gx = gaussian_mechanism(1,0.1,0.2,x)
@@ -79,7 +79,7 @@ Type:
 Theorem 3.1 claims that composing an (``\varepsilon``, ``\delta``)-differentially private function with itself `k` times yields an (``\varepsilon``', k``\delta`` + ``\delta``')-differentially private function for any ``\delta'\in(0,1])``, where ``\varepsilon' = 2\sqrt{2k \ln(\frac{1}{\delta′})}\varepsilon``. This can be expressed using a julia `for`-loop:
 
 ```julia
-julia> typecheck_hs_from_string("
+julia> typecheck_from_string("
        module Foo
        function foo(x::Integer) :: Priv()
           y = 0.0

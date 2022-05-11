@@ -54,7 +54,7 @@ In case `τ₁ = τ[s ©]` is a [static number](@ref types) for some `s`, we all
 ## Choices/Mulitple Dispatch (`IsChoice`)
 If the julia type information is not sufficient to resolve multiple dispatch, you end up with constraints instead. Behold the following example, where the function `f` has two methods, but in the call to `f` that happens withing `g`, it is not yet clear which of the methods will be called. Annotating the argument of `g` would have made it possible to resolve the constraint, so it is advisable to add annotations where possible.
 ```
-julia> typecheck_hs_from_string("module L
+julia> typecheck_from_string("module L
        f(x::Matrix) = x+x
        f(x::Integer) = 2*x
        g(x) = f(x)

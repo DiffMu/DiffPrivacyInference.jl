@@ -84,12 +84,18 @@ In particular, in order to run/build from source, you need:
     
 To parse a string and then typecheck it using the haskell backend, do
 ```julia
-julia> term = string_to_dmterm("function my_identity(a)
-                                  return a
-                                end")
-
-julia> typecheck_hs_from_dmterm(term)
+julia> typecheck_from_string("
+   module L
+   function my_sum(a,b)
+      return a+b
+   end
+   end")
 ```
+Note that all checked code has to be inside a module. You can also parse and check a whole file:
+```julia
+julia> typecheck_from_file(path)
+```
+
 To execute all (haskell-)tests, simply run
 ```julia
 julia> test_hs()
