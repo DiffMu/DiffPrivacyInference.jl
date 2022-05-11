@@ -21,7 +21,7 @@ There are a few things you are not allowed to do even though they use supported 
 
 - Your code has to be valid julia code. If it is not, do not expect the typechecker to always tell you so or produce reasonable results.
 - You cannot reassign (or mutate) variables that were declared in a different scope. For example, the following is illegal:
-  ```
+  ```julia
   function foo()
      x = 10
      function bar()
@@ -32,7 +32,7 @@ There are a few things you are not allowed to do even though they use supported 
   end
   ```
 - If you want to use a variable, you have to define it first. E.g. the following is valid julia code but illegal:
-  ```
+  ```julia
   function foo()
      bar() = a
      a = 100
@@ -41,7 +41,7 @@ There are a few things you are not allowed to do even though they use supported 
   ```
 - As long a reassignment happens in the same scope as where the variable was defined, it is allowed.
   For example the following is valid code:
-  ```
+  ```julia
   function foo()
      x = 1
      y = x+2

@@ -6,7 +6,7 @@ Our typechecker can infer many things about your code, but is does need you to a
 ## Function kinds
 ### `Priv()`
 We distinguish between functions that provide differential privacy (so called [privacy functions](@ref)), and ones that do not (so called [sensitivity functions](@ref)). The typechecker cannot know whether you expect a function to be differentially private or not, so if you do you'll have to annotate your function definition using the [`Priv()`](@ref)/[`Priv(T)`](@ref) type function. Its argument is the desired return type of the annotated function, no argument means any return type. For example to declare function `f` to be differentially private and returning something of type `Matrix`:
-```
+```julia
 function f(eps, del, x::Matrix) :: Priv(Matrix)
    gaussian_mechanism(1, eps, del, x)
 end
@@ -15,7 +15,7 @@ The typechecker will proceed assuming `f` is differentially private and infer th
 
 ### `PrivacyFunction`
 If you want to write a higher-order function that takes a privacy function as an argument, you have to annotate that argument accordingly using [`PrivacyFunction`](@ref). For example if we want to write a higher-order function `g` that we want to apply to our previously defined `f` it would need to look like this:
-```
+```julia
 function g(f::PrivacyFunction, x::Matrix) :: Priv(Matrix)
    f(0.1, 0.1, x)
 end
@@ -23,7 +23,7 @@ end
 
 ## Static parameters
 As you can read in the documentation of our [types](@ref types), we allow two kinds of numeric function arguments -- static and variable ones. Static arguments are usueful if you want the inferred sensitivity/privacy guarantee of some of your function's arguments to depend on the values of some other of the function arguments. A simple example with an argument annotated using the [`Static()`](@ref)/[`Static(T)`](@ref) type function:
-```
+```julia
 julia> typecheck_hs_from_string("module L
           function f(x::Integer, y::Integer)
              x * y
@@ -60,7 +60,7 @@ In the first example, both arguments have infinite sensitivity, as they are both
 
 ## Black boxes
 The typechecker cannot infer sensitivity/privacy guarantees for arbitrary code (see [How to write checkable code](@ref syntax)). We still support using some functions whose body we cannot check via the [black box](@ref black-boxes) construct. These functions must be defined inside the code that is typechecked, and you can tell the checker that it can't infer things about the body by using a [`BlackBox()`](@ref)/[`BlackBox(T)`](@ref) annotation in the definition. Here's an example of a function calling a function from an imported module, which is not admissible in code that is supposed to be checked:
-```
+```julia
 loss(X, y, m::DMModel) :: BlackBox() = Flux.crossentropy(m.model(X), y)
 ```
 

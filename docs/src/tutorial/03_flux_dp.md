@@ -28,12 +28,12 @@ end
 ```
 
 The loss function for our training not only uses a function from `Flux`, but also accesses the `Flux` model wrapped in the `model` field of the input `DMModel`. Hence it's a black box too.
-```
+```julia
 loss(X, y, m) :: BlackBox() = Flux.crossentropy(m.model(X), y)
 ```
 
 The function computing the gradient from a model and data and label vectors is a black box, too. Note that just like models, gradients have to be wrapped in our [`DMGrads`](@ref) type.
-```
+```julia
 function unbounded_gradient(m::DMModel, data::Vector, label) :: BlackBox()
    gs = Flux.gradient(Flux.params(m.model)) do
            loss(data,label,m.model)
@@ -142,7 +142,7 @@ So here's what's going on:
 
 ## Typechecking this
 To typecheck the file, make the following call in the julia REPL:
-```
+```julia
 julia> typecheck_from_file("test/flux_dp/flux_dp.jl")
 
 ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ It says that given the constraints in the list hold for the variables occuring i
 To use the above algorithm, we need to call the `train_dp` function. The inferred differential privacy is a property of the algorithm, but we cannot typecheck the code that actually calls the function with some actual data that's loaded from somewhere. This has to happen in a seperate file where you can use the checked function, but bear the responsibility of using it correcly.
 
 First, we load the MNIST dataset, containing loads of images of handwritten digits and the corresponding labels.
-```
+```julia
 using Flux
 
 # get MNIST dataset
@@ -197,7 +197,7 @@ labels = Flux.Data.MNIST.labels();
 ```
 
 We transform the data into an actual julia matrix whose rows contain the images and a julia matrix whose i-the row contains a one-hot encoding of the label corresponding to the image in the i-th row of the data matrix. We then split it into 80% training and 20% test data.
-```
+```julia
 # preprocess data into float matrix and one-hot label matrix
 X = transpose(hcat(float.(reshape.(images,:))...))
 y = [i == label ? 1 : 0 for label in labels, i in 0:9]
@@ -212,7 +212,7 @@ y_test = y[split+1:end,:]
 ```
 
 Now we can include the file we tyepechecked and run it with some parameters! Training will take some time.
-```
+```julia
 include("flux_dp.jl")
 
 # train with DP-SGD for 1000 epochs with sample size of 2000, learning rate of 0.2, an (0.2,0.2)-privacy
@@ -221,7 +221,7 @@ m = FluxDP.train_dp(X_train,y_train,0.2,0.2,0.2,1000,2000)
 
 ## Run the trianing yourself!
 To run the whole thing, simply include the file `mnist.jl` in your REPL. Let's see what it can learn! Training can take a while.
-```
+```julia
 julia> # prints mean error and accuracy
 julia > result = include("test/flux_dp/mnist.jl")
 average loss: 0.407527023015877

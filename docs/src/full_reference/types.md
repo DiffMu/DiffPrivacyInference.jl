@@ -58,7 +58,7 @@ Real[s ©]
 ```
 
 An example are the `eps` and `del` parameters of the [`gaussian_mechanism`](@ref) function: you are interested in its privacy with respect to the values of these parameters.
-```
+```julia
 julia> typecheck_hs_from_string("
        module L
        function f(eps::Static(), del::Static(), x::Matrix) :: Priv()
@@ -83,7 +83,7 @@ The privacy of the `x` argument is expressed in terms of the `eps` and `del` arg
 
 ### Data
 The sensitivity of a function is given with respect to a metric on the input and output spaces of the function. The typechecker supports two metrics on numbers, namely the euclidean metric `d(x,y) = |x-y|` and the discrete metric `d(x,y) = 0 if x==y, 1 otherwise`. If you want to use the latter, annotate your variables with `Data`:`
-```
+```julia
 julia> typecheck_hs_from_string("module L
        function f(x::Data)
           disc(100.0) * x
