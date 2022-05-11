@@ -36,7 +36,6 @@ makedocs(sitename="DiffPrivacyInference",
 
 deploydocs(
     repo = "github.com/DiffMu/DiffPrivacyInference.jl.git",
-    versions = ["stable" => "v^", "v#.#", "v#.#.#", devurl => devurl],
     devbranch = "main",
 )
 
