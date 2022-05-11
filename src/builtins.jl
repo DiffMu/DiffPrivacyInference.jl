@@ -381,7 +381,28 @@ undisc(n::Data) = float(n)
 
 Tell the typechecker to measure a matrix with a different norm `n`.
 See the documentation on [measuring distance](@ref) for more info.
+
+# Examples
+Use `norm_convert` to measure the matrix in L1 norm instead of L2 norm. Mutates `m`
+```julia
+function foo!(m::MetricMatrix(Real, L2))
+    norm_convert!(L1, m)
+    return
+end
+```
+The assigned type is:
+```julia
+{
+|   - Matrix<n: L2, c: C>[s₂ × n]{τ₂₁}
+|       @ √(n)
+|   --------------------------
+|    -> Matrix<n: L1, c: C>[s₂ × n]{τ₂₁}
+}
+```
+You can see that we paid a sensitivity penalty of √n where n is the number of rows of `m`.
 """
+
+
 norm_convert!(n::Norm,m) = m
 
 
@@ -390,6 +411,24 @@ norm_convert!(n::Norm,m) = m
 
 Return a copy of `m`, but tell the typechecker to measure a matrix with a different norm `n`.
 See the documentation on [measuring distance](@ref) for more info.
+
+# Examples
+Use `norm_convert` to measure the matrix in L1 norm instead of L2 norm.
+```julia
+function foo(m::MetricMatrix(Real, L2))
+    norm_convert(L1, m)
+end
+```
+The assigned type is:
+```julia
+{
+|   - Matrix<n: L2, c: C>[s₂ × n]{τ₂₁}
+|       @ √(n)
+|   --------------------------
+|    -> Matrix<n: L1, c: C>[s₂ × n]{τ₂₁}
+}
+```
+You can see that we paid a sensitivity penalty of √n where n is the number of rows of `m`.
 """
 norm_convert(n::Norm,m) = clone(m)
 
@@ -602,9 +641,10 @@ end
 #
 
 """
-    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple
+    sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple{Matrix, Matrix}
 
 Take a uniform sample (with replacement) of `n` rows of the matrix `m` and corresponding rows of matrix `v`.
+Returns a tuple of `n`-row submatrices of `m` and `v`.
 """
 function sample(n::Integer, m::AbstractMatrix, v::AbstractMatrix) :: Tuple{Matrix, Matrix}
     r = rand(axes(m,1), n)
@@ -618,7 +658,7 @@ end
 """
     clip!(l::Norm, g::DMGrads) :: Nothing
 
-Clip the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`. Mutates the gradient, returns `nothing`.
+Clip the gradient, i.e. scale by `1/norm(g,l)` if `norm(g,l) > 1`. Mutates the gradient, returns `nothing`.
 """
 function clip!(p::Norm, cg::DMGrads) :: Nothing
 
@@ -633,9 +673,9 @@ end
 
 
 """
-    clip(l::Norm, g::DMGrads) :: Nothing
+    clip(l::Norm, g::DMGrads) :: DMGrads
 
-Return a clipped copy of the gradient, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
+Return a clipped copy of the gradient, i.e. scale by `1/norm(g,l)` if `norm(g,l) > 1`.
 """
 function clip(p::Norm, cg::DMGrads) :: DMGrads
 
@@ -654,7 +694,7 @@ end
 """
     clip(l::Norm, g::AbstractVector)
 
-Return a clipped copy of the input vector, i.e. scale by `1/norm(g)` if `norm(g) > 1`.
+Return a clipped copy of the input vector, i.e. scale by `1/norm(g,l)` if `norm(g,l) > 1`.
 """
 function clip(p::Norm, cg::AbstractVector)
 
@@ -696,7 +736,7 @@ end
     scale_gradient!(s::Number, gs::DMGrads) :: Nothing
 
 Scale the gradient represented by the Zygote.Grads struct wrapped in the input DMGrads `gs`
-by the scalar `s`. Mutates the gradient, returs `nothing`.
+by the scalar `s`. Mutates the gradient, returns `nothing`.
 """
 function scale_gradient!(s :: Number, cg::DMGrads) :: Nothing
    for g in cg.grads
