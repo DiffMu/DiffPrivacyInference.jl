@@ -2,9 +2,15 @@
 # [Project structure](@id project_structure)
 
 ## Julia project
+The subfolders of the [Julia part](https://github.com/DiffMu/DiffPrivacyInference.jl) are organized as follows:
+```
+- src       (builtins and code for calling the typechecker written in Haskell)
+- example   (full typecheckable and working example code)
+- docs/src  (this documentation)
+```
 
 ## Haskell project
-The subfolders of the [haskell part](https://github.com/DiffMu/DiffPrivacyInferenceHs) are organized as follows:
+The subfolders of the [Haskell part](https://github.com/DiffMu/DiffPrivacyInferenceHs) are organized as follows:
 ```
 - app  (main entry point into application)
 - src  (actual source code)
