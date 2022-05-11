@@ -456,11 +456,6 @@ version = "0.3.14"
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
-[[MLStyle]]
-git-tree-sha1 = "e49789e5eb7b2d5577aaea395bfcac769df64bb8"
-uuid = "d8e11817-5142-5d16-987a-aa16d5891078"
-version = "0.4.11"
-
 [[MacroTools]]
 deps = ["Markdown", "Random"]
 git-tree-sha1 = "3d3e902b31198a27340d0bf00d6ac452866021cf"
