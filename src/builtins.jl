@@ -107,10 +107,19 @@ loss(X, y, m::DMModel) :: BlackBox(Real) = Flux.crossentropy(m.model(X), y)
 """
 BlackBox(T::DataType) = T
 
+
 """
 Annotation for variables of a function that are privacy functions themselves. You have to
 annotate privacy function function arguments, otherwise typechecking will assume a non-private
 function and fail if you insert a privacy function.
+
+# Examples
+A function that applies the argument privacy function to the other argument.
+```julia
+function appl_priv(f::PrivacyFunction, x) :: Priv()
+   f(x)
+end
+```
 """
 PrivacyFunction = Function
 
@@ -120,33 +129,61 @@ Annotation for real numbers with the discrete metric, i.e.
     d(a,b) = (a==b) ? 1 : 0
 Use it to tell the typechecker you want to infer sensitivity/privacy of a function variable
 w.r.t. to the discrete metric. An alias for julia's `Real` type, so you cannot dispatch on it.
-"""
+See the documentation on [measuring distance](@ref) for more info."""
 Data = Real
 
 
-# TODO link to docs
 """
     MetricMatrix(T, N<:Norm)
+
 Annotate matrices with the desired metric you want them to be measured in by the typechecker.
-Just maps to Matrix{T}.
+Just maps to Matrix{T}. See the documentation on [measuring distance](@ref) for more info.
+
+# Examples
+A function with a matrix argument with specified metric and unspecified output metric:
+```julia
+function sum2(m::MetricMatrix(Real, L2)) :: Matrix{Real}
+   m + m
+end
+```
 """
 MetricMatrix(T, L::Norm) = Matrix{<:T}
 
 
 """
     MetricVector(T, N<:Norm)
+
 Annotate matrices with the desired metric you want them to be measured in by the typechecker.
-Just maps to Vector{T}.
+Just maps to Vector{T}, so you cannot dispatch on it.
+See the documentation on [measuring distance](@ref) for more info.
+
+# Examples
+A function with a vector argument with specified metric and unspecified output metric:
+```julia
+function sum2(m::MetricVector(Real, L2)) :: Vector{Real}
+   m + m
+end
+```
 """
 MetricVector(T, L::Norm) = Vector{<:T}
 
 
 """
     MetricGradient(T, N<:Norm)
+
 Annotate gradients with the desired metric you want them to be measured in by the typechecker.
-Just maps to DMGrad.
+Just maps to DMGrads, so you cannot dispatch on it.
+See the documentation on [measuring distance](@ref) for more info.
+
+# Examples
+A function with a gradient argument with specified metric and unspecified output metric:
+```julia
+function sum2(m::MetricGradient(Real, L2)) :: DMGrads
+   sum_gradients(m, m)
+end
+```
 """
-MetricGradient(T, L::Norm) = DMGrad
+MetricGradient(T, L::Norm) = DMGrads
 
 
 ###########################################
@@ -727,14 +764,6 @@ end
 function internal_expect_const(a)
     a
 end
-
-
-
-#fold_rows(f,i,m) = vec_to_row(collect(foldl(f, eachrow(m), init=i)))
-#fold_cols(f,i,m) = vec_to_col(collect(foldl(f, eachcol(m), init=i)))
-
-###########################################
-# Demutation testing
 
 mutable struct Box
     internal_box_content
