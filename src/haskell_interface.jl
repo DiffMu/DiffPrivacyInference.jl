@@ -63,7 +63,7 @@ function callback_issubtype(ca::Cstring, cb::Cstring) :: UInt8
         #       Thus we print here the empty string.
         print("")
         return 1
-    else res0
+    else
         return 0
     end
 end
@@ -92,34 +92,6 @@ function callback_parseterm(ci::Cstring) :: Cstring
     pointer(global_parsetermresult)
 end
 
-# const c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
-
-
-# function typecheck_hs_from_dmterm(term::DMTerm)
-#     str = string(term)
-
-#     # load the shared library
-#     # Note, the library has to be available on a path in $LD_LIBRARY_PATH
-#     dm = Libdl.dlopen(joinpath(homedir(), ".local/lib/libdiffmu-wrapper"))
-
-#     # get function pointers for the relevant functions
-#     init = Libdl.dlsym(dm, :wrapperInit)
-#     exit = Libdl.dlsym(dm, :wrapperExit)
-#     typecheckFromDMTerm = Libdl.dlsym(dm, :typecheckFromCString_DMTerm)
-
-#     # call the library
-#     ccall(init, Cvoid, ())
-
-#     c_callback_issubtype = @cfunction(callback_issubtype, Cuchar, (Cstring, Cstring))
-
-#     ccall(typecheckFromDMTerm, Cvoid, (Ptr{Cvoid},Cstring,), c_callback_issubtype, str)
-#     ccall(exit, Cvoid, ())
-
-#     # unload the library
-#     Libdl.dlclose(dm)
-
-#     return
-# end
 
 """
 typecheck_from_file(file::AbstractString)
