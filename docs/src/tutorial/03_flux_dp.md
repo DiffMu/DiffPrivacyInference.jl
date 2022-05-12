@@ -3,7 +3,7 @@
 We provide code for [a toy example](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/example/flux_dp/) that trains a simple neural network modelled using the [Flux.jl machine learning library](https://github.com/FluxML/Flux.jl) to recognize handwritten digits. Our typechecker can verify that the function doing the gradient descent for training satisfies given differential privacy bounds. We walk through most of the code here.
 
 ## Noisy gradient descent, implemented in the [`flux_dp.jl`](https://github.com/DiffMu/DiffPrivacyInference.jl/blob/main/example/flux_dp/flux_dp.jl) file
-This file contains an implementation of noisy gradient descent, guided by the example in section 5.6 of the [duet paper](https://arxiv.org/abs/1909.02481).
+This file contains an implementation of [differentially private stochastic gradient descent](https://arxiv.org/abs/1607.00133), guided by the example in section 5.6 of the [duet paper](https://arxiv.org/abs/1909.02481).
 
 The file defines a module to ensure a seperate scope. Further, we `use` the `DiffPrivacyInference` module to have access to our [builtins](@ref) within this module.
 ```julia
@@ -143,7 +143,7 @@ So here's what's going on:
 ## Typechecking this
 To typecheck the file, make the following call in the julia REPL:
 ```julia
-julia> typecheck_from_file("test/flux_dp/flux_dp.jl")
+julia> typecheck_from_file("example/flux_dp/flux_dp.jl")
 
 ---------------------------------------------------------------------------
 Type:
@@ -223,7 +223,7 @@ m = FluxDP.train_dp(X_train,y_train,0.2,0.2,0.2,1000,2000)
 To run the whole thing, simply include the file `mnist.jl` in your REPL. Let's see what it can learn! Training can take a while.
 ```julia
 julia> # prints mean error and accuracy
-julia > result = include("test/flux_dp/mnist.jl")
+julia > result = include("example/flux_dp/mnist.jl")
 average loss: 0.407527023015877
 accuracy: 0.8861666666666667
 DMModel(Chain(Dense(784, 40, relu), Dense(40, 10), softmax))
