@@ -329,7 +329,6 @@ builtins = H.fromList
   , ("above_threshold", pQuaternary AboveThresh)
 --  , ("exponential_mechanism", pQuaternary Exponential)
   , ("parallel_private_fold_rows", pQuaternary PFoldRows)
-  , ("parallel_private_fold_rows!", pQuaternary MutPFoldRows)
   
   , ("+", pMultiary (\a b -> Op (IsBinary DMOpAdd) [a,b]))
   , ("*", pMultiary (\a b -> Op (IsBinary DMOpMul) [a,b]))

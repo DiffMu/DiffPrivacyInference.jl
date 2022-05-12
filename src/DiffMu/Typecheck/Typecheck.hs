@@ -807,7 +807,19 @@ checkSen' scope (Located l (Length m)) = do
   return (NoFun (Numeric (Num (IRNum DMInt) (Const nv))))
 
 
-checkSen' scope (Located l (MutClipM c m)) = checkSens scope (Located l (ClipM c m))
+checkSen' scope (Located l (MutClipM c m)) = do -- same as clip but only gradients allowed
+  τb <- checkSens scope m -- check the matrix
+
+  -- variables for norm and clip parameters and dimension
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  n <- svar <$> newSVarWithPriority UserNamePriority "n"
+
+  -- set correct matrix type
+  unify (l :\\: "Argument of `clip!` must be an (LInf, Data)-Gradient.") τb (NoFun (DMGrads LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
+
+  -- change clip parameter to input
+  return (NoFun (DMGrads LInf (Clip c) n (NoFun (Numeric (Num DMData NonConst)))))
+  
 checkSen' scope (Located l (ClipM c m)) = do
   τb <- checkSens scope m -- check the matrix
 
@@ -823,7 +835,7 @@ checkSen' scope (Located l (ClipM c m)) = do
     (l :\\: "Clip can only be used on 1-dimensional things.")
 
   -- set correct matrix type
-  unify (l :\\: "Argument of `clip` must be an (LInf, Data)-Matrix.") τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
+  unify (l :\\: "Argument of `clip` must be an (LInf, Data)-Container.") τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- change clip parameter to input
   return (NoFun (DMContainer k LInf (Clip c) n (NoFun (Numeric (Num DMData NonConst)))))
@@ -911,7 +923,6 @@ checkSen' scope (Located l (UndiscM m)) = do
   -- and forget about old `nrm
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
---  return (NoFun (DMGrads clp (Clip clp) n (Numeric (Num (IRNum DMReal) NonConst))))
   return (NoFun (DMContainer k clp U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
 --------------------
@@ -1358,7 +1369,76 @@ checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
                          body))))
 
 
-checkPri' scope (Located l (MutGauss rp εp δp f)) = checkPri' scope (Located l (Gauss rp εp δp f))
+checkPri' scope (Located l (MutGauss rp εp δp f)) = -- same as Gauss, but only gradients allowed
+  let
+   setParam :: TC DMMain -> Sensitivity -> TC ()
+   setParam dt v = do -- parameters must be const numbers.
+      τ <- dt
+      τv <- newVar
+      unify (l :\\: "Gauss parameters must be const (Static) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
+      mtruncateP zeroId
+      return ()
+
+   setBody df (ε, δ) r = do
+      -- extract f's type from the TC monad
+      τf <- df
+      -- interesting input variables must have sensitivity <= r
+      restrictInteresting r
+        (l :\\:
+         "Gauss: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+         "Have to have sensitivity <= " :<>: r
+        )
+      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      ctxBeforeTrunc <- use types
+      debug $ "[Gauss] Before truncation, context is:\n" <> showT ctxBeforeTrunc
+      mtruncateP inftyP
+      ctxAfterTrunc <- use types
+      debug $ "[Gauss] After truncation, context is:\n" <> showT ctxAfterTrunc
+      (ivars, itypes) <- getInteresting
+      mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
+      -- return type is a privacy type.
+      return τf
+   in do
+      -- check all the parameters and f, extract the TC monad from the Delayed monad.
+      let drp = checkSens scope rp
+      let dεp = checkSens scope εp
+      let dδp = checkSens scope δp
+      let df  = checkSens scope f
+
+      -- create variables for the parameters
+      v_ε :: Sensitivity <- newVar
+      v_δ :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
+
+      -- parameters must be in (0,1) for gauss to be DP
+      addConstraint (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
+        (l :\\: "Gauss epsilon parameter must be <= 1")
+      addConstraint (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
+        (l :\\: "Gauss delta parameter must be <= 1")
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+        (l :\\: "Gauss epsilon parameter must be > 0")
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
+        (l :\\: "Gauss delta parameter must be > 0")
+        
+      -- restrict interesting variables in f's context to v_r
+      let mf = setBody df (v_ε, v_δ) v_r
+
+      let mr = setParam drp v_r
+      let mε = setParam dεp v_ε
+      let mδ = setParam dδp v_δ
+
+      (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
+
+      n <- newVar -- dimension
+      iclp <- newVar -- clip of input grad can be anything
+      τv <- newVar -- input grad element type can be anything (as long as it's numeric)
+      -- input type gets a LessEqual so we can put Integer or Real (but not Data)
+      addConstraint (Solvable(IsLessEqual(τf, (NoFun (DMGrads L2 iclp n (NoFun (Numeric (Num (IRNum DMReal) τv))))))))
+         (l :\\: "Input to `gaussian_mechanism!` must be `L2`-gradient with real entries.")
+
+      return (NoFun (DMGrads LInf U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
+
+
 checkPri' scope term@(Located l (Gauss rp εp δp f)) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
@@ -1427,7 +1507,66 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
       return (NoFun (τgauss))
 
 
-checkPri' scope (Located l (MutLaplace rp εp f)) = checkPri' scope (Located l (Laplace rp εp f))
+checkPri' scope (Located l (MutLaplace rp εp f)) = -- same as Laplace, but only gradients allowed
+  let
+   setParam :: TC DMMain -> Sensitivity -> TC ()
+   setParam dt v = do -- parameters must be const numbers.
+      τ <- dt
+      τv <- newVar
+      unify (l :\\: "Laplace parameters must be const (Static) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
+      mtruncateP zeroId
+      return ()
+
+   setBody df ε r = do
+      -- extract f's type from the TC monad
+      τf <- df
+      -- interesting input variables must have sensitivity <= r
+      restrictInteresting r
+        (l :\\: 
+         "Laplace: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+         "Have to have sensitivity <= " :<>: r
+        )
+      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      mtruncateP inftyP
+      (ivars, itypes) <- getInteresting
+      mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
+      -- return type is a privacy type.
+      return τf
+   in do
+      -- check all the parameters and f, extract the TC monad from the Delayed monad.
+      let drp = checkSens scope rp
+      let dεp = checkSens scope εp
+      let df  = checkSens scope f
+
+      -- create variables for the parameters
+      v_ε :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
+
+      -- eps parameter must be > 0 for scaling factor to be well-defined
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+        (l :\\: "Laplace epsilon parameter must be > 0")
+
+      -- sensitivity parameter must be > 0 for laplace distribution to be well-defined
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_r)))
+        (l :\\: "Sensitivity of the input to Laplace must be > 0")
+
+      -- restrict interesting variables in f's context to v_r
+      let mf = setBody df v_ε v_r
+
+      let mr = setParam drp v_r
+      let mε = setParam dεp v_ε
+
+      (τf, _) <- msumTup (mf, msumTup (mr, mε))
+
+      n <- newVar -- dimension
+      iclp <- newVar -- clip of input grad can be anything
+      τv <- newVar -- input grad element type can be anything (as long as it's numeric)
+      -- input type gets a LessEqual so we can put Integer or Real (but not Data)
+      addConstraint (Solvable(IsLessEqual(τf, (NoFun (DMGrads L2 iclp n (NoFun (Numeric (Num (IRNum DMReal) τv))))))))
+         (l :\\: "Input to `laplace_mechanism!` must be `L2`-gradient with real entries.")
+
+      return (NoFun (DMGrads LInf U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
+
 checkPri' scope term@(Located l (Laplace rp εp f)) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
@@ -1768,7 +1907,6 @@ checkPri' scope (Located l (PReduceCols f m)) = do
     return (NoFun (DMVec LInf U r τ_out))
 
 
-checkPri' scope (Located l (MutPFoldRows f acc m₁ m₂)) = checkPri' scope (Located l (PFoldRows f acc m₁ m₂))
 checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     ε <- newVar
     δ <- newVar

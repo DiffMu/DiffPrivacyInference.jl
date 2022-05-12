@@ -213,9 +213,9 @@ testSample pp = describe "Sample" $ do
               \function bar(data, b, x::Integer) :: Priv() \n\
               \  D, L = sample(b, data, data) \n\
               \  gs = unbox(foo(D[1,:]), Vector{<:Data}, length(D[1,:])) \n\
-              \  clip!(L2,gs) \n\
-              \  undisc_container!(gs) \n\
-              \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
+              \  gs = clip(L2,gs) \n\
+              \  gs = undisc_container(gs) \n\
+              \  gs = gaussian_mechanism(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
         ty = "Fun([([NoFun(Matrix<n: LInf, c: C>[n × m](NoFun(Num(Data)))) @ (0.4⋅(1 / n)⋅m₃,0.3⋅(1 / n)⋅m₃),NoFun(Num(IR Integer[m₃ ©])) @ (0,0),NoFun(Num(IR Integer)) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[m](NoFun(Num(IR Real))))) @ Just [Any,Any,Integer]])"
