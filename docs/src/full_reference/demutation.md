@@ -139,7 +139,7 @@ function h2()
 end
 ```
 
-## Restrictions dealing with memory aliasing
+## [Restrictions dealing with memory aliasing](@id mutation-restrictions)
 As described in the introduction, the problems with verifying code that has mutating functions
 actually only appear when memory aliasing occurs. That is, when
  1. there are multiple variables which reference the same memory location (memory aliasing), and
