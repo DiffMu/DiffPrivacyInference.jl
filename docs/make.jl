@@ -16,7 +16,7 @@ makedocs(sitename="DiffPrivacyInference",
                  "tutorial/02_privacy_functions.md",
                  "tutorial/03_flux_dp.md",
              ],
-             "Full Reference" => [
+             "User Reference" => [
                  "full_reference/overview.md",
                  "full_reference/syntax.md",
                  "full_reference/annotations.md",
@@ -30,7 +30,9 @@ makedocs(sitename="DiffPrivacyInference",
              ],
              "Development Notes" => [
                  "development_notes/updating_haskell.md",
-                 "development_notes/project_structure.md"
+                 "development_notes/project_structure.md",
+                 "development_notes/technical_description.md",
+                 "development_notes/demutation_system.md"
              ]
          ]
 )
