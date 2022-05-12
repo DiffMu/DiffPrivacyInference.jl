@@ -743,7 +743,6 @@ data PreDMTerm (t :: * -> *) =
   | MapCols2 (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | MapRows2 (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | PFoldRows (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
-  | MutPFoldRows (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | PReduceCols (LocPreDMTerm t) (LocPreDMTerm t)
   | MFold (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | Count (LocPreDMTerm t) (LocPreDMTerm t)
@@ -786,7 +785,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply, Disc,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, PFoldRows, MutPFoldRows, MFold, MutConvertM, ConvertM, MCreate, Transpose, UndiscM, MutUndiscM, Undisc,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, PFoldRows, MFold, MutConvertM, ConvertM, MCreate, Transpose, UndiscM, MutUndiscM, Undisc,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, MutSubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
@@ -921,7 +920,6 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (MapCols2 a b c)   = MapCols2 <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (MapRows2 a b c)   = MapRows2 <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (PFoldRows a b c d)   = PFoldRows <$> (f a) <*> (f b) <*> (f c) <*> (f d)
-    recDMTermM_Loc_Impl f h (MutPFoldRows a b c d)   = MutPFoldRows <$> (f a) <*> (f b) <*> (f c) <*> (f d)
     recDMTermM_Loc_Impl f h (PReduceCols a b)  = PReduceCols <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (MutConvertM a b)  = MutConvertM a <$> (f b)
@@ -1049,7 +1047,6 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MapCols2 a b c)   = "MapCols2 (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c)  <> ")"
   showPretty (MapRows2 a b c)   = "MapRows2 (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c)  <> ")"
   showPretty (PFoldRows a b c d)   = "PFoldRows (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d)  <> ")"
-  showPretty (MutPFoldRows a b c d)   = "MutPFoldRows (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d)  <> ")"
   showPretty (PReduceCols a b)  = "PReduceCols (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MFold a b c)      = "MFold (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (MutUndiscM a)     = "MutUndiscM (" <> (showPretty a) <> ")"
