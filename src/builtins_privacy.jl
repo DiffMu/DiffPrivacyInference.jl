@@ -109,7 +109,7 @@ but not all the known ones.
 # Example
 Clip and noise a matrix, not mutating the input.
 ```julia
-function noise_grad!(g::MetricMatrix(Data, LInf), eps) :: Priv()
+function noise_grad(g::MetricMatrix(Data, LInf), eps) :: Priv()
     cg = clip(L2,g)
     ug = undisc_container(cg)
     laplacian_mechanism(2, eps, ug)
@@ -132,9 +132,9 @@ NAOISE HOLOHAN and STEFANO BRAGHIN. It mitigates some floating point related vul
 but not all the known ones.
 
 # Example
-Clip and noise a matrix, mutating the input.
+Clip and noise a gradient, mutating the input.
 ```julia
-function noise_grad!(g::MetricMatrix(Data, LInf), eps) :: Priv()
+function noise_grad!(g::MetricGradient(Data, LInf), eps) :: Priv()
     clip!(L2,g)
     undisc_container!(g)
     laplacian_mechanism!(2, eps, g)
