@@ -231,19 +231,3 @@ the fold is `(eps,del)`-private in the input matrices. The input matrices are ex
 function parallel_private_fold_rows(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
    foldl((i,(x,y))->f(x,y,i), [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))], init=i)
 end
-
-
-"""
-    parallel_private_fold_rows(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
-
-Fold the privacy function `f :: Vector -> Vector -> I -> I` over the two input matrices' rows simultaneously.
-Allows for `f` to mutate the accumulator, returns nothing. 
-This is parallel composition on the rows of `m` and `n`, so if `f` is `(eps,del)`-private in it's first two arguments,
-the fold is `(eps,del)`-private in the input matrices. The input matrices are expected to be measured in the discrete norm.
-"""
-function parallel_private_fold_rows!(f::Function, i, m::AbstractMatrix, n::AbstractMatrix)
-   for (x,y) in [(collect(rm),collect(rn)) for (rm,rn) in zip(eachrow(m), eachrow(n))] 
-      f(x,y,i)
-   end
-   return nothing
-end
