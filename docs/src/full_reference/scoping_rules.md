@@ -71,7 +71,7 @@ because it makes a difference whether `a` is of mutation type `Pure` or of mutat
 
 
 ### [Rule: *immutable mutation type*](@id scoping_rule_2)
-It is not allowed to change the mutation type of a variable. This makes sure that pure functions,
+It is not allowed to change the [mutation type](@ref mutation_funs) of a variable. This makes sure that pure functions,
 mutating functions and black boxes do not get mixed up. As a further effect it means that if a mutating
 function has multiple implementations, all of them have to have the same mutation signature:
 ```julia
