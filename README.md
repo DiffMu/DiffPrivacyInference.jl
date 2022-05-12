@@ -1,6 +1,8 @@
-
 [![Build Status](https://travis-ci.com/DiffMu/DiffPrivacyInference.jl.svg?branch=main)](https://travis-ci.com/DiffMu/DiffPrivacyInference.jl)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://DiffMu.github.io/DiffPrivacyInference.jl/stable)
+
+
+**DISCLAIMER**: Even though we analyzed the theoretical framework which we are basing our privacy guarantees on, and extensively tested the implementation, we cannot entirely exclude the possibility of bugs or of privacy risks in a program which our typechecker claims to be safe. Use at your own risk. Feedback and questions are very welcome.
 
 The goal of this project is to create a type checker which can automatically analyze [Julia](https://julialang.org/) programs for [(ε, δ)-differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) guarantees.
 
