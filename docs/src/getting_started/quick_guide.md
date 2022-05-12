@@ -1,5 +1,5 @@
 
-# Quick Guide
+# [Quick Guide](@id quick-guide)
 
 This program performs static analysis of your julia code to automatically infer [sensitivity](https://en.wikipedia.org/wiki/Differential_privacy#Sensitivity)/[(ε, δ)-differential privacy](https://en.wikipedia.org/wiki/Differential_privacy) properties of your functions. 
 

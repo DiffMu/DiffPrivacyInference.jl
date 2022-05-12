@@ -20,7 +20,7 @@ The (numeric) variable `eps` must be in `[0,1)`.
 ```
 constr : τ ⊑ Real
 ```
-The type variable `τ` must be a [subtype](https://diffmu.github.io/DiffPrivacyInference.jl/dev/full_reference/types/#Subtyping) of `Real`.
+The type variable `τ` must be a [subtype](@ref subtyping) of `Real`.
 
 
 ### `IsSupremum` and `IsInfimum`
@@ -28,7 +28,7 @@ The type variable `τ` must be a [subtype](https://diffmu.github.io/DiffPrivacyI
 constr : constr : Type τ₁ is the supremum of types τ₂ and Integer
 constr : Type τ₃ is the infimum of types τ₄ and Real
 ```
-Suprema and infima w.r.t. the [subtyping hierarchy](https://diffmu.github.io/DiffPrivacyInference.jl/dev/full_reference/types/#Subtyping). That is, `τ₁` is the type that is lowest in the subtyping hierarchy such that `τ₂ ⊑ τ₁` and `Integer ⊑ τ₁`
+Suprema and infima w.r.t. the [subtyping hierarchy](@ref subtyping). That is, `τ₁` is the type that is lowest in the subtyping hierarchy such that `τ₂ ⊑ τ₁` and `Integer ⊑ τ₁`
 
 ## Const/NonConst
 We support [static number types](@ref types), so we need constraints on whether a number type is static or not.
@@ -49,7 +49,7 @@ All numeric types in `τ` will be set to non-static once they are known.
 ```
 constr : constr : Types τ₁ and τ₂ are equal except for static-ness, where the fist is a subtype of the second
 ```
-In case `τ₁ = τ[s ©]` is a [static number](@ref types) for some `s`, we allow [`τ₁ ⊑ τ₂`](https://diffmu.github.io/DiffPrivacyInference.jl/dev/full_reference/types/#Subtyping). Otherwise, it is `τ₁ = τ₂`.
+In case `τ₁ = τ[s ©]` is a [static number](@ref types) for some `s`, we allow [`τ₁ ⊑ τ₂`](@ref subtyping). Otherwise, it is `τ₁ = τ₂`.
 
 ## Choices/Mulitple Dispatch (`IsChoice`)
 If the julia type information is not sufficient to resolve multiple dispatch, you end up with constraints instead. Behold the following example, where the function `f` has two methods, but in the call to `f` that happens withing `g`, it is not yet clear which of the methods will be called. Annotating the argument of `g` would have made it possible to resolve the constraint, so it is advisable to add annotations where possible.

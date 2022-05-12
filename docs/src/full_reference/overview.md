@@ -1,5 +1,5 @@
 
-# Overview
+# [Overview](@id overview)
 ## Writing checkable code
 Arbitrary julia code is unlikely to be differentially private. Apart from that, there are language constructs that make automatic analysis too difficult. We hence restrict the code you can write and expect us to analyze by introducing a couple of rules:
 
@@ -23,6 +23,6 @@ There are some things the typechecker cannot do for you. You have to take care o
     - you call the function you inferred to be private in the correct way. The analysis result is only valid for the input types that are presented to you there. If you input any other types, the warranty is voided without you getting any warning whatsoever.
     - you handle your data in a way that does not disclose it. The result of a (properly made) function call to a verified function will ensure differential privacy for your data, but what you do after having made that call is your own responsibility.
 - Throughout our checking we assume that what you gave us is valid julia code. Hence, our result is only valid if your code can run without error.
-- [There are known vulnerabilities of floating point implementations of differentially private mechanisms.](https://diffmu.github.io/DiffPrivacyInference.jl/stable/tutorial/02_privacy_functions/#Warning:-Floating-point-is-dangerous!). We did what we could to mitigate some of them, but some are beyond the scope of this project. Be aware of that!
+- [There are known vulnerabilities of floating point implementations of differentially private mechanisms.](@ref floats). We did what we could to mitigate some of them, but some are beyond the scope of this project. Be aware of that!
 - We do not support recursion, but we cannot detect all cases of it so we won't be able to warn you about them. Don't write recursive code.
 - Black box functions can be used to encapsulate unsupported code, but [not everything is allowed inside those](https://diffmu.github.io/DiffPrivacyInference.jl/stable/full_reference/demutation/#mut_type_black_box).

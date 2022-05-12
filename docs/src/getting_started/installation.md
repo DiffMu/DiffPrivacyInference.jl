@@ -1,5 +1,5 @@
 
-# Installation
+# [Installation](@id installation)
 
 ## Using the julia package manager
 

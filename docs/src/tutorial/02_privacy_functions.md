@@ -48,7 +48,7 @@ Type:
 ---------------------------------------------------------------------------
 ```
 
-## Warning: Floating point is dangerous!
+## [Warning: Floating point is dangerous!](@id floats)
 The aforementioned definitions of differential privacy (and the related [notion of sensitivity](@ref sensitivity-functions)) are defined on abstracet [metric spaces](https://en.wikipedia.org/wiki/Metric_space). Floating point numbers are an approximation of the real numbers, but in some respects differ fatally in their behaviour, especially when talking about probabilities, or when performing simple arithmetics on numbers of very different scale. Hence, the theoretical results don't really hold for floating point implementations of differentially private functions, as was [spectacularily proven](https://www.microsoft.com/en-us/research/wp-content/uploads/2012/10/lsbs.pdf). Mitigation for the flaws in naive random floating point sampling was provided by a [2021 paper](https://arxiv.org/abs/2107.10138), whose approach we use for our implementation of the additive noise mechanisms. We do not, however, provide sensitivity/privacy guarantees in case of overflow situations or rounding errors. These are [very hard to take into account](https://cs-people.bu.edu/jiawenl/pdf/2020DP-FLPT.pdf) even in manual proofs and present a somewhat open problem.
 
 

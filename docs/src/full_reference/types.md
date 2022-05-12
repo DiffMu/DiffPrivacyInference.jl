@@ -122,7 +122,7 @@ For compatibility with [`Flux.jl`](https://fluxml.ai/Flux.jl/stable/), we have t
 
 See the [example implementation of DP-SGD](@ref fluxdp) for usage examples of these.
 
-## Subtyping
+## [Subtyping](@id subtyping)
 The subtyping hierarchy builds on the usual julia type hierarchy. That is, we have
 
 ```Integer ⊑ Real```

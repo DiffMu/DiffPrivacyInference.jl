@@ -14,7 +14,7 @@ We cannot check arbitrary `julia` code, and most julia code does not result in d
 - `include` statements. The typechecker will load the included file and check it as well.
 - Functions which mutate (some) of their arguments. Special rules apply, see [Mutating functions](@ref demutation).
 - Functions that contain syntax not listed above. You can mark these and they will be checked in a very pessimistic manner. Note that it is still not allowed to do absolutely anything in these, see the documentation of [black boxes](@ref black-boxes).
-- Be aware of the [limitations of the typechecker regarding floating point implementations](https://diffmu.github.io/DiffPrivacyInference.jl/dev/tutorial/02_privacy_functions/#Warning:-Floating-point-is-dangerous!)
+- Be aware of the [limitations of the typechecker regarding floating point implementations](@ref floats)
 
 ## Forbidden things
 
